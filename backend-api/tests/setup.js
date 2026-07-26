@@ -1,14 +1,15 @@
 /**
- * Jest Test Setup
- * Configuración global para tests
+ * Jest Test Setup (runs per test file, AFTER the environment is ready)
  *
- * Una sola MongoMemoryServer se comparte entre TODOS los archivos de test
- * (evita arrancar 8 mongods en paralelo, que colisionan en puertos/recursos
- * y producen AggregateError). setup.js posee el ciclo de vida completo;
- * los archivos de test solo usan process.env.MONGODB_URI ya seteado.
+ * The single shared MongoMemoryServer is created ONCE in jest.globalSetup.js
+ * (sets process.env.MONGODB_URI). Here we connect mongoose — but ONLY
+ * once per worker, and we NEVER disconnect between files: setupFilesAfterEnv
+ * runs this per FILE, so disconnecting in afterAll would tear down the
+ * connection for the NEXT file that shares this worker, causing mongoose to
+ * reconnect to a just-closed mongod (AggregateError / ECONNREFUSED).
+ * globalTeardown stops the shared mongod at the very end.
  */
 
-const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 
 // Variables de entorno para tests (deben ir ANTES de importar el server)
@@ -22,24 +23,17 @@ process.env.NODE_ENV = 'test';
 process.env.REDIS_URL = '';
 process.env.SMTP_HOST = '';
 
-let mongoServer;
-
-// Configurar antes de todos los tests (una vez para toda la suite)
+// Connect to the shared MongoMemoryServer (once per worker; skip if already up)
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const mongoUri = mongoServer.getUri();
-  process.env.MONGODB_URI = mongoUri;
-
-  await mongoose.connect(mongoUri, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
-
-  // Exponer para que los test files reutilicen la misma instancia
-  globalThis.__MONGOD__ = mongoServer;
+  if (mongoose.connection.readyState === 0) {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+  }
 });
 
-// Limpiar después de cada test
+// Limpiar después de cada test (per-test, safe)
 afterEach(async () => {
   const collections = mongoose.connection.collections;
   for (const key in collections) {
@@ -47,11 +41,5 @@ afterEach(async () => {
   }
 });
 
-// Cerrar conexión después de todos los tests (única dueña del ciclo de vida)
-afterAll(async () => {
-  await mongoose.disconnect();
-  if (mongoServer) {
-    await mongoServer.stop();
-  }
-  delete globalThis.__MONGOD__;
-});
+// NO afterAll disconnect here: globalTeardown stops the shared mongod,
+// and disconnecting would break other files sharing this worker.

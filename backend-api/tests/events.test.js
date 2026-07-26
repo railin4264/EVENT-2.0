@@ -20,15 +20,13 @@ let userId;
 
 describe('Events API', () => {
   beforeAll(async () => {
-    mongoServer = globalThis.__MONGOD__;
-    process.env.MONGODB_URI = mongoServer.getUri();
-
+    // MONGODB_URI is provided by jest.globalSetup (single shared mongod).
     const server = require('../src/server');
     app = server.app || server;
   });
 
   afterAll(async () => {
-    // setup.js owns the mongoose connection lifecycle
+    // setup.js disconnects mongoose; globalSetup stops the shared mongod
   });
 
   beforeEach(async () => {

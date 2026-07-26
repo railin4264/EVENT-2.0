@@ -6,9 +6,15 @@ module.exports = {
   // Test environment
   testEnvironment: 'node',
 
-  // Setup files - provides MongoMemoryServer + test env vars so the suite
-  // runs without a real MongoDB/Firebase connection.
+  // Setup files - provides test env vars + mongo connection per test file.
+  // The shared MongoMemoryServer is created ONCE in globalSetup (see below)
+  // so multiple test files don't each spawn their own mongod (port collisions
+  // produced AggregateError / ECONNREFUSED in parallel + runInBand runs).
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+
+  // Single shared MongoMemoryServer for the whole process (official pattern).
+  globalSetup: '<rootDir>/jest.globalSetup.js',
+  globalTeardown: '<rootDir>/jest.globalTeardown.js',
 
   // Test file patterns
   testMatch: [

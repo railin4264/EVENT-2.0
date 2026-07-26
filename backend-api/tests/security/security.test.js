@@ -16,11 +16,8 @@ describe('Security Tests', () => {
   let authToken;
 
   beforeEach(async () => {
-    // Reuse the single shared MongoMemoryServer from setup.js
+    // MONGODB_URI is provided by jest.globalSetup (single shared mongod).
     if (!mongoServer) {
-      mongoServer = globalThis.__MONGOD__;
-      process.env.MONGODB_URI = mongoServer.getUri();
-
       const server = require('../../src/server');
       app = server.app || server;
     }
