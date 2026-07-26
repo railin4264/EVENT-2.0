@@ -1,13 +1,19 @@
 /**
  * Jest Test Setup (runs per test file, AFTER the environment is ready)
  *
- * The single shared MongoMemoryServer is created ONCE in jest.globalSetup.js
- * (sets process.env.MONGODB_URI). Here we connect mongoose — but ONLY
- * once per worker, and we NEVER disconnect between files: setupFilesAfterEnv
- * runs this per FILE, so disconnecting in afterAll would tear down the
- * connection for the NEXT file that shares this worker, causing mongoose to
- * reconnect to a just-closed mongod (AggregateError / ECONNREFUSED).
- * globalTeardown stops the shared mongod at the very end.
+ * The MongoMemoryServer is created ONCE for the WHOLE run by
+ * jest.globalSetup.js, which exposes its URI via process.env.MONGODB_URI
+ * (env is inherited by every worker). Here we ONLY connect mongoose
+ * to that shared URI — we never create a mongod ourselves.
+ *
+ * directConnection:true disables the mongodb SDAM monitor, whose
+ * background reconnect attempts ("localhost:undefined") were the source
+ * of the stray AggregateError / internalConnectMultiple that appeared
+ * only in the full suite.
+ *
+ * We connect once (if not already up) and never disconnect between
+ * files in the same worker (would tear down the shared connection
+ * for the next file). globalSetup stops the mongod at the end.
  */
 
 const mongoose = require('mongoose');
@@ -23,12 +29,14 @@ process.env.NODE_ENV = 'test';
 process.env.REDIS_URL = '';
 process.env.SMTP_HOST = '';
 
-// Connect to the shared MongoMemoryServer (once per worker; skip if already up)
+// Connect to the shared MongoMemoryServer provided by globalSetup.
 beforeAll(async () => {
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      directConnection: true, // disable SDAM monitor reconnects
+      serverSelectionTimeoutMS: 5000,
     });
   }
 });
@@ -41,5 +49,5 @@ afterEach(async () => {
   }
 });
 
-// NO afterAll disconnect here: globalTeardown stops the shared mongod,
-// and disconnecting would break other files sharing this worker.
+// NO afterAll disconnect: the shared mongod is stopped by globalTeardown,
+// and disconnecting here would break other files sharing this worker.

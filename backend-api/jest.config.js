@@ -6,13 +6,16 @@ module.exports = {
   // Test environment
   testEnvironment: 'node',
 
-  // Setup files - provides test env vars + mongo connection per test file.
-  // The shared MongoMemoryServer is created ONCE in globalSetup (see below)
-  // so multiple test files don't each spawn their own mongod (port collisions
-  // produced AggregateError / ECONNREFUSED in parallel + runInBand runs).
+  // Setup files - provides test env vars; the mongo connection is
+  // estabished per-file by setup.js (it connects to the shared URI).
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
 
-  // Single shared MongoMemoryServer for the whole process (official pattern).
+  // ONE MongoMemoryServer for the WHOLE run, created in the parent
+  // process by globalSetup and exposed via process.env.MONGODB_URI
+  // (env is inherited by every worker). This is the only topology
+  // that avoids the stray "localhost:undefined" AggregateError: a
+  // per-worker mongod left the mongodb SDAM monitor reconnecting
+  // to a port-less "localhost" when the worker-local db churned.
   globalSetup: '<rootDir>/jest.globalSetup.js',
   globalTeardown: '<rootDir>/jest.globalTeardown.js',
 
@@ -80,11 +83,9 @@ module.exports = {
   // Max workers for parallel testing
   maxWorkers: '50%',
 
-  // Force exit after tests complete
-  forceExit: true,
-
-  // Detect open handles
-  detectOpenHandles: true,
+  // NOTE: forceExit/detectOpenHandles removed — forceExit kills the
+  // process (and the MongoMemoryServer child) before SDAM monitor
+  // timers finish, causing stray localhost:undefined reconnect attempts.
 
   // Suppress console output during tests (optional)
   silent: false,
