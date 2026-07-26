@@ -6,8 +6,9 @@ module.exports = {
   // Test environment
   testEnvironment: 'node',
 
-  // Setup files - Comentado porque los tests manejan su propio setup
-  // setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  // Setup files - provides MongoMemoryServer + test env vars so the suite
+  // runs without a real MongoDB/Firebase connection.
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
 
   // Test file patterns
   testMatch: [

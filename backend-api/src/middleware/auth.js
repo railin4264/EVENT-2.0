@@ -33,12 +33,10 @@ const protect = async (req, res, next) => {
     let decoded;
     try {
       decoded = jwtService.verifyAccessToken(token);
-      logger.info(`Token decoded successfully for user ID: ${decoded.id}`);
     } catch (error) {
       logger.error('Token verification failed:', {
         error: error.message,
-        type: error.name,
-        token: token?.substring(0, 20) + '...'
+        type: error.name
       });
 
       if (error.name === 'TokenExpiredError' || error.message === 'Access token expired') {

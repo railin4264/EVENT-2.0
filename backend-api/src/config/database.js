@@ -22,7 +22,15 @@ const connectDB = async () => {
       throw error; // Let the test framework handle the error instead of exiting
     }
 
-    process.exit(1);
+    // Production/staging: a missing DB is fatal. For any other mode (dev,
+    // local, undefined) keep the server up so the app can be probed even
+    // before Mongo is reachable.
+    if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
+      process.exit(1);
+    }
+
+    logger.warn('🔄 Continuing without database connection');
+    return null;
   }
 };
 

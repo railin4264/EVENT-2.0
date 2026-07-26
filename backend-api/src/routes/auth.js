@@ -20,13 +20,15 @@ const validateRegister = [
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
   body('firstName')
+    .optional()
     .trim()
     .isLength({ min: 1, max: 50 })
-    .withMessage('First name is required and must be between 1-50 characters'),
+    .withMessage('First name must be between 1-50 characters'),
   body('lastName')
+    .optional()
     .trim()
     .isLength({ min: 1, max: 50 })
-    .withMessage('Last name is required and must be between 1-50 characters'),
+    .withMessage('Last name must be between 1-50 characters'),
   body('username')
     .trim()
     .isLength({ min: 3, max: 30 })
@@ -34,6 +36,7 @@ const validateRegister = [
     .matches(/^[a-zA-Z0-9_]+$/)
     .withMessage('Username can only contain letters, numbers, and underscores'),
   body('acceptTerms')
+    .optional()
     .custom((value) => value === true || value === 'true' || value === 1)
     .withMessage('You must accept the terms and conditions'),
   body('interests')
@@ -41,6 +44,7 @@ const validateRegister = [
     .isArray()
     .withMessage('Interests must be an array'),
   body('birthDate')
+    .optional()
     .isISO8601()
     .toDate()
     .withMessage('Valid date of birth is required')
@@ -74,7 +78,16 @@ router.post('/register', validateRegister, async (req, res) => {
   }
   try {
     logger.info('Registration attempt:', { email: req.body.email, username: req.body.username });
-    const { username, email, password, firstName, lastName, interests, bio, location, acceptTerms, birthDate } = req.body;
+    const { username, email, password, firstName, lastName, name, interests, bio, location, acceptTerms, birthDate } = req.body;
+
+    // Accept a single `name` and split into firstName/lastName for convenience.
+    let resolvedFirst = firstName;
+    let resolvedLast = lastName;
+    if ((!resolvedFirst || !resolvedLast) && typeof name === 'string' && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      resolvedFirst = resolvedFirst || parts[0];
+      resolvedLast = resolvedLast || parts.slice(1).join(' ') || parts[0];
+    }
 
     // Verify terms acceptance
     if (!acceptTerms) {
@@ -101,8 +114,8 @@ router.post('/register', validateRegister, async (req, res) => {
       username,
       email,
       password,
-      firstName,
-      lastName,
+      firstName: resolvedFirst,
+      lastName: resolvedLast,
       birthDate
     };
 

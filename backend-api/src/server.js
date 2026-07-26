@@ -31,7 +31,6 @@ if (!process.env.PORT) {
 
 // Log critical environment variables for debugging in development only
 if (process.env.NODE_ENV === 'development') {
-  console.log('🔐 JWT_SECRET configured:', process.env.JWT_SECRET?.substring(0, 10) + '...');
   console.log('🗄️  MongoDB URI:', process.env.MONGODB_URI);
   console.log('🌐 CORS Origins:', process.env.CORS_ORIGIN);
 }
@@ -103,8 +102,11 @@ const io = socketService.initialize(server);
 // Initialize cron service
 const cronService = new CronService();
 
-// Connect to databases and services (wrap in async IIFE)
-(async () => {
+// Connect to databases and services ONLY when run as the main script.
+// When required by tests (supertest), the test setup provides its own
+// MongoMemoryServer connection, so we must not connect (or call
+// process.exit) here on import.
+const startServer = async () => {
   try {
     await connectDB();
     await connectRedis();
@@ -113,7 +115,11 @@ const cronService = new CronService();
     logger.error('❌ Database connection failed:', error);
     process.exit(1);
   }
-})();
+};
+
+if (require.main === module) {
+  startServer();
+}
 
 // Initialize cache service
 const cacheService = require('./services/cacheService');
@@ -312,6 +318,8 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
+// Only bind a port when run as the main script (tests use supertest against app).
+if (require.main === module) {
 server.listen(PORT, '0.0.0.0', () => {
   logger.info(`
 🚀 EventConnect API Server Started!
@@ -338,6 +346,7 @@ server.listen(PORT, '0.0.0.0', () => {
     logger.info('🕐 Cron jobs initialized (not started in development)');
   }
 });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
