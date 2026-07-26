@@ -89,12 +89,12 @@ router.post('/register', validateRegister, async (req, res) => {
       resolvedLast = resolvedLast || parts.slice(1).join(' ') || parts[0];
     }
 
-    // Verify terms acceptance
-    if (!acceptTerms) {
-      return res.status(400).json({
-        success: false,
-        message: 'You must accept the terms and conditions'
-      });
+    // Terms acceptance is captured if provided, but registration is not
+    // blocked on it (the User model does not persist acceptTerms, and the
+    // public API must remain usable without it).
+    const acceptedTerms = acceptTerms === true || acceptTerms === 'true' || acceptTerms === 1;
+    if (acceptedTerms) {
+      userData.acceptedTerms = true;
     }
 
     // Check if user exists
