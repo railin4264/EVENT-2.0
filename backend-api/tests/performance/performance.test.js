@@ -17,7 +17,7 @@ describe('Performance Tests', () => {
   let testTribe;
 
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = globalThis.__MONGOD__;
     process.env.MONGODB_URI = mongoServer.getUri();
 
     const server = require('../../src/server');
@@ -69,10 +69,7 @@ describe('Performance Tests', () => {
   });
 
   afterAll(async () => {
-    const mongoose = require('mongoose');
-    await mongoose.connection.dropDatabase();
-    await mongoose.connection.close();
-    await mongoServer.stop();
+    // setup.js owns the mongoose connection lifecycle
   });
 
   describe('API Response Times', () => {

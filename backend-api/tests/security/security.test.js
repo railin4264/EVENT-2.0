@@ -16,9 +16,9 @@ describe('Security Tests', () => {
   let authToken;
 
   beforeEach(async () => {
-    // If mongoServer doesn't exist, this is the first run
+    // Reuse the single shared MongoMemoryServer from setup.js
     if (!mongoServer) {
-      mongoServer = await MongoMemoryServer.create();
+      mongoServer = globalThis.__MONGOD__;
       process.env.MONGODB_URI = mongoServer.getUri();
 
       const server = require('../../src/server');
@@ -46,12 +46,7 @@ describe('Security Tests', () => {
   });
 
   afterAll(async () => {
-    if (mongoServer) {
-      const mongoose = require('mongoose');
-      await mongoose.connection.dropDatabase();
-      await mongoose.connection.close();
-      await mongoServer.stop();
-    }
+    // setup.js owns the mongoose connection lifecycle; nothing to tear down
   });
 
   describe('Authentication Security', () => {

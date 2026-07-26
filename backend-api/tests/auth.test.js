@@ -19,17 +19,17 @@ let app;
 
 describe('Auth API', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    // Reuse the single shared MongoMemoryServer created by setup.js
+    mongoServer = globalThis.__MONGOD__;
     process.env.MONGODB_URI = mongoServer.getUri();
-    
+
     // Importar app después de configurar variables
     const server = require('../src/server');
     app = server.app || server;
   });
 
   afterAll(async () => {
-    await mongoose.disconnect();
-    await mongoServer.stop();
+    // setup.js owns the mongoose connection lifecycle; nothing to tear down here
   });
 
   afterEach(async () => {

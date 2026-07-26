@@ -56,7 +56,7 @@ const TEST_USER = {
 };
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = globalThis.__MONGOD__;
   process.env.MONGODB_URI = mongoServer.getUri();
 
   const server = require('../src/server');
@@ -92,8 +92,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await mongoose.disconnect();
-  await mongoServer.stop();
+  // setup.js owns the mongoose connection lifecycle
 });
 
 describe('Payment Flow', () => {

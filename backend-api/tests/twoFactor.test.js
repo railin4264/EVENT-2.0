@@ -51,16 +51,15 @@ async function createTestUser(data = {}) {
 
 describe('Two-Factor Authentication', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = globalThis.__MONGOD__;
     process.env.MONGODB_URI = mongoServer.getUri();
-    
+
     const server = require('../src/server');
     app = server.app || server;
   });
 
   afterAll(async () => {
-    await mongoose.disconnect();
-    await mongoServer.stop();
+    // setup.js owns the mongoose connection lifecycle
   });
 
   afterEach(async () => {

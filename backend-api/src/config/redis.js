@@ -6,11 +6,14 @@ let redisClient = null;
 const connectRedis = async () => {
   try {
     redisClient = redis.createClient({
-      url: process.env.REDIS_URL
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      // Do not auto-reconnect in the background; if Redis is down we operate
+      // without it instead of hammering reconnection attempts.
+      socket: { reconnectStrategy: false }
     });
 
     redisClient.on('error', (err) => {
-      logger.error('❌ Redis Client Error:', err);
+      logger.warn('Redis client error (continuing without Redis):', err.message);
     });
 
     redisClient.on('connect', () => {
@@ -20,15 +23,11 @@ const connectRedis = async () => {
     await redisClient.connect();
     return redisClient;
   } catch (error) {
-    logger.error('❌ Redis connection error:', error);
-    
-    // In development, continue without redis
-    if (process.env.NODE_ENV === 'development') {
-      logger.warn('🔄 Continuing in development mode without Redis');
-      return null;
-    }
-    
-    process.exit(1);
+    logger.warn('❌ Redis connection failed, continuing without Redis:', error.message);
+    redisClient = null;
+    // Never crash the process because Redis is unavailable (tests, degraded
+    // production, local dev). The app must keep working without cache.
+    return null;
   }
 };
 
