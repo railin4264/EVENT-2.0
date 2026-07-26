@@ -7,6 +7,7 @@ const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const User = require('../../src/models/User');
 
 describe('Security Tests', () => {
   let app;
@@ -23,8 +24,6 @@ describe('Security Tests', () => {
       const server = require('../../src/server');
       app = server.app || server;
     }
-
-    const User = require('../../src/models/User');
 
     // Create test user
     const hashedPassword = await bcrypt.hash('testpassword123', 10);
@@ -43,7 +42,6 @@ describe('Security Tests', () => {
   });
 
   afterEach(async () => {
-    const User = require('../../src/models/User');
     await User.deleteMany({});
   });
 

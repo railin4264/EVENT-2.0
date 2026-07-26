@@ -40,8 +40,10 @@ class EmailService {
       logger.info(`Email sent to ${to}: ${info.messageId}`);
       return info;
     } catch (error) {
-      logger.error(`Failed to send email to ${to}:`, error);
-      throw error;
+      // Email delivery failure must never break the calling request
+      // (registration, password reset, etc.). Log and return a failed marker.
+      logger.error(`Failed to send email to ${to} (continuing without email):`, error.message);
+      return { messageId: null, sent: false, error: error.message };
     }
   }
 

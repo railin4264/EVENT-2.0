@@ -43,6 +43,11 @@ const errorHandler = (err, req, res, next) => {
     error = { message, statusCode: 401 };
   }
 
+  // CORS rejection should be a 403, not a 500
+  if (err.message === 'Not allowed by CORS') {
+    error = { message: 'Not allowed by CORS', statusCode: 403 };
+  }
+
   res.status(error.statusCode || 500).json({
     success: false,
     message: error.message || 'Server Error',

@@ -14,9 +14,9 @@ class SocketService {
     this.notificationService = null;
     this.gamificationService = null;
     this.cleanupInterval = null;
-
-    // Cleanup inactive connections every 5 minutes
-    this.startCleanupInterval();
+    // NOTE: the cleanup interval is started in initialize(), not here, so that
+    // simply importing/constructing this service does not schedule timers or
+    // open background connections (important for the test harness).
   }
 
   initialize(server) {
@@ -40,6 +40,10 @@ class SocketService {
 
     // Initialize gamification service
     this.gamificationService = new GamificationService(this.notificationService);
+
+    // Start the stale-connection cleanup timer only now that a real server
+    // is running (avoids scheduling timers in the test harness).
+    this.startCleanupInterval();
 
     logger.info('🔌 Socket.IO service initialized');
     return this.io;

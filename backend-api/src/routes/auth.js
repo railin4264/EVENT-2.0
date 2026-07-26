@@ -447,6 +447,52 @@ router.post('/logout-all', protect, async (req, res) => {
   }
 });
 
+// @desc    Change password (with full token rotation)
+// @route   POST /api/auth/change-password
+// @access  Private
+router.post('/change-password', protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current and new password are required'
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters'
+      });
+    }
+
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    // Rotate all sessions: invalidate every existing token so stolen/old
+    // tokens stop working immediately after a password change.
+    user.tokens = [];
+    user.refreshTokens = [];
+    await user.save();
+
+    logger.info(`Password changed for user: ${user.username}`);
+    res.json({ success: true, message: 'Password changed successfully. Please log in again.' });
+  } catch (error) {
+    logger.error('Change password error:', error);
+    res.status(500).json({ success: false, message: 'Server error during password change' });
+  }
+});
+
 // @desc    Get current logged in user
 // @route   GET /api/auth/me
 // @access  Private

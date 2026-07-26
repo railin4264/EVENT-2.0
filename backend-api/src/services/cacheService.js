@@ -20,42 +20,34 @@ class CacheService {
   }
 
   async connect() {
+    // Redis is OPTIONAL. If no REDIS_URL is configured, stay disconnected and
+    // never attempt a connection (avoids background reconnection attempts that
+    // surface as unhandled AggregateError rejections in tests/CI).
+    if (!process.env.REDIS_URL) {
+      this.isConnected = false;
+      this.client = null;
+      return null;
+    }
+
     try {
       if (this.isConnected && this.client) {
         return this.client;
       }
 
       const redisConfig = {
-        url: process.env.REDIS_URL || 'redis://localhost:6379',
+        url: process.env.REDIS_URL,
         socket: {
-          reconnectStrategy: (retries) => {
-            if (retries > this.maxRetryAttempts) {
-              logger.error('Redis max retry attempts reached');
-              return new Error('Redis connection failed');
-            }
-            return Math.min(retries * 50, 500);
-          }
-        },
-        retry_strategy: (options) => {
-          if (options.error && options.error.code === 'ECONNREFUSED') {
-            logger.error('Redis server connection refused');
-            return new Error('Redis server connection refused');
-          }
-          if (options.total_retry_time > 1000 * 60 * 60) {
-            logger.error('Redis retry time exhausted');
-            return new Error('Redis retry time exhausted');
-          }
-          if (options.attempt > 10) {
-            return undefined;
-          }
-          return Math.min(options.attempt * 100, 3000);
+          // Do not auto-reconnect in the background — if Redis is down we
+          // degrade to no-cache instead of hammering reconnection.
+          reconnectStrategy: false
         }
       };
 
       this.client = Redis.createClient(redisConfig);
 
       this.client.on('error', (err) => {
-        logger.error('Redis Client Error:', err);
+        // Swallow connection errors so they never become unhandled rejections.
+        logger.warn('Redis client error (cache disabled):', err.message);
         this.isConnected = false;
       });
 
@@ -63,11 +55,6 @@ class CacheService {
         logger.info('Redis Client Connected');
         this.isConnected = true;
         this.retryAttempts = 0;
-      });
-
-      this.client.on('reconnecting', () => {
-        logger.info('Redis Client Reconnecting...');
-        this.retryAttempts++;
       });
 
       this.client.on('ready', () => {
@@ -79,9 +66,12 @@ class CacheService {
       return this.client;
 
     } catch (error) {
-      logger.error('Failed to connect to Redis:', error);
+      // Redis is optional: never crash the app (or test runs) when it is
+      // unavailable. Callers already guard with this.isConnected / try-catch
+      // and degrade gracefully (cache miss → recompute from DB).
+      logger.warn('Redis unavailable, continuing without cache:', error.message);
       this.isConnected = false;
-      throw error;
+      return null;
     }
   }
 
@@ -99,11 +89,10 @@ class CacheService {
 
   // Basic cache operations
   async get(key, defaultValue = null) {
+    if (!this.isConnected) {
+      return defaultValue;
+    }
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-
       const value = await this.client.get(this.formatKey(key));
       if (value === null) {
         logger.debug(`Cache miss for key: ${key}`);
@@ -119,11 +108,10 @@ class CacheService {
   }
 
   async set(key, value, ttl = null) {
+    if (!this.isConnected) {
+      return false;
+    }
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-
       const serializedValue = JSON.stringify(value);
       const formattedKey = this.formatKey(key);
       const cacheTTL = ttl || this.defaultTTL;
@@ -138,11 +126,10 @@ class CacheService {
   }
 
   async del(key) {
+    if (!this.isConnected) {
+      return false;
+    }
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-
       const result = await this.client.del(this.formatKey(key));
       logger.debug(`Cache delete for key: ${key}, result: ${result}`);
       return result > 0;
@@ -153,11 +140,10 @@ class CacheService {
   }
 
   async exists(key) {
+    if (!this.isConnected) {
+      return false;
+    }
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-
       const result = await this.client.exists(this.formatKey(key));
       return result === 1;
     } catch (error) {
@@ -167,11 +153,10 @@ class CacheService {
   }
 
   async expire(key, ttl) {
+    if (!this.isConnected) {
+      return false;
+    }
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-
       const result = await this.client.expire(this.formatKey(key), ttl);
       return result === 1;
     } catch (error) {
@@ -182,12 +167,12 @@ class CacheService {
 
   // Pattern-based operations
   async deletePattern(pattern) {
+    if (!this.isConnected) {
+      return false;
+    }
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-
       const keys = await this.client.keys(this.formatKey(pattern));
+
       if (keys.length > 0) {
         const result = await this.client.del(keys);
         logger.debug(`Cache delete pattern ${pattern}: ${result} keys deleted`);
@@ -201,11 +186,10 @@ class CacheService {
   }
 
   async getKeysPattern(pattern) {
+    if (!this.isConnected) {
+      return [];
+    }
     try {
-      if (!this.isConnected) {
-        await this.connect();
-      }
-
       return await this.client.keys(this.formatKey(pattern));
     } catch (error) {
       logger.error(`Cache get keys pattern error for ${pattern}:`, error);

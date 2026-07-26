@@ -95,12 +95,19 @@ const server = createServer(app);
 // Configure Sentry for Express
 sentryConfig.configureExpress(app);
 
-// Socket.IO setup
-const socketService = require('./services/socketService');
-const io = socketService.initialize(server);
+// Socket.IO + cron setup runs only when started as the main script.
+// When required by tests (supertest), initializing Socket.IO starts timers
+// and background connections (redis cleanup interval) that surface as
+// unhandled AggregateError rejections. Tests use `app` directly.
+let io = null;
+let socketService = null;
+let cronService = null;
 
-// Initialize cron service
-const cronService = new CronService();
+if (require.main === module) {
+  socketService = require('./services/socketService');
+  io = socketService.initialize(server);
+  cronService = new CronService();
+}
 
 // Connect to databases and services ONLY when run as the main script.
 // When required by tests (supertest), the test setup provides its own
