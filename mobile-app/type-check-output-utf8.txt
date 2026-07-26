@@ -1,0 +1,117 @@
+﻿
+> eventconnect-mobile@2.0.0 type-check
+> tsc --noEmit
+
+src/components/home/QuickActions.tsx(20,28): error TS2339: Property 'quickAction' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(24,34): error TS2339: Property 'quickActionIcon' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(27,33): error TS2339: Property 'quickActionText' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(31,28): error TS2339: Property 'quickAction' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(35,34): error TS2339: Property 'quickActionIcon' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(38,33): error TS2339: Property 'quickActionText' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(42,28): error TS2339: Property 'quickAction' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(46,34): error TS2339: Property 'quickActionIcon' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/home/QuickActions.tsx(49,33): error TS2339: Property 'quickActionText' does not exist on type '{ container: { flex: number; backgroundColor: string; }; scrollContent: { paddingTop: number; }; headerSticky: { shadowColor: string; shadowOffset: { width: number; height: number; }; shadowOpacity: number; ... 13 more ...; backgroundColor: string; } | { ...; }; ... 107 more ...; shimmer: { ...; }; }'.
+src/components/TribePosts.tsx(60,41): error TS2351: This expression is not constructable.
+  Type 'Function' has no construct signatures.
+src/components/TribePosts.tsx(102,41): error TS2351: This expression is not constructable.
+  Type 'Function' has no construct signatures.
+src/components/TribePosts.tsx(122,41): error TS2351: This expression is not constructable.
+  Type 'Function' has no construct signatures.
+src/components/TribePosts.tsx(150,49): error TS2351: This expression is not constructable.
+  Type 'Function' has no construct signatures.
+src/components/TribeStories.tsx(62,41): error TS2351: This expression is not constructable.
+  Type 'Function' has no construct signatures.
+src/components/TribeStories.tsx(83,43): error TS2351: This expression is not constructable.
+  Type 'Function' has no construct signatures.
+src/components/ui/Avatar.tsx(127,11): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: LinearGradientProps): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+  Overload 2 of 2, '(props: LinearGradientProps, context: any): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+src/components/ui/Badge.tsx(75,9): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: LinearGradientProps): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+  Overload 2 of 2, '(props: LinearGradientProps, context: any): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+src/components/ui/Button.tsx(163,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: LinearGradientProps): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+  Overload 2 of 2, '(props: LinearGradientProps, context: any): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+src/components/ui/Card.tsx(91,11): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: LinearGradientProps): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+  Overload 2 of 2, '(props: LinearGradientProps, context: any): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+src/components/ui/CategoryChip.tsx(18,11): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: LinearGradientProps): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+  Overload 2 of 2, '(props: LinearGradientProps, context: any): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+src/components/ui/GlassmorphicCard.tsx(53,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: LinearGradientProps): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+  Overload 2 of 2, '(props: LinearGradientProps, context: any): LinearGradient', gave the following error.
+    Type 'string[]' is not assignable to type 'readonly [ColorValue, ColorValue, ...ColorValue[]]'.
+      Source provides no match for required element at position 0 in target.
+src/components/ui/index.ts(29,15): error TS2614: Module '"./Button"' has no exported member 'ButtonProps'. Did you mean to use 'import ButtonProps from "./Button"' instead?
+src/components/ui/index.ts(30,15): error TS2614: Module '"./Card"' has no exported member 'CardProps'. Did you mean to use 'import CardProps from "./Card"' instead?
+src/components/ui/index.ts(31,15): error TS2614: Module '"./Badge"' has no exported member 'BadgeProps'. Did you mean to use 'import BadgeProps from "./Badge"' instead?
+src/components/ui/index.ts(32,15): error TS2614: Module '"./Avatar"' has no exported member 'AvatarProps'. Did you mean to use 'import AvatarProps from "./Avatar"' instead?
+src/components/ui/Skeleton.tsx(73,9): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: ViewProps): View', gave the following error.
+    Type '{ width: string | number; height: number; borderRadius: number; }' is not assignable to type 'ViewStyle | Falsy | RegisteredStyle<ViewStyle> | RecursiveArray<ViewStyle | Falsy | RegisteredStyle<ViewStyle>> | readonly (ViewStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+      Types of property 'width' are incompatible.
+        Type 'string | number' is not assignable to type 'DimensionValue'.
+          Type 'string' is not assignable to type 'DimensionValue'.
+  Overload 2 of 2, '(props: ViewProps, context: any): View', gave the following error.
+    Type '{ width: string | number; height: number; borderRadius: number; }' is not assignable to type 'ViewStyle | Falsy | RegisteredStyle<ViewStyle> | RecursiveArray<ViewStyle | Falsy | RegisteredStyle<ViewStyle>> | readonly (ViewStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+      Types of property 'width' are incompatible.
+        Type 'string | number' is not assignable to type 'DimensionValue'.
+          Type 'string' is not assignable to type 'DimensionValue'.
+src/hooks/useFeed.ts(2,33): error TS2305: Module '"@/services/api"' has no exported member 'FeedFilters'.
+src/hooks/useOffline.ts(103,44): error TS2345: Argument of type 'PaginatedResponse<Event>' is not assignable to parameter of type 'Event[]'.
+  Type 'PaginatedResponse<Event>' is missing the following properties from type 'Event[]': length, pop, push, concat, and 35 more.
+src/hooks/useOffline.ts(285,24): error TS2367: This comparison appears to be unintentional because the types '"image" | "text" | "location" | "file" | "event" | "tribe"' and '"system"' have no overlap.
+src/hooks/useOffline.ts(345,51): error TS2345: Argument of type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/mobile-app/src/services/notificationsService").Notification[]' is not assignable to parameter of type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/mobile-app/src/types/index").Notification[]'.
+  Type 'Notification' is missing the following properties from type 'Notification': id, recipient, isRead
+src/hooks/useOffline.ts(346,28): error TS2345: Argument of type 'Notification[]' is not assignable to parameter of type 'SetStateAction<Notification[]>'.
+  Type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/mobile-app/src/services/notificationsService").Notification[]' is not assignable to type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/mobile-app/src/types/index").Notification[]'.
+    Type 'Notification' is missing the following properties from type 'Notification': id, recipient, isRead
+src/navigation/AppNavigator.tsx(112,9): error TS2322: Type '"CreateHub"' is not assignable to type 'keyof MainTabParamList'.
+src/navigation/AppNavigator.tsx(221,9): error TS2322: Type '"Discovery"' is not assignable to type 'keyof RootStackParamList'.
+src/navigation/AppNavigator.tsx(226,9): error TS2322: Type '"Messages"' is not assignable to type 'keyof RootStackParamList'.
+src/navigation/AppNavigator.tsx(231,9): error TS2322: Type '"Tribes"' is not assignable to type 'keyof RootStackParamList'.
+src/navigation/AppNavigator.tsx(301,9): error TS2322: Type '"StoriesViewer"' is not assignable to type 'keyof RootStackParamList'.
+src/screens/auth/RegisterScreen.tsx(103,9): error TS2353: Object literal may only specify known properties, and 'birthDate' does not exist in type 'RegisterForm'.
+src/screens/ChallengesScreen.tsx(20,100): error TS2339: Property 'data' does not exist on type 'Challenge[]'.
+src/screens/main/HomeScreen.tsx(48,42): error TS2322: Type '"tech"' is not assignable to type 'EventCategory'.
+src/screens/main/HomeScreen.tsx(66,86): error TS2694: Namespace '"C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/mobile-app/node_modules/react-native-reanimated/lib/typescript/Animated"' has no exported member 'SharedValue'.
+src/screens/main/HomeScreen.tsx(69,40): error TS2345: Argument of type '() => { transform: ({ translateY: number; scale?: undefined; } | { scale: number; translateY?: undefined; })[]; }' is not assignable to parameter of type '() => DefaultStyle'.
+  Type '{ transform: ({ translateY: number; scale?: undefined; } | { scale: number; translateY?: undefined; })[]; }' is not assignable to type 'DefaultStyle'.
+    Type '{ transform: ({ translateY: number; scale?: undefined; } | { scale: number; translateY?: undefined; })[]; }' is not assignable to type 'ImageStyle'.
+      Types of property 'transform' are incompatible.
+        Type '({ translateY: number; scale?: undefined; } | { scale: number; translateY?: undefined; })[]' is not assignable to type 'string | readonly (({ scale: AnimatableNumericValue; } & { perspective?: never; rotate?: never; rotateX?: never; rotateY?: never; rotateZ?: never; scaleX?: never; scaleY?: never; ... 4 more ...; matrix?: never; }) | ... 11 more ... | ({ ...; } & { ...; }))[]'.
+          Type '({ translateY: number; scale?: undefined; } | { scale: number; translateY?: undefined; })[]' is not assignable to type 'readonly (({ scale: AnimatableNumericValue; } & { perspective?: never; rotate?: never; rotateX?: never; rotateY?: never; rotateZ?: never; scaleX?: never; scaleY?: never; translateX?: never; translateY?: never; skewX?: never; skewY?: never; matrix?: never; }) | ... 11 more ... | ({ ...; } & { ...; }))[]'.
+            Type '{ translateY: number; scale?: undefined; } | { scale: number; translateY?: undefined; }' is not assignable to type '({ scale: AnimatableNumericValue; } & { perspective?: never; rotate?: never; rotateX?: never; rotateY?: never; rotateZ?: never; scaleX?: never; scaleY?: never; translateX?: never; translateY?: never; skewX?: never; skewY?: never; matrix?: never; }) | ... 11 more ... | ({ ...; } & { ...; })'.
+              Type '{ translateY: number; scale?: undefined; }' is not assignable to type '({ scale: AnimatableNumericValue; } & { perspective?: never; rotate?: never; rotateX?: never; rotateY?: never; rotateZ?: never; scaleX?: never; scaleY?: never; translateX?: never; translateY?: never; skewX?: never; skewY?: never; matrix?: never; }) | ... 11 more ... | ({ ...; } & { ...; })'.
+                Type '{ translateY: number; scale?: undefined; }' is not assignable to type '{ matrix: AnimatableNumericValue[]; } & { scale?: never; perspective?: never; rotate?: never; rotateX?: never; rotateY?: never; rotateZ?: never; scaleX?: never; scaleY?: never; translateX?: never; translateY?: never; skewX?: never; skewY?: never; }'.
+                  Property 'matrix' is missing in type '{ translateY: number; scale?: undefined; }' but required in type '{ matrix: AnimatableNumericValue[]; }'.
+src/screens/main/HomeScreen.tsx(89,79): error TS2322: Type 'DefaultStyle' is not assignable to type 'false | "" | (false & Partial<CSSAnimationProperties> & Partial<CSSTransitionProperties>) | ("" & Partial<...> & Partial<...>) | ... 12 more ... | readonly (false | ... 13 more ... | RegisteredStyle<...>)[]'.
+  Type 'ViewStyle' is not assignable to type 'false | "" | (false & Partial<CSSAnimationProperties> & Partial<CSSTransitionProperties>) | ("" & Partial<...> & Partial<...>) | ... 12 more ... | readonly (false | ... 13 more ... | RegisteredStyle<...>)[]'.
+    Type 'ViewStyle' is not assignable to type '(false & Partial<CSSAnimationProperties> & Partial<CSSTransitionProperties>) | ("" & Partial<CSSAnimationProperties> & Partial<...>) | ... 12 more ... | readonly (false | ... 13 more ... | RegisteredStyle<...>)[]'.
+      Type 'ViewStyle' is not assignable to type '{ resizeMode?: "repeat" | "none" | "center" | "stretch" | "contain" | "cover" | SharedValueDisableContravariance<"center"> | SharedValueDisableContravariance<"stretch"> | SharedValueDisableContravariance<...> | SharedValueDisableContravariance<...> | SharedValueDisableContravariance<...> | SharedValueDisableContrava...'.
+        Types of property 'overflow' are incompatible.
+          Type '"hidden" | "visible" | "scroll"' is not assignable to type 'MaybeSharedValue<"hidden"> | MaybeSharedValue<"visible">'.
+            Type '"scroll"' is not assignable to type 'MaybeSharedValue<"hidden"> | MaybeSharedValue<"visible">'.

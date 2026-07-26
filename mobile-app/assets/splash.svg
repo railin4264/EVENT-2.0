@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="2560" viewBox="0 0 1200 2560" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="splashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="2560" fill="url(#splashGrad)"/>
+  <circle cx="600" cy="1100" r="120" fill="white" opacity="0.9"/>
+  <text x="600" y="1120" font-family="Arial, sans-serif" font-size="80" font-weight="bold" text-anchor="middle" fill="#6366f1">EC</text>
+  <text x="600" y="1350" font-family="Arial, sans-serif" font-size="48" font-weight="600" text-anchor="middle" fill="white">EventConnect</text>
+  <text x="600" y="1420" font-family="Arial, sans-serif" font-size="28" text-anchor="middle" fill="white" opacity="0.8">Discover • Connect • Experience</text>
+</svg>

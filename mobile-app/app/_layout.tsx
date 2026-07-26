@@ -1,0 +1,114 @@
+import React from 'react';
+import { useFonts } from 'expo-font';
+import { SplashScreen, Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useEffect } from 'react';
+import { useColorScheme } from 'react-native';
+
+import { useNetInfo } from '@react-native-community/netinfo';
+import { View, Text } from 'react-native';
+
+// Providers
+import { AuthProvider } from '../src/contexts/AuthContext';
+import { ThemeProvider } from '../src/contexts/ThemeContext';
+import { NotificationsProvider } from '../src/contexts/NotificationsContext';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
+
+import { ToastProvider } from '../src/contexts/ToastContext';
+import { FabSheetProvider } from '../src/contexts/FabSheetContext';
+
+// Prevent the splash screen from auto-hiding before asset loading is complete.
+SplashScreen.preventAutoHideAsync();
+
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000, // 10 minutes
+    },
+  },
+});
+
+export default function RootLayout() {
+  const colorScheme = useColorScheme();
+  const [loaded] = useFonts({
+    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  });
+
+  useEffect(() => {
+    if (loaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded]);
+
+  const netInfo = useNetInfo();
+
+  if (!loaded) {
+    return null;
+  }
+
+  return (
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <QueryClientProvider client={queryClient}>
+            <ThemeProvider>
+              <ToastProvider>
+                <FabSheetProvider>
+                  <AuthProvider>
+                    <NotificationsProvider>
+                  {netInfo.isConnected === false && (
+                    <View style={{ backgroundColor: '#ef4444', padding: 4, alignItems: 'center', paddingTop: 40 }}>
+                      <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>Sin conexión a internet</Text>
+                    </View>
+                  )}
+                  <Stack
+                    screenOptions={{
+                      headerStyle: {
+                        backgroundColor: '#0C0B10',
+                      },
+                      headerTintColor: '#fff',
+                      headerTitleStyle: {
+                        fontWeight: 'bold',
+                      },
+                      contentStyle: {
+                        backgroundColor: '#0C0B10',
+                      },
+                    }}
+                  >
+                    <Stack.Screen name="index" options={{ headerShown: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                    <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                    <Stack.Screen name="event/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="tribe/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="messages" options={{ headerShown: false }} />
+                    <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+                    <Stack.Screen name="search" options={{ headerShown: false }} />
+                    <Stack.Screen name="settings" options={{ headerShown: false }} />
+                    <Stack.Screen name="create-event" options={{ headerShown: false }} />
+                    <Stack.Screen name="create-tribe" options={{ headerShown: false }} />
+                    <Stack.Screen name="notifications" options={{ headerShown: false }} />
+                    <Stack.Screen name="stories/[id]" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
+                    <Stack.Screen name="new-chat" options={{ headerShown: false }} />
+                    <Stack.Screen name="services-detail" options={{ headerShown: false }} />
+                  </Stack>
+                  <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+                </NotificationsProvider>
+              </AuthProvider>
+            </FabSheetProvider>
+          </ToastProvider>
+        </ThemeProvider>
+        </QueryClientProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
+  );
+}

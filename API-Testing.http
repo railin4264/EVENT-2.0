@@ -1,0 +1,167 @@
+### EventConnect V2 - REST Client Testing
+### Base URL
+@baseUrl = http://localhost:5000
+@apiUrl = {{baseUrl}}/api
+
+### Variables (will be updated after login)
+@authToken = 
+@userId = 
+
+###
+### 1. HEALTH CHECK
+GET {{baseUrl}}/health
+Content-Type: application/json
+
+###
+### 2. API INFO
+GET {{apiUrl}}
+Content-Type: application/json
+
+###
+### 3. REGISTER USER
+POST {{apiUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser_{{$randomInt}}",
+  "email": "test{{$randomInt}}@eventconnect.com",
+  "password": "TestPassword123!",
+  "profile": {
+    "firstName": "Test",
+    "lastName": "User",
+    "bio": "Test user for API testing",
+    "interests": ["technology", "networking", "events"]
+  }
+}
+
+###
+### 4. LOGIN USER (Demo user)
+POST {{apiUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "demo@eventconnect.com",
+  "password": "DemoPassword123!"
+}
+
+###
+### 5. GET CURRENT USER (requires token from login)
+GET {{apiUrl}}/auth/me
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+###
+### 6. GET ALL EVENTS
+GET {{apiUrl}}/events?limit=10&page=1
+Content-Type: application/json
+
+###
+### 7. SEARCH EVENTS
+GET {{apiUrl}}/events?search=tech&category=technology
+Content-Type: application/json
+
+###
+### 8. GET NEARBY EVENTS
+GET {{apiUrl}}/events/nearby?lat=40.7128&lng=-74.0060&radius=5000
+Content-Type: application/json
+
+###
+### 9. CREATE EVENT (requires auth token)
+POST {{apiUrl}}/events
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "title": "Test Event {{$randomInt}}",
+  "description": "This is a test event created via REST Client",
+  "category": "technology",
+  "startDate": "2025-01-15T18:00:00.000Z",
+  "endDate": "2025-01-15T21:00:00.000Z",
+  "location": {
+    "type": "Point",
+    "coordinates": [-74.0060, 40.7128],
+    "address": "New York, NY"
+  },
+  "maxAttendees": 50,
+  "price": 0,
+  "isPublic": true,
+  "tags": ["testing", "api", "rest-client"]
+}
+
+###
+### 10. GET ALL TRIBES
+GET {{apiUrl}}/tribes
+Content-Type: application/json
+
+###
+### 11. CREATE TRIBE (requires auth token)
+POST {{apiUrl}}/tribes
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "name": "Test Tribe {{$randomInt}}",
+  "description": "A test tribe created via REST Client",
+  "category": "technology",
+  "isPublic": true,
+  "settings": {
+    "allowPosts": true,
+    "allowEvents": true,
+    "requireApproval": false
+  }
+}
+
+###
+### 12. AI EVENT RECOMMENDATIONS
+GET {{apiUrl}}/ai/recommendations/events?limit=5
+Content-Type: application/json
+
+###
+### 13. AI TRIBE RECOMMENDATIONS
+GET {{apiUrl}}/ai/recommendations/tribes?limit=5
+Content-Type: application/json
+
+###
+### 14. AI TRENDING CONTENT
+GET {{apiUrl}}/ai/trending?type=events
+Content-Type: application/json
+
+###
+### 15. GAMIFICATION - GET ACHIEVEMENTS
+GET {{apiUrl}}/gamification/achievements
+Content-Type: application/json
+
+###
+### 16. GAMIFICATION - GET LEADERBOARDS
+GET {{apiUrl}}/gamification/leaderboards?type=global&limit=10
+Content-Type: application/json
+
+###
+### 17. GAMIFICATION - USER PROFILE (requires auth token)
+GET {{apiUrl}}/gamification/profile
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+###
+### 18. GAMIFICATION - GET CHALLENGES
+GET {{apiUrl}}/gamification/challenges
+Content-Type: application/json
+
+###
+### 19. USER PROFILE (requires auth token)
+GET {{apiUrl}}/users/profile
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+###
+### 20. UPDATE USER PROFILE (requires auth token)
+PUT {{apiUrl}}/users/profile
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "profile": {
+    "bio": "Updated bio from REST Client testing",
+    "interests": ["technology", "api-testing", "automation"]
+  }
+}

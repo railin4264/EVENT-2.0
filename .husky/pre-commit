@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running pre-commit checks for EventConnect project..."
+
+# Run linting for all packages
+npm run lint
+
+# Run formatting for all packages
+npm run format
+
+# Run type checking
+npm run type-check
+
+# Run tests for all packages
+npm test
+
+echo "✅ Pre-commit checks passed for EventConnect project!"

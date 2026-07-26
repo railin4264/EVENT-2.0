@@ -1,0 +1,150 @@
+﻿
+> eventconnect-frontend@1.0.0 type-check
+> tsc --noEmit
+
+src/app/dashboard/page.tsx(5,20): error TS2614: Module '"lucide-react"' has no exported member 'TicketCheck'. Did you mean to use 'import TicketCheck from "lucide-react"' instead?
+src/app/events/create/page.tsx(110,3): error TS2300: Duplicate identifier 'isPrivate'.
+src/app/events/create/page.tsx(111,3): error TS2300: Duplicate identifier 'isPrivate'.
+src/app/events/create/page.tsx(948,40): error TS2552: Cannot find name 'setFormData'. Did you mean 'formData'?
+src/app/messages/page.tsx(11,3): error TS2614: Module '"lucide-react"' has no exported member 'Video'. Did you mean to use 'import Video from "lucide-react"' instead?
+src/app/messages/page.tsx(19,3): error TS2724: '"lucide-react"' has no exported member named 'Circle'. Did you mean 'XCircle'?
+src/app/messages/page.tsx(86,21): error TS2345: Argument of type 'Chat' is not assignable to parameter of type 'ChatRoom'.
+  Types of property 'participants' are incompatible.
+    Type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/eventconnect-frontend/src/lib/api/chat").ChatParticipant[]' is not assignable to type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/eventconnect-frontend/src/types/api.types").ChatParticipant[]'.
+      Type 'ChatParticipant' is missing the following properties from type 'ChatParticipant': lastSeen, isTyping
+src/app/messages/page.tsx(87,24): error TS2345: Argument of type 'Chat' is not assignable to parameter of type 'ChatRoom'.
+  Types of property 'participants' are incompatible.
+    Type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/eventconnect-frontend/src/lib/api/chat").ChatParticipant[]' is not assignable to type 'import("C:/Users/Raili/OneDrive/Nueva carpeta/Im\u00E1genes/EVENT NOW 2.0/eventconnect-frontend/src/types/api.types").ChatParticipant[]'.
+      Type 'ChatParticipant' is missing the following properties from type 'ChatParticipant': lastSeen, isTyping
+src/app/messages/page.tsx(204,32): error TS2304: Cannot find name 'router'.
+src/app/messages/page.tsx(261,139): error TS2339: Property 'avatar' does not exist on type 'string | User'.
+  Property 'avatar' does not exist on type 'string'.
+src/app/messages/page.tsx(321,138): error TS2339: Property 'avatar' does not exist on type 'string | User'.
+  Property 'avatar' does not exist on type 'string'.
+src/app/page.tsx(17,3): error TS2614: Module '"lucide-react"' has no exported member 'Mic'. Did you mean to use 'import Mic from "lucide-react"' instead?
+src/app/register/page.tsx(102,9): error TS2353: Object literal may only specify known properties, and 'phone' does not exist in type 'RegisterData'.
+src/app/tribes/[id]/page.tsx(489,88): error TS2339: Property 'likedByUser' does not exist on type 'TribePost'.
+src/app/tribes/[id]/page.tsx(494,61): error TS2339: Property 'likedByUser' does not exist on type 'TribePost'.
+src/app/tribes/[id]/page.tsx(495,39): error TS2339: Property 'likes' does not exist on type 'TribePost'.
+src/components/auth/InterestsSelector.tsx(5,10): error TS2614: Module '"lucide-react"' has no exported member 'Music'. Did you mean to use 'import Music from "lucide-react"' instead?
+src/components/auth/InterestsSelector.tsx(5,17): error TS2614: Module '"lucide-react"' has no exported member 'Trophy'. Did you mean to use 'import Trophy from "lucide-react"' instead?
+src/components/auth/InterestsSelector.tsx(5,25): error TS2614: Module '"lucide-react"' has no exported member 'Laptop'. Did you mean to use 'import Laptop from "lucide-react"' instead?
+src/components/auth/InterestsSelector.tsx(5,33): error TS2614: Module '"lucide-react"' has no exported member 'Palette'. Did you mean to use 'import Palette from "lucide-react"' instead?
+src/components/auth/InterestsSelector.tsx(5,42): error TS2614: Module '"lucide-react"' has no exported member 'Utensils'. Did you mean to use 'import Utensils from "lucide-react"' instead?
+src/components/auth/InterestsSelector.tsx(5,74): error TS2614: Module '"lucide-react"' has no exported member 'Book'. Did you mean to use 'import Book from "lucide-react"' instead?
+src/components/auth/InterestsSelector.tsx(5,80): error TS2614: Module '"lucide-react"' has no exported member 'Plane'. Did you mean to use 'import Plane from "lucide-react"' instead?
+src/components/comments/CommentItem.tsx(5,17): error TS2614: Module '"lucide-react"' has no exported member 'Reply'. Did you mean to use 'import Reply from "lucide-react"' instead?
+src/components/comments/CommentItem.tsx(5,24): error TS2614: Module '"lucide-react"' has no exported member 'Pencil'. Did you mean to use 'import Pencil from "lucide-react"' instead?
+src/components/comments/CommentSection.tsx(111,21): error TS2345: Argument of type '(prev: Comment[]) => { replies: (string | Comment)[]; repliesCount: number; _id: string; targetType: "event" | "post"; targetId: string; author: { _id: string; username: string; firstName?: string; lastName?: string; avatar?: string; }; ... 7 more ...; updatedAt: string; }[]' is not assignable to parameter of type 'SetStateAction<Comment[]>'.
+  Type '(prev: Comment[]) => { replies: (string | Comment)[]; repliesCount: number; _id: string; targetType: "event" | "post"; targetId: string; author: { _id: string; username: string; firstName?: string; lastName?: string; avatar?: string; }; ... 7 more ...; updatedAt: string; }[]' is not assignable to type '(prevState: Comment[]) => Comment[]'.
+    Type '{ replies: (string | Comment)[]; repliesCount: number; _id: string; targetType: "event" | "post"; targetId: string; author: { _id: string; username: string; firstName?: string; lastName?: string; avatar?: string; }; ... 7 more ...; updatedAt: string; }[]' is not assignable to type 'Comment[]'.
+      Type '{ replies: (string | Comment)[]; repliesCount: number; _id: string; targetType: "event" | "post"; targetId: string; author: { _id: string; username: string; firstName?: string; lastName?: string; avatar?: string; }; ... 7 more ...; updatedAt: string; }' is not assignable to type 'Comment'.
+        Types of property 'replies' are incompatible.
+          Type '(string | Comment)[]' is not assignable to type 'string[] | Comment[]'.
+            Type '(string | Comment)[]' is not assignable to type 'string[]'.
+              Type 'string | Comment' is not assignable to type 'string'.
+                Type 'Comment' is not assignable to type 'string'.
+src/components/comments/CommentSection.tsx(148,15): error TS2322: Type '(string | Comment)[]' is not assignable to type 'string[] | Comment[]'.
+  Type '(string | Comment)[]' is not assignable to type 'string[]'.
+    Type 'string | Comment' is not assignable to type 'string'.
+      Type 'Comment' is not assignable to type 'string'.
+src/components/comments/CommentThread.tsx(5,60): error TS2614: Module '"lucide-react"' has no exported member 'Flag'. Did you mean to use 'import Flag from "lucide-react"' instead?
+src/components/comments/CommentThread.tsx(126,11): error TS2322: Type '{ src: string; alt: string; fallback: string; size: string; }' is not assignable to type 'IntrinsicAttributes & AvatarProps & RefAttributes<HTMLSpanElement>'.
+  Property 'src' does not exist on type 'IntrinsicAttributes & AvatarProps & RefAttributes<HTMLSpanElement>'.
+src/components/comments/CommentThread.tsx(313,20): error TS2741: Property 'comments' is missing in type '{ key: string; comment: Comment; currentUserId: string; onReply: (commentId: string, content: string) => Promise<void>; onLike: (commentId: string) => Promise<void>; ... 4 more ...; currentDepth: number; }' but required in type 'CommentThreadProps'.
+src/components/discovery/FeaturedEventsCarousel.tsx(5,62): error TS2614: Module '"lucide-react"' has no exported member 'DollarSign'. Did you mean to use 'import DollarSign from "lucide-react"' instead?
+src/components/discovery/FeaturedEventsCarousel.tsx(93,17): error TS2322: Type 'EventImage' is not assignable to type 'string'.
+src/components/discovery/ModernEventCard.tsx(5,35): error TS2614: Module '"lucide-react"' has no exported member 'Ticket'. Did you mean to use 'import Ticket from "lucide-react"' instead?
+src/components/discovery/QuickFilters.tsx(4,10): error TS2614: Module '"lucide-react"' has no exported member 'Flame'. Did you mean to use 'import Flame from "lucide-react"' instead?
+src/components/discovery/QuickFilters.tsx(4,27): error TS2614: Module '"lucide-react"' has no exported member 'PartyPopper'. Did you mean to use 'import PartyPopper from "lucide-react"' instead?
+src/components/discovery/QuickFilters.tsx(4,40): error TS2614: Module '"lucide-react"' has no exported member 'DollarSign'. Did you mean to use 'import DollarSign from "lucide-react"' instead?
+src/components/discovery/QuickFilters.tsx(4,52): error TS2614: Module '"lucide-react"' has no exported member 'Sparkles'. Did you mean to use 'import Sparkles from "lucide-react"' instead?
+src/components/discovery/ShareButton.tsx(5,17): error TS2614: Module '"lucide-react"' has no exported member 'Link'. Did you mean to use 'import Link from "lucide-react"' instead?
+src/components/discovery/ShareButton.tsx(5,23): error TS2614: Module '"lucide-react"' has no exported member 'Facebook'. Did you mean to use 'import Facebook from "lucide-react"' instead?
+src/components/events/EventCard.tsx(181,25): error TS2339: Property 'isFavorite' does not exist on type 'Event'.
+src/components/events/EventReviews.tsx(8,3): error TS2614: Module '"lucide-react"' has no exported member 'ThumbsDown'. Did you mean to use 'import ThumbsDown from "lucide-react"' instead?
+src/components/events/EventReviews.tsx(9,3): error TS2614: Module '"lucide-react"' has no exported member 'Flag'. Did you mean to use 'import Flag from "lucide-react"' instead?
+src/components/gamification/AchievementsPanel.tsx(6,3): error TS2614: Module '"lucide-react"' has no exported member 'Award'. Did you mean to use 'import Award from "lucide-react"' instead?
+src/components/gamification/AchievementsPanel.tsx(7,3): error TS2614: Module '"lucide-react"' has no exported member 'Trophy'. Did you mean to use 'import Trophy from "lucide-react"' instead?
+src/components/gamification/AchievementsPanel.tsx(9,3): error TS2614: Module '"lucide-react"' has no exported member 'Target'. Did you mean to use 'import Target from "lucide-react"' instead?
+src/components/gamification/AchievementsPanel.tsx(12,3): error TS2614: Module '"lucide-react"' has no exported member 'Flame'. Did you mean to use 'import Flame from "lucide-react"' instead?
+src/components/gamification/AchievementsPanel.tsx(19,3): error TS2614: Module '"lucide-react"' has no exported member 'Gift'. Did you mean to use 'import Gift from "lucide-react"' instead?
+src/components/layout/MobileNav.tsx(5,36): error TS2614: Module '"lucide-react"' has no exported member 'TicketIcon'. Did you mean to use 'import TicketIcon from "lucide-react"' instead?
+src/components/redesign/Auth.tsx(78,53): error TS2345: Argument of type '{ username: string; email: string; password: string; firstName: string; lastName: string; acceptTerms: boolean; interests: string[]; location: string; }' is not assignable to parameter of type 'RegisterRequest'.
+  Property 'birthDate' is missing in type '{ username: string; email: string; password: string; firstName: string; lastName: string; acceptTerms: boolean; interests: string[]; location: string; }' but required in type 'RegisterRequest'.
+src/components/settings/AccountSettings.tsx(5,66): error TS2614: Module '"lucide-react"' has no exported member 'Smartphone'. Did you mean to use 'import Smartphone from "lucide-react"' instead?
+src/components/settings/NotificationSettings.tsx(5,22): error TS2614: Module '"lucide-react"' has no exported member 'Smartphone'. Did you mean to use 'import Smartphone from "lucide-react"' instead?
+src/components/settings/NotificationSettings.tsx(5,66): error TS2614: Module '"lucide-react"' has no exported member 'Trophy'. Did you mean to use 'import Trophy from "lucide-react"' instead?
+src/hooks/useChat.ts(231,5): error TS1117: An object literal cannot have multiple properties with the same name.
+src/lib/icons.ts(9,3): error TS2614: Module '"lucide-react"' has no exported member 'ArrowLeft'. Did you mean to use 'import ArrowLeft from "lucide-react"' instead?
+src/lib/icons.ts(11,3): error TS2614: Module '"lucide-react"' has no exported member 'ArrowUp'. Did you mean to use 'import ArrowUp from "lucide-react"' instead?
+src/lib/icons.ts(12,3): error TS2614: Module '"lucide-react"' has no exported member 'ArrowDown'. Did you mean to use 'import ArrowDown from "lucide-react"' instead?
+src/lib/icons.ts(20,3): error TS2614: Module '"lucide-react"' has no exported member 'Minus'. Did you mean to use 'import Minus from "lucide-react"' instead?
+src/lib/icons.ts(26,3): error TS2614: Module '"lucide-react"' has no exported member 'UserPlus'. Did you mean to use 'import UserPlus from "lucide-react"' instead?
+src/lib/icons.ts(28,3): error TS2614: Module '"lucide-react"' has no exported member 'UserCheck'. Did you mean to use 'import UserCheck from "lucide-react"' instead?
+src/lib/icons.ts(38,3): error TS2614: Module '"lucide-react"' has no exported member 'Video'. Did you mean to use 'import Video from "lucide-react"' instead?
+src/lib/icons.ts(46,3): error TS2724: '"lucide-react"' has no exported member named 'CalendarDays'. Did you mean 'Calendar'?
+src/lib/icons.ts(48,3): error TS2614: Module '"lucide-react"' has no exported member 'Timer'. Did you mean to use 'import Timer from "lucide-react"' instead?
+src/lib/icons.ts(52,3): error TS2614: Module '"lucide-react"' has no exported member 'Navigation'. Did you mean to use 'import Navigation from "lucide-react"' instead?
+src/lib/icons.ts(53,3): error TS2614: Module '"lucide-react"' has no exported member 'Compass'. Did you mean to use 'import Compass from "lucide-react"' instead?
+src/lib/icons.ts(60,3): error TS2614: Module '"lucide-react"' has no exported member 'Sliders'. Did you mean to use 'import Sliders from "lucide-react"' instead?
+src/lib/icons.ts(78,3): error TS2614: Module '"lucide-react"' has no exported member 'Folder'. Did you mean to use 'import Folder from "lucide-react"' instead?
+src/lib/icons.ts(79,3): error TS2614: Module '"lucide-react"' has no exported member 'Upload'. Did you mean to use 'import Upload from "lucide-react"' instead?
+src/lib/icons.ts(86,3): error TS2614: Module '"lucide-react"' has no exported member 'BellOff'. Did you mean to use 'import BellOff from "lucide-react"' instead?
+src/lib/icons.ts(89,3): error TS2614: Module '"lucide-react"' has no exported member 'CreditCard'. Did you mean to use 'import CreditCard from "lucide-react"' instead?
+src/lib/icons.ts(90,3): error TS2614: Module '"lucide-react"' has no exported member 'DollarSign'. Did you mean to use 'import DollarSign from "lucide-react"' instead?
+src/lib/icons.ts(91,3): error TS2614: Module '"lucide-react"' has no exported member 'ShoppingCart'. Did you mean to use 'import ShoppingCart from "lucide-react"' instead?
+src/lib/icons.ts(92,3): error TS2614: Module '"lucide-react"' has no exported member 'Tag'. Did you mean to use 'import Tag from "lucide-react"' instead?
+src/lib/icons.ts(95,3): error TS2614: Module '"lucide-react"' has no exported member 'Music'. Did you mean to use 'import Music from "lucide-react"' instead?
+src/lib/icons.ts(96,3): error TS2614: Module '"lucide-react"' has no exported member 'Music2'. Did you mean to use 'import Music2 from "lucide-react"' instead?
+src/lib/icons.ts(97,3): error TS2614: Module '"lucide-react"' has no exported member 'Gamepad2'. Did you mean to use 'import Gamepad2 from "lucide-react"' instead?
+src/lib/icons.ts(98,3): error TS2614: Module '"lucide-react"' has no exported member 'Trophy'. Did you mean to use 'import Trophy from "lucide-react"' instead?
+src/lib/icons.ts(99,3): error TS2614: Module '"lucide-react"' has no exported member 'Medal'. Did you mean to use 'import Medal from "lucide-react"' instead?
+src/lib/icons.ts(100,3): error TS2614: Module '"lucide-react"' has no exported member 'Target'. Did you mean to use 'import Target from "lucide-react"' instead?
+src/lib/icons.ts(101,3): error TS2614: Module '"lucide-react"' has no exported member 'Dumbbell'. Did you mean to use 'import Dumbbell from "lucide-react"' instead?
+src/lib/icons.ts(102,3): error TS2614: Module '"lucide-react"' has no exported member 'Utensils'. Did you mean to use 'import Utensils from "lucide-react"' instead?
+src/lib/icons.ts(103,3): error TS2614: Module '"lucide-react"' has no exported member 'Coffee'. Did you mean to use 'import Coffee from "lucide-react"' instead?
+src/lib/icons.ts(104,3): error TS2614: Module '"lucide-react"' has no exported member 'Wine'. Did you mean to use 'import Wine from "lucide-react"' instead?
+src/lib/icons.ts(105,3): error TS2614: Module '"lucide-react"' has no exported member 'Palette'. Did you mean to use 'import Palette from "lucide-react"' instead?
+src/lib/icons.ts(106,3): error TS2614: Module '"lucide-react"' has no exported member 'Brush'. Did you mean to use 'import Brush from "lucide-react"' instead?
+src/lib/icons.ts(107,3): error TS2614: Module '"lucide-react"' has no exported member 'BookOpen'. Did you mean to use 'import BookOpen from "lucide-react"' instead?
+src/lib/icons.ts(108,3): error TS2614: Module '"lucide-react"' has no exported member 'GraduationCap'. Did you mean to use 'import GraduationCap from "lucide-react"' instead?
+src/lib/icons.ts(109,3): error TS2614: Module '"lucide-react"' has no exported member 'Briefcase'. Did you mean to use 'import Briefcase from "lucide-react"' instead?
+src/lib/icons.ts(110,3): error TS2614: Module '"lucide-react"' has no exported member 'Building2'. Did you mean to use 'import Building2 from "lucide-react"' instead?
+src/lib/icons.ts(111,3): error TS2614: Module '"lucide-react"' has no exported member 'Laptop'. Did you mean to use 'import Laptop from "lucide-react"' instead?
+src/lib/icons.ts(112,3): error TS2614: Module '"lucide-react"' has no exported member 'Smartphone'. Did you mean to use 'import Smartphone from "lucide-react"' instead?
+src/lib/icons.ts(113,3): error TS2614: Module '"lucide-react"' has no exported member 'Plane'. Did you mean to use 'import Plane from "lucide-react"' instead?
+src/lib/icons.ts(114,3): error TS2614: Module '"lucide-react"' has no exported member 'Car'. Did you mean to use 'import Car from "lucide-react"' instead?
+src/lib/icons.ts(115,3): error TS2614: Module '"lucide-react"' has no exported member 'Train'. Did you mean to use 'import Train from "lucide-react"' instead?
+src/lib/icons.ts(116,3): error TS2614: Module '"lucide-react"' has no exported member 'Bike'. Did you mean to use 'import Bike from "lucide-react"' instead?
+src/lib/icons.ts(121,3): error TS2614: Module '"lucide-react"' has no exported member 'Cloud'. Did you mean to use 'import Cloud from "lucide-react"' instead?
+src/lib/icons.ts(122,3): error TS2614: Module '"lucide-react"' has no exported member 'CloudRain'. Did you mean to use 'import CloudRain from "lucide-react"' instead?
+src/lib/icons.ts(126,3): error TS2724: '"lucide-react"' has no exported member named 'Unlock'. Did you mean 'Lock'?
+src/lib/icons.ts(128,3): error TS2614: Module '"lucide-react"' has no exported member 'ShieldCheck'. Did you mean to use 'import ShieldCheck from "lucide-react"' instead?
+src/lib/icons.ts(129,3): error TS2614: Module '"lucide-react"' has no exported member 'Key'. Did you mean to use 'import Key from "lucide-react"' instead?
+src/lib/icons.ts(137,3): error TS2614: Module '"lucide-react"' has no exported member 'Flag'. Did you mean to use 'import Flag from "lucide-react"' instead?
+src/lib/icons.ts(138,3): error TS2614: Module '"lucide-react"' has no exported member 'Gift'. Did you mean to use 'import Gift from "lucide-react"' instead?
+src/lib/icons.ts(140,3): error TS2614: Module '"lucide-react"' has no exported member 'Flame'. Did you mean to use 'import Flame from "lucide-react"' instead?
+src/lib/icons.ts(141,3): error TS2614: Module '"lucide-react"' has no exported member 'Sparkles'. Did you mean to use 'import Sparkles from "lucide-react"' instead?
+src/lib/icons.ts(142,3): error TS2614: Module '"lucide-react"' has no exported member 'PartyPopper'. Did you mean to use 'import PartyPopper from "lucide-react"' instead?
+src/lib/icons.ts(144,3): error TS2614: Module '"lucide-react"' has no exported member 'TrendingDown'. Did you mean to use 'import TrendingDown from "lucide-react"' instead?
+src/lib/icons.ts(145,3): error TS2614: Module '"lucide-react"' has no exported member 'BarChart'. Did you mean to use 'import BarChart from "lucide-react"' instead?
+src/lib/icons.ts(146,3): error TS2614: Module '"lucide-react"' has no exported member 'PieChart'. Did you mean to use 'import PieChart from "lucide-react"' instead?
+src/lib/icons.ts(147,3): error TS2614: Module '"lucide-react"' has no exported member 'Activity'. Did you mean to use 'import Activity from "lucide-react"' instead?
+src/lib/icons.ts(148,3): error TS2614: Module '"lucide-react"' has no exported member 'Link'. Did you mean to use 'import Link from "lucide-react"' instead?
+src/lib/icons.ts(150,3): error TS2614: Module '"lucide-react"' has no exported member 'QrCode'. Did you mean to use 'import QrCode from "lucide-react"' instead?
+src/lib/icons.ts(151,3): error TS2614: Module '"lucide-react"' has no exported member 'Ticket'. Did you mean to use 'import Ticket from "lucide-react"' instead?
+src/lib/icons.ts(152,3): error TS2614: Module '"lucide-react"' has no exported member 'Award'. Did you mean to use 'import Award from "lucide-react"' instead?
+src/lib/icons.ts(155,3): error TS2614: Module '"lucide-react"' has no exported member 'Facebook'. Did you mean to use 'import Facebook from "lucide-react"' instead?
+src/lib/icons.ts(159,3): error TS2614: Module '"lucide-react"' has no exported member 'Youtube'. Did you mean to use 'import Youtube from "lucide-react"' instead?
+src/lib/icons.ts(160,3): error TS2614: Module '"lucide-react"' has no exported member 'Github'. Did you mean to use 'import Github from "lucide-react"' instead?
+src/lib/icons.ts(163,3): error TS2614: Module '"lucide-react"' has no exported member 'Reply'. Did you mean to use 'import Reply from "lucide-react"' instead?
+src/lib/icons.ts(164,3): error TS2614: Module '"lucide-react"' has no exported member 'Forward'. Did you mean to use 'import Forward from "lucide-react"' instead?
+src/lib/icons.ts(165,3): error TS2614: Module '"lucide-react"' has no exported member 'CornerUpLeft'. Did you mean to use 'import CornerUpLeft from "lucide-react"' instead?
+src/lib/icons.ts(166,3): error TS2614: Module '"lucide-react"' has no exported member 'CornerUpRight'. Did you mean to use 'import CornerUpRight from "lucide-react"' instead?
+src/lib/icons.ts(171,3): error TS2614: Module '"lucide-react"' has no exported member 'Maximize'. Did you mean to use 'import Maximize from "lucide-react"' instead?
+src/lib/icons.ts(172,3): error TS2614: Module '"lucide-react"' has no exported member 'Minimize'. Did you mean to use 'import Minimize from "lucide-react"' instead?
+src/lib/icons.ts(173,3): error TS2614: Module '"lucide-react"' has no exported member 'Fullscreen'. Did you mean to use 'import Fullscreen from "lucide-react"' instead?
+src/lib/icons.ts(174,3): error TS2614: Module '"lucide-react"' has no exported member 'Grid'. Did you mean to use 'import Grid from "lucide-react"' instead?
+src/lib/icons.ts(175,3): error TS2614: Module '"lucide-react"' has no exported member 'List'. Did you mean to use 'import List from "lucide-react"' instead?
+src/lib/icons.ts(176,3): error TS2614: Module '"lucide-react"' has no exported member 'Layout'. Did you mean to use 'import Layout from "lucide-react"' instead?

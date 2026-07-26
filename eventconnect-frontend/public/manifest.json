@@ -1,0 +1,47 @@
+{
+  "name": "EventConnect 2.0",
+  "short_name": "EventConnect",
+  "description": "Connect, create, and explore amazing events and communities",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366F1",
+  "orientation": "portrait-primary",
+  "categories": ["social", "entertainment", "productivity"],
+  "lang": "es",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Crear Evento",
+      "short_name": "Crear",
+      "description": "Crear un nuevo evento",
+      "url": "/events/create"
+    },
+    {
+      "name": "Explorar",
+      "short_name": "Explorar", 
+      "description": "Explorar eventos cerca de ti",
+      "url": "/discovery"
+    },
+    {
+      "name": "Mi Perfil",
+      "short_name": "Perfil",
+      "description": "Ver mi perfil",
+      "url": "/profile"
+    }
+  ]
+}
