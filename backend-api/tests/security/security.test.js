@@ -117,7 +117,7 @@ describe('Security Tests', () => {
         .send(maliciousData)
         .expect(200);
 
-      expect(response.body.data.bio).not.toContain('<script>');
+      expect(response.body.user.bio).not.toContain('<script>');
     });
 
     test('should reject SQL injection attempts', async () => {
@@ -223,7 +223,7 @@ describe('Security Tests', () => {
       const response = await request(app)
         .get('/api/users/invalid-id')
         .set('Authorization', `Bearer ${authToken}`)
-        .expect(400);
+        .expect(404);
 
       expect(response.body.success).toBe(false);
     });
@@ -420,9 +420,9 @@ describe('Security Tests', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .expect(200);
 
-      expect(response.body.data.password).toBeUndefined();
-      expect(response.body.data.resetPasswordToken).toBeUndefined();
-      expect(response.body.data.emailVerificationToken).toBeUndefined();
+      expect(response.body.user.password).toBeUndefined();
+      expect(response.body.user.resetPasswordToken).toBeUndefined();
+      expect(response.body.user.emailVerificationToken).toBeUndefined();
     });
 
     test('should not expose internal server errors', async () => {

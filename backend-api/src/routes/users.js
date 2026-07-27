@@ -366,11 +366,7 @@ router.get('/:id', protect, async (req, res) => {
       user
     });
   } catch (error) {
-    logger.error('Get user by ID error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    next(error);
   }
 });
 

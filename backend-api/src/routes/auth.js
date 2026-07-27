@@ -191,6 +191,15 @@ router.post('/register', validateRegister, async (req, res) => {
 // @access  Public
 router.post('/login', validateLogin, async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: errors.array()
+      });
+    }
+
     const { email, password } = req.body;
 
     // Log login attempts in development only
