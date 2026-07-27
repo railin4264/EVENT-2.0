@@ -53,8 +53,8 @@ async function createTestUser(data = {}) {
 
 describe('Two-Factor Authentication', () => {
   beforeAll(async () => {
-    // MONGODB_URI is provided by jest.globalSetup (single shared mongod).
-    const server = require('../src/server');
+    // MONGODB_URI is provided by the shared mongod (globalSetup / setup.js).
+    const server = require('../../src/server');
     app = server.app || server;
   });
 

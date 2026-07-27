@@ -158,3 +158,4 @@ backend-api/logs/
 # Jest output / temp reports
 jest_output.txt
 output.txt
+backend-api/.mongod-uri

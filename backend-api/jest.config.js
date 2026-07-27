@@ -10,15 +10,14 @@ module.exports = {
   // globalThis in setup.js) and connects mongoose to its valid
   // mongodb://127.0.0.1:PORT URI. We run with maxWorkers:1 (single
   // process) so globalThis is process-wide and the mongod stays alive for
-  // the whole run. This avoids both the "localhost:undefined" AggregateError
-  // (workers on mongoose's port-less default) and the ECONNRESET / second-
-  // mongod AggregateError (parallel workers each got their own globalThis
-  // or the parent's mongod died mid-run).
+  // the whole run, and so a single module registry is shared (needed
+  // because twoFactor.test.js relies on jest.mock('qrcode'/'speakeasy')
+  // which would be shadowed by a module cached from an earlier file under
+  // parallel execution).
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
 
   // Single process: globalThis (and thus the shared mongod) is one and
-  // alive for the entire run. Slower than parallel, but the only topology
-  // that keeps one valid mongod reachable for every test file.
+  // alive for the entire run.
   maxWorkers: 1,
 
   // Test file patterns. NOTE: tests/integration/* are end-to-end tests
@@ -62,7 +61,7 @@ module.exports = {
   testTimeout: 30000,
 
   // Verbose output
-  verbose: true,
+  verbose: false,
 
   // Clear mocks between tests
   clearMocks: true,
@@ -78,23 +77,12 @@ module.exports = {
     'process.env.NODE_ENV': 'test'
   },
 
-  // Transform configuration (if needed for ES6 modules)
-  transform: {},
-
   // Module file extensions
   moduleFileExtensions: ['js', 'json'],
-
-  // Test result processor
-  testResultsProcessor: undefined,
-
-  // Max workers for parallel testing
-  maxWorkers: '50%',
 
   // NOTE: forceExit/detectOpenHandles removed — forceExit kills the
   // process (and the MongoMemoryServer child) before SDAM monitor
   // timers finish, causing stray localhost:undefined reconnect attempts.
-
-  // Suppress console output during tests (optional)
   silent: false,
 
   // Error on deprecated features
