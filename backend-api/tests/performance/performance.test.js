@@ -7,6 +7,7 @@ const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const jwtService = require('../../src/services/jwtService');
 
 describe('Performance Tests', () => {
   let app;
@@ -36,9 +37,7 @@ describe('Performance Tests', () => {
       isEmailVerified: true
     });
 
-    authToken = jwt.sign({ id: testUser._id }, process.env.JWT_SECRET, {
-      expiresIn: '24h'
-    });
+    authToken = jwtService.generateAccessToken({ id: testUser._id });
 
     // Create test event
     testEvent = await Event.create({

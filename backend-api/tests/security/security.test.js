@@ -7,6 +7,7 @@ const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const jwtService = require('../../src/services/jwtService');
 const User = require('../../src/models/User');
 
 describe('Security Tests', () => {
@@ -33,9 +34,7 @@ describe('Security Tests', () => {
       isEmailVerified: true
     });
 
-    authToken = jwt.sign({ id: testUser._id }, process.env.JWT_SECRET, {
-      expiresIn: '24h'
-    });
+    authToken = jwtService.generateAccessToken({ id: testUser._id });
   });
 
   afterEach(async () => {
@@ -66,9 +65,12 @@ describe('Security Tests', () => {
     });
 
     test('should reject expired JWT tokens', async () => {
+      const expiredTokenReal = jwtService.generateAccessToken({ id: testUser._id });
+      // Force expiry by re-signing with a negative lifetime against the
+      // same secret jwtService uses.
       const expiredToken = jwt.sign(
-        { id: testUser._id },
-        process.env.JWT_SECRET,
+        { id: testUser._id.toString(), type: 'access', iss: 'eventconnect-api', aud: 'eventconnect-clients' },
+        jwtService.accessTokenSecret,
         { expiresIn: '-1h' }
       );
 

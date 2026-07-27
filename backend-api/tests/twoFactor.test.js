@@ -7,6 +7,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const jwt = require('jsonwebtoken');
+const jwtService = require('../src/services/jwtService');
 const twoFactorService = require('../src/services/twoFactorService');
 const User = require('../src/models/User');
 
@@ -46,7 +47,7 @@ async function createTestUser(data = {}) {
     birthDate: data.birthDate || new Date('1990-01-01'),
     ...data
   });
-  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  const token = jwtService.generateAccessToken({ id: user._id });
   return { user, token };
 }
 
