@@ -18,23 +18,12 @@ process.env.BCRYPT_ROUNDS = '4';
 // secret mismatch with the cached server instance (maxWorkers:1) and 401s.
 
 
-// Mock speakeasy for consistent testing
-jest.mock('speakeasy', () => ({
-  generateSecret: jest.fn(() => ({
-    base32: 'TEST_SECRET_BASE32_VALUE_FOR_TESTING',
-    otpauth_url: 'otpauth://totp/EventConnect%20(test@example.com)?secret=TEST_SECRET_BASE32_VALUE_FOR_TESTING&issuer=eventconnect.com'
-  })),
-  totp: {
-    verify: jest.fn()
-  }
-}));
-
-// Mock QRCode
-jest.mock('qrcode', () => ({
-  toDataURL: jest.fn(() => Promise.resolve('data:image/png;base64,TEST_QR_CODE'))
-}));
-
-let mongoServer;
+// NOTE: qrcode / speakeasy are mocked globally in tests/setup.js (loaded as
+// a setupFile). Do NOT re-mock them here — a second jest.mock creates a
+// separate mock instance, and the cached server's twoFactorService binds the
+// setup.js instance, so speakeasy.totp.verify.mockReturnValue(...) in these
+// tests would NOT reach the server and 2FA "valid flow" routes would get 400.
+// The single shared mock is configured per-test via mockReturnValue below.
 let app;
 
 async function createTestUser(data = {}) {
