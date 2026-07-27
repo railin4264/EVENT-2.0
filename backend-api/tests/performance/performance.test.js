@@ -250,7 +250,7 @@ describe('Performance Tests', () => {
         .post('/api/upload/avatar')
         .set('Authorization', `Bearer ${authToken}`)
         .attach('avatar', smallImageBuffer, 'test.jpg')
-        .expect(200);
+        .expect(201);
 
       const responseTime = Date.now() - startTime;
       expect(responseTime).toBeLessThan(1000); // Small uploads should be fast
