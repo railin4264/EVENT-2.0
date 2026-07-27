@@ -3,10 +3,11 @@
  * Tests for: Stripe payment intent, ticket purchase flow
  */
 
-process.env.JWT_SECRET = 'test-jwt-secret-payments';
-process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
-process.env.JWT_EXPIRES_IN = '1h';
 process.env.NODE_ENV = 'test';
+
+// NOTE: JWT_SECRET / JWT_REFRESH_SECRET are set by tests/setup.js (loaded
+// first as a setupFile). Do NOT override them here — overriding causes a
+// secret mismatch with the cached server instance (maxWorkers:1) and 401s.
 process.env.BCRYPT_ROUNDS = '4';
 process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
 

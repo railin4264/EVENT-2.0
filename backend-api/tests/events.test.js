@@ -6,12 +6,12 @@ const request = require('supertest');
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
-process.env.JWT_SECRET = 'test-jwt-secret-123456789';
-process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-123456789';
-process.env.JWT_EXPIRES_IN = '1h';
-process.env.JWT_REFRESH_EXPIRES_IN = '7d';
 process.env.NODE_ENV = 'test';
 process.env.BCRYPT_ROUNDS = '4';
+
+// NOTE: JWT_SECRET / JWT_REFRESH_SECRET are set by tests/setup.js (loaded
+// first as a setupFile). Do NOT override them here — overriding causes a
+// secret mismatch with the cached server instance (maxWorkers:1) and 401s.
 
 let mongoServer;
 let app;
