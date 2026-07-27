@@ -194,11 +194,19 @@ class MonitoringConfig {
 
     try {
       // Check Redis
-      const redis = require('redis');
-      const client = redis.createClient(process.env.REDIS_URL);
-      await client.ping();
-      health.services.redis = 'healthy';
-      client.quit();
+      if (!process.env.REDIS_URL) {
+        // No Redis configured (tests / degraded mode): skip the ping
+        // rather than letting the client fall back to localhost:6379
+        // and spam reconnect attempts.
+        health.services.redis = 'unhealthy';
+        health.status = health.status === 'healthy' ? 'degraded' : health.status;
+      } else {
+        const redis = require('redis');
+        const client = redis.createClient(process.env.REDIS_URL);
+        await client.ping();
+        health.services.redis = 'healthy';
+        client.quit();
+      }
     } catch (error) {
       health.services.redis = 'unhealthy';
       health.status = 'degraded';

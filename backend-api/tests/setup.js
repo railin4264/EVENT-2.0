@@ -1,21 +1,18 @@
 /**
  * Jest Test Setup (runs per test file, AFTER the environment is ready)
  *
- * The MongoMemoryServer is created ONCE for the WHOLE run by
- * jest.globalSetup.js, which exposes its URI via process.env.MONGODB_URI
- * (env is inherited by every worker). Here we ONLY connect mongoose
- * to that shared URI — we never create a mongod ourselves.
- *
- * directConnection:true disables the mongodb SDAM monitor, whose
- * background reconnect attempts ("localhost:undefined") were the source
- * of the stray AggregateError / internalConnectMultiple that appeared
- * only in the full suite.
- *
- * We connect once (if not already up) and never disconnect between
- * files in the same worker (would tear down the shared connection
- * for the next file). globalSetup stops the mongod at the end.
+ * One MongoMemoryServer per PROCESS, created lazily and cached on
+ * globalThis so every test file in this process shares a valid
+ * mongodb://127.0.0.1:PORT URI. The jest config runs with
+ * maxWorkers:1 (single process), so globalThis is process-wide and the
+ * mongod stays alive for the whole run — this avoids BOTH the stray
+ * "localhost:undefined" AggregateError (workers on mongoose's port-less
+ * default when globalSetup's env didn't reach them) AND the ECONNRESET
+ * / second-mongod AggregateError (parallel workers each got their own
+ * globalThis / the parent's mongod died mid-run).
  */
 
+const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 
 // Variables de entorno para tests (deben ir ANTES de importar el server)
@@ -23,21 +20,20 @@ process.env.JWT_SECRET = 'test-jwt-secret';
 process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret';
 process.env.JWT_EXPIRES_IN = '1h';
 process.env.NODE_ENV = 'test';
-// Tests run without Redis/SMTP externally (MongoMemoryServer is used).
-// Blank (but present) so dotenv.config() in server.js won't re-inject the
-// real REDIS_URL/SMTP_HOST from .env, which would trigger connection attempts.
+// Tests run without Redis/SMTP externally. Blank (but present) so
+// dotenv.config() in server.js won't re-inject the real REDIS_URL/SMTP_HOST.
 process.env.REDIS_URL = '';
 process.env.SMTP_HOST = '';
 
-// Connect to the shared MongoMemoryServer provided by globalSetup.
 beforeAll(async () => {
+  if (!globalThis.__MONGO__) {
+    globalThis.__MONGO__ = await MongoMemoryServer.create();
+  }
+  const uri = globalThis.__MONGO__.getUri();
+  process.env.MONGODB_URI = uri;
+
   if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      directConnection: true, // disable SDAM monitor reconnects
-      serverSelectionTimeoutMS: 5000,
-    });
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
   }
 });
 
@@ -49,5 +45,5 @@ afterEach(async () => {
   }
 });
 
-// NO afterAll disconnect: the shared mongod is stopped by globalTeardown,
-// and disconnecting here would break other files sharing this worker.
+// NO afterAll disconnect: the mongod + connection persist for the process
+// lifetime; jest reaps the mongod when the single worker exits.

@@ -6,24 +6,31 @@ module.exports = {
   // Test environment
   testEnvironment: 'node',
 
-  // Setup files - provides test env vars; the mongo connection is
-  // estabished per-file by setup.js (it connects to the shared URI).
+  // Setup files - creates ONE MongoMemoryServer per PROCESS (cached on
+  // globalThis in setup.js) and connects mongoose to its valid
+  // mongodb://127.0.0.1:PORT URI. We run with maxWorkers:1 (single
+  // process) so globalThis is process-wide and the mongod stays alive for
+  // the whole run. This avoids both the "localhost:undefined" AggregateError
+  // (workers on mongoose's port-less default) and the ECONNRESET / second-
+  // mongod AggregateError (parallel workers each got their own globalThis
+  // or the parent's mongod died mid-run).
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
 
-  // ONE MongoMemoryServer for the WHOLE run, created in the parent
-  // process by globalSetup and exposed via process.env.MONGODB_URI
-  // (env is inherited by every worker). This is the only topology
-  // that avoids the stray "localhost:undefined" AggregateError: a
-  // per-worker mongod left the mongodb SDAM monitor reconnecting
-  // to a port-less "localhost" when the worker-local db churned.
-  globalSetup: '<rootDir>/jest.globalSetup.js',
-  globalTeardown: '<rootDir>/jest.globalTeardown.js',
+  // Single process: globalThis (and thus the shared mongod) is one and
+  // alive for the entire run. Slower than parallel, but the only topology
+  // that keeps one valid mongod reachable for every test file.
+  maxWorkers: 1,
 
-  // Test file patterns
+  // Test file patterns. NOTE: tests/integration/* are end-to-end tests
+  // that hit a live HTTP server on :5000 (started outside jest); they are
+  // excluded here because the supertest/in-process harness does not bring
+  // one up, and attempting the connection produces stray AggregateError
+  // rejections. Run them separately against a running server.
   testMatch: [
     '<rootDir>/tests/**/*.test.js',
     '<rootDir>/src/**/__tests__/**/*.js'
   ],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/tests/integration/'],
 
   // Coverage configuration
   collectCoverage: true,
