@@ -37,6 +37,11 @@ jest.mock('speakeasy', () => ({
 // Blanks so the app runs without external infra (Redis/SMTP optional).
 process.env.REDIS_URL = process.env.REDIS_URL || '';
 process.env.SMTP_HOST = process.env.SMTP_HOST || '';
+// Raise the 2FA rate-limit in tests: all requests share 127.0.0.1, so the
+// default max:10/15min would 429 the 2FA route tests. Only the 2FA limiter
+// reads this env; the auth/API limiters (which security/performance assert
+// as 429) are unaffected.
+process.env.TWO_FACTOR_RATE_LIMIT_MAX = process.env.TWO_FACTOR_RATE_LIMIT_MAX || '1000';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-hermes';
 process.env.NODE_ENV = 'test';
 

@@ -15,7 +15,9 @@ const router = express.Router();
 // Rate limiting for 2FA routes
 const twoFactorLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 requests per windowMs
+  // Default 10/min per IP. In tests all requests share 127.0.0.1, so raise
+  // this via env to avoid false 429s (the auth rate-limiter is unaffected).
+  max: parseInt(process.env.TWO_FACTOR_RATE_LIMIT_MAX, 10) || 10,
   message: { success: false, message: 'Too many 2FA requests' }
 });
 
