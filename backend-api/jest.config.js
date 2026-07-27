@@ -63,15 +63,12 @@ module.exports = {
   // Verbose output
   verbose: false,
 
-  // Clear mocks between tests
+  // Clear mocks between tests (mockClear only — keeps mock implementations).
+  // NOTE: resetMocks/restoreMocks intentionally LEFT OFF. They call
+  // mockReset()/mockRestore() which wipe the mock *implementation*, so the
+  // global qrcode/speakeasy mocks in setup.js would start returning
+  // undefined after the first test and crash twoFactorService.generateSecret.
   clearMocks: true,
-
-  // Reset mocks between tests
-  resetMocks: true,
-
-  // Restore mocks after each test
-  restoreMocks: true,
-
   // Globals
   globals: {
     'process.env.NODE_ENV': 'test'

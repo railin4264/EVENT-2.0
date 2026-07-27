@@ -17,6 +17,23 @@
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 
+// Global mocks for 2FA crypto deps. Defined here (setupFilesAfterEnv) so they
+// are installed BEFORE any test file requires the server — in maxWorkers:1 the
+// server/twoFactorService module is cached on first load, and twoFactor.test.js
+// runs AFTER security.test.js (which doesn't mock these). Mocking globally
+// ensures the cached twoFactorService sees the mocked qrcode/speakeasy in every
+// file, so 2FA QR/token assertions are deterministic.
+jest.mock('qrcode', () => ({
+  toDataURL: jest.fn(() => Promise.resolve('data:image/png;base64,TEST_QR_CODE'))
+}));
+jest.mock('speakeasy', () => ({
+  generateSecret: jest.fn(() => ({
+    base32: 'TEST_SECRET_BASE32_VALUE_FOR_TESTING',
+    otpauth_url: 'otpauth://totp/EventConnect%20(test@example.com)?secret=TEST_SECRET_BASE32_VALUE_FOR_TESTING&issuer=eventconnect.com'
+  })),
+  totp: { verify: jest.fn() }
+}));
+
 // Blanks so the app runs without external infra (Redis/SMTP optional).
 process.env.REDIS_URL = process.env.REDIS_URL || '';
 process.env.SMTP_HOST = process.env.SMTP_HOST || '';

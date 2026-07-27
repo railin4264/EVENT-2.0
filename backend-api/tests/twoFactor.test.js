@@ -52,9 +52,10 @@ async function createTestUser(data = {}) {
 }
 
 describe('Two-Factor Authentication', () => {
-  beforeAll(async () => {
-    // MONGODB_URI is provided by the shared mongod (globalSetup / setup.js).
-    const server = require('../../src/server');
+  beforeAll(() => {
+    // The server (and its cached twoFactorService) is loaded by setup.js with
+    // qrcode/speakeasy mocked globally, so 2FA QR/token paths see the mocks.
+    const server = require('../src/server');
     app = server.app || server;
   });
 
