@@ -458,6 +458,14 @@ router.post('/', protect, async (req, res) => {
     });
   } catch (error) {
     logger.error('Create event error:', error);
+    // Validation failures (e.g. missing title) must be 400, not 500.
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: Object.values(error.errors).map(e => e.message)
+      });
+    }
     res.status(500).json({
       success: false,
       message: 'Server error'
