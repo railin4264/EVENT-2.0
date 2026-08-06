@@ -355,7 +355,8 @@ router.post('/orders/:orderId/refund', [
 const createIntentValidators = [
   protect,
   body('amount').isFloat({ min: 0.01 }).withMessage('Valid amount required'),
-  body('currency').optional().isIn(['usd', 'eur', 'gbp', 'mxn']).withMessage('Invalid currency')
+  body('currency').optional().isIn(['usd', 'eur', 'gbp', 'mxn']).withMessage('Invalid currency'),
+  body('eventId').optional().isMongoId().withMessage('Valid event ID required')
 ];
 
 const createPaymentIntentHandler = async (req, res) => {

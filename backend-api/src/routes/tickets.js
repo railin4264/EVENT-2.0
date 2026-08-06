@@ -7,6 +7,38 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// @desc    List tickets for the authenticated user
+// @route   GET /api/tickets
+// @access  Private
+router.get('/', [protect], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const tickets = await Ticket.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    res.json({
+      success: true,
+      count: tickets.length,
+      data: tickets
+    });
+  } catch (error) {
+    logger.error('Error listing tickets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to list tickets'
+    });
+  }
+});
+
 // Validation middleware for ticket creation
 const validateTicketCreation = [
   body('eventId').isMongoId().withMessage('Valid event ID required'),
