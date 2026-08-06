@@ -88,8 +88,8 @@ describe('Security Tests', () => {
         password: 'wrongpassword'
       };
 
-      // Make multiple failed login attempts
-      for (let i = 0; i < 6; i++) {
+      // Make multiple failed login attempts (exceeds authLimiter max of 20)
+      for (let i = 0; i < 20; i++) {
         await request(app)
           .post('/api/auth/login')
           .send(loginData);
@@ -439,8 +439,8 @@ describe('Security Tests', () => {
 
   describe('API Rate Limiting', () => {
     test('should rate limit API endpoints', async () => {
-      // Make multiple requests quickly
-      const promises = Array(20).fill().map(() =>
+      // Make 201 requests quickly to exceed the global limiter (max 200)
+      const promises = Array(201).fill().map(() =>
         request(app)
           .get('/api/events')
           .set('Authorization', `Bearer ${authToken}`)
@@ -453,8 +453,8 @@ describe('Security Tests', () => {
     });
 
     test('should have stricter limits for sensitive endpoints', async () => {
-      // Test password reset endpoint
-      const promises = Array(10).fill().map(() =>
+      // Test password reset endpoint (exceeds authLimiter max of 20)
+      const promises = Array(21).fill().map(() =>
         request(app)
           .post('/api/auth/forgot-password')
           .send({ email: 'security@test.com' })
