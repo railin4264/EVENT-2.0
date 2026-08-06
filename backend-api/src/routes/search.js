@@ -12,6 +12,24 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Sanitize NoSQL operators from query string to prevent injection
+function sanitizeNoSqlOperators(str) {
+  if (typeof str !== 'string') return str;
+  const noSqlOperators = [
+    '$where', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin',
+    '$or', '$and', '$not', '$nor', '$exists', '$type', '$mod',
+    '$regex', '$options', '$all', '$elemMatch', '$size', '$comment',
+    '$natural', '$orderby', '$hint', '$maxScan', '$min', '$max',
+    '$returnKey', '$showDiskLoc', '$snapshot', '$query', '$explain'
+  ];
+  let sanitized = str;
+  for (const op of noSqlOperators) {
+    const regex = new RegExp(op.replace('$', '\\$'), 'gi');
+    sanitized = sanitized.replace(regex, '');
+  }
+  return sanitized;
+}
+
 // @desc    Get search suggestions
 // @route   GET /api/search/suggestions
 // @access  Private
@@ -240,6 +258,92 @@ router.get('/global', protect, async (req, res) => {
     });
   } catch (error) {
     logger.error('Global search error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// @desc    Search events, users, tribes by text query
+// @route   GET /api/search
+// @access  Private
+router.get('/', protect, async (req, res) => {
+  try {
+    const { q, type } = req.query;
+
+    if (!q || q.trim().length < 2) {
+      return res.json({
+        success: true,
+        data: { events: [], users: [], tribes: [] }
+      });
+    }
+
+    if (q.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query must be 100 characters or fewer'
+      });
+    }
+
+    // Sanitize NoSQL operators from query
+    const safeQ = sanitizeNoSqlOperators(q.trim());
+    const escapedQ = escapeRegex(safeQ);
+    const searchTypes = type ? type.split(',') : ['events', 'users', 'tribes'];
+    const data = { events: [], users: [], tribes: [] };
+
+    // Search users
+    if (searchTypes.includes('users')) {
+      const users = await User.find({
+        $or: [
+          { username: { $regex: escapedQ, $options: 'i' } },
+          { firstName: { $regex: escapedQ, $options: 'i' } },
+          { lastName: { $regex: escapedQ, $options: 'i' } }
+        ],
+        isActive: true
+      })
+        .select('username firstName lastName avatar bio')
+        .limit(20);
+      data.users = users;
+    }
+
+    // Search events
+    if (searchTypes.includes('events')) {
+      const events = await Event.find({
+        $or: [
+          { title: { $regex: escapedQ, $options: 'i' } },
+          { description: { $regex: escapedQ, $options: 'i' } }
+        ],
+        status: 'published'
+      })
+        .populate('createdBy', 'username firstName lastName avatar')
+        .select('title description date location images category')
+        .limit(20)
+        .sort({ date: 1 });
+      data.events = events;
+    }
+
+    // Search tribes
+    if (searchTypes.includes('tribes')) {
+      const tribes = await Tribe.find({
+        $or: [
+          { name: { $regex: escapedQ, $options: 'i' } },
+          { description: { $regex: escapedQ, $options: 'i' } }
+        ],
+        isActive: true
+      })
+        .populate('creator', 'username firstName lastName avatar')
+        .select('name description category memberCount avatar')
+        .limit(20);
+      data.tribes = tribes;
+    }
+
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    logger.error('Search error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

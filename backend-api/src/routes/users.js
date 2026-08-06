@@ -7,6 +7,7 @@ const Follow = require('../models/Follow');
 const { protect } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const logger = require('../utils/logger');
+const { enforceSecondFactor } = require('../middleware/twoFactor');
 
 const router = express.Router();
 
@@ -122,6 +123,7 @@ router.get('/profile/:id?', protect, async (req, res) => {
 // @access  Private
 router.put('/profile', [
   protect,
+  enforceSecondFactor,
   body('firstName').optional().isLength({ min: 1 }).trim().escape(),
   body('lastName').optional().isLength({ min: 1 }).trim().escape(),
   body('bio').optional().isLength({ max: 500 }).trim(),
@@ -470,7 +472,7 @@ router.get('/me/settings', protect, async (req, res) => {
 // @desc    Update user settings
 // @route   PUT /api/users/me/settings
 // @access  Private
-router.put('/me/settings', protect, async (req, res) => {
+router.put('/me/settings', protect, enforceSecondFactor, async (req, res) => {
   try {
     const { notifications, privacy, preferences } = req.body;
 
@@ -504,6 +506,7 @@ router.put('/me/settings', protect, async (req, res) => {
 // @access  Private
 router.put('/me/profile', [
   protect,
+  enforceSecondFactor,
   body('firstName').optional().isLength({ min: 1, max: 50 }).trim().escape(),
   body('lastName').optional().isLength({ min: 1, max: 50 }).trim().escape(),
   body('username').optional().isLength({ min: 3, max: 50 }).trim().escape(),
@@ -587,6 +590,7 @@ router.put('/me/profile', [
 // @access  Private
 router.put('/me/password', [
   protect,
+  enforceSecondFactor,
   body('currentPassword').notEmpty().withMessage('Current password is required'),
   body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
   body('confirmPassword').custom((value, { req }) => {
@@ -640,7 +644,7 @@ router.put('/me/password', [
 // @desc    Update notification preferences
 // @route   PUT /api/users/me/notifications
 // @access  Private
-router.put('/me/notifications', protect, async (req, res) => {
+router.put('/me/notifications', protect, enforceSecondFactor, async (req, res) => {
   try {
     const { email, push, eventReminders, newMessages, weeklyDigest } = req.body;
 
@@ -682,6 +686,7 @@ router.put('/me/notifications', protect, async (req, res) => {
 // @access  Private
 router.delete('/me', [
   protect,
+  enforceSecondFactor,
   body('password').notEmpty().withMessage('Password is required to delete account'),
   body('confirmDelete').equals('DELETE').withMessage('Please type DELETE to confirm')
 ], async (req, res) => {

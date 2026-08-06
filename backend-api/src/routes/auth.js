@@ -2,6 +2,7 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const { protect } = require('../middleware/auth');
+const { enforceSecondFactor } = require('../middleware/twoFactor');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const jwtService = require('../services/jwtService');
@@ -428,7 +429,7 @@ router.post('/logout', protect, async (req, res) => {
 // @desc    Logout from all devices
 // @route   POST /api/auth/logout-all
 // @access  Private
-router.post('/logout-all', protect, async (req, res) => {
+router.post('/logout-all', protect, enforceSecondFactor, async (req, res) => {
   try {
     // Clear all tokens
     req.user.tokens = [];
@@ -454,7 +455,7 @@ router.post('/logout-all', protect, async (req, res) => {
 // @desc    Change password (with full token rotation)
 // @route   POST /api/auth/change-password
 // @access  Private
-router.post('/change-password', protect, async (req, res) => {
+router.post('/change-password', protect, enforceSecondFactor, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
