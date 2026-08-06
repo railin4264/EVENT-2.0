@@ -92,11 +92,6 @@ router.post('/register', validateRegister, async (req, res) => {
     // Terms acceptance is captured if provided, but registration is not
     // blocked on it (the User model does not persist acceptTerms, and the
     // public API must remain usable without it).
-    const acceptedTerms = acceptTerms === true || acceptTerms === 'true' || acceptTerms === 1;
-    if (acceptedTerms) {
-      userData.acceptedTerms = true;
-    }
-
     // Check if user exists
     const existingUser = await User.findOne({
       $or: [{ email }, { username }]

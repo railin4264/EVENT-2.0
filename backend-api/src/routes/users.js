@@ -361,6 +361,15 @@ router.get('/:id', protect, async (req, res) => {
       });
     }
 
+    const isSelf = req.user && req.user.id === user._id.toString();
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view this user'
+      });
+    }
+
     res.json({
       success: true,
       user

@@ -350,11 +350,15 @@ router.post('/orders/:orderId/refund', [
 // @desc    Create payment intent (legacy support)
 // @route   POST /api/payments/intent
 // @access  Private
-router.post('/intent', [
+// Shared handler for creating a payment intent (mounted on both /intent
+// and the legacy alias /create-intent expected by older clients/tests).
+const createIntentValidators = [
   protect,
   body('amount').isFloat({ min: 0.01 }).withMessage('Valid amount required'),
   body('currency').optional().isIn(['usd', 'eur', 'gbp', 'mxn']).withMessage('Invalid currency')
-], async (req, res) => {
+];
+
+const createPaymentIntentHandler = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -392,7 +396,10 @@ router.post('/intent', [
       message: 'Failed to create payment intent'
     });
   }
-});
+};
+
+router.post('/intent', createIntentValidators, createPaymentIntentHandler);
+router.post('/create-intent', createIntentValidators, createPaymentIntentHandler);
 
 // @desc    Get event orders (for event organizers)
 // @route   GET /api/payments/events/:eventId/orders

@@ -1,5 +1,5 @@
 # Multi-stage build for EventConnect 2.0
-FROM node:24-alpine-alpine AS base
+FROM node:24-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
