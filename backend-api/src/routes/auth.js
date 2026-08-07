@@ -135,7 +135,7 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
 
     // Auto-verify email in development mode so users can log in immediately
     if (process.env.NODE_ENV !== 'production') {
-      userData.isEmailVerified = true;
+      safeUserData.isEmailVerified = true;
     }
 
     const user = await User.create(safeUserData);
