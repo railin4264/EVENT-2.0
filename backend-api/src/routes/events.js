@@ -25,7 +25,7 @@ const sanitizeQuery = (req, res, next) => {
 // @desc    Get all events
 // @route   GET /api/events
 // @access  Public (with optional authentication)
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', optionalAuth, eventListCache, async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
@@ -519,7 +519,7 @@ router.get('/favorites', protect, async (req, res) => {
 // @desc    Get single event
 // @route   GET /api/events/:id
 // @access  Public (with optional authentication)
-router.get('/:id', optionalAuth, async (req, res) => {
+router.get('/:id', optionalAuth, eventDetailsCache, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
       .populate('createdBy', '_id username firstName lastName avatar')
