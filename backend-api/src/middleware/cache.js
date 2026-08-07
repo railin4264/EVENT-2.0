@@ -35,13 +35,22 @@ function makeCache(ttlSeconds = 30) {
   };
 }
 
-// Named caches referenced by src/routes/events.js
+// Named caches referenced by src/routes/events.js and src/routes/tribes.js
 const eventListCache = makeCache(30);
 const eventDetailsCache = makeCache(60);
+const tribeListCache = makeCache(30);
+const tribeDetailsCache = makeCache(60);
 
 // Invalidates all cached entries (call after mutations)
 function invalidateCache() {
   store.clear();
 }
 
-module.exports = { eventListCache, eventDetailsCache, invalidateCache, makeCache };
+module.exports = {
+  eventListCache,
+  eventDetailsCache,
+  tribeListCache,
+  tribeDetailsCache,
+  invalidateCache,
+  makeCache
+};
