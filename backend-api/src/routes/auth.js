@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const { protect } = require('../middleware/auth');
 const { enforceSecondFactor } = require('../middleware/twoFactor');
+const { sanitizeBody, stripForbiddenUserFields } = require('../middleware/sanitize');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const jwtService = require('../services/jwtService');
@@ -67,7 +68,7 @@ const validateLogin = [
 // @desc    Register user
 // @route   POST /api/auth/register
 // @access  Public
-router.post('/register', validateRegister, async (req, res) => {
+router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
   // Check for validation errors
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -114,6 +115,9 @@ router.post('/register', validateRegister, async (req, res) => {
       lastName: resolvedLast,
       birthDate
     };
+    // Prevent privilege escalation: never trust role/admin/permission fields
+    // from client input.
+    const safeUserData = stripForbiddenUserFields(userData);
 
     // Add optional fields if provided
     if (interests && Array.isArray(interests)) {
@@ -134,7 +138,7 @@ router.post('/register', validateRegister, async (req, res) => {
       userData.isEmailVerified = true;
     }
 
-    const user = await User.create(userData);
+    const user = await User.create(safeUserData);
 
     // Generate token pair using JWT service
     const tokens = jwtService.generateTokenPair(user);
@@ -185,7 +189,7 @@ router.post('/register', validateRegister, async (req, res) => {
 // @desc    Login user
 // @route   POST /api/auth/login
 // @access  Public
-router.post('/login', validateLogin, async (req, res) => {
+router.post('/login', sanitizeBody, validateLogin, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

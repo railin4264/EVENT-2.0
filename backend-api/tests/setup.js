@@ -31,7 +31,10 @@ jest.mock('speakeasy', () => ({
     base32: 'TEST_SECRET_BASE32_VALUE_FOR_TESTING',
     otpauth_url: 'otpauth://totp/EventConnect%20(test@example.com)?secret=TEST_SECRET_BASE32_VALUE_FOR_TESTING&issuer=eventconnect.com'
   })),
-  totp: { verify: jest.fn() }
+  // Default to a valid token so the cached server (maxWorkers:1) treats TOTP
+  // verification as successful. Tests that need a rejection override this with
+  // speakeasy.totp.verify.mockReturnValue(false).
+  totp: { verify: jest.fn(() => true) }
 }));
 
 // Blanks so the app runs without external infra (Redis/SMTP optional).
