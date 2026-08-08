@@ -10,6 +10,7 @@ import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import OAuthButtons from '@/components/auth/OAuthButtons'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'El correo es requerido').email('Email inválido'),
@@ -234,6 +235,14 @@ function LoginForm() {
               )}
             </button>
           </form>
+
+          <div className="my-6 flex items-center gap-3 text-xs text-gray-400">
+            <div className="h-px flex-1 bg-gray-100 dark:bg-white/10" />
+            o
+            <div className="h-px flex-1 bg-gray-100 dark:bg-white/10" />
+          </div>
+
+          <OAuthButtons mode="login" />
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-white/5 text-center">
             <Link

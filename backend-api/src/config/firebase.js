@@ -56,9 +56,17 @@ class FirebaseService {
     if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
       try {
         // eslint-disable-next-line global-require
-        return require(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+        const fs = require('fs');
+        const path = require('path');
+        const resolved = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
+        if (!fs.existsSync(resolved)) {
+          logger.warn(`Firebase service account file not found at ${resolved}. Push notifications will be disabled.`);
+          return null;
+        }
+        return JSON.parse(fs.readFileSync(resolved, 'utf8'));
       } catch (error) {
         logger.error('Failed to load Firebase service account file:', error);
+        return null;
       }
     }
 

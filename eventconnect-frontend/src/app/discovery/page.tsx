@@ -18,6 +18,7 @@ import { useAnalytics } from '@/components/providers/AnalyticsProvider'
 import QuickFilters, { type QuickFilterType } from '@/components/discovery/QuickFilters'
 import { useFavorites } from '@/hooks/useFavorites'
 import ShareButton from '@/components/discovery/ShareButton'
+import RecommendedEvents from '@/components/ai/RecommendedEvents'
 import CountdownTimer from '@/components/discovery/CountdownTimer'
 import ParallaxCard from '@/components/discovery/ParallaxCard'
 import { useToast } from '@/components/redesign/ui/use-toast'
@@ -1330,6 +1331,9 @@ export default function DiscoveryPage() {
             </div>
           </div>
         )}
+
+        {/* AI personalized recommendations */}
+        <RecommendedEvents />
       </div>
     </div >
   )

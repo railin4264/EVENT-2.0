@@ -11,6 +11,7 @@ import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import OAuthButtons from '@/components/auth/OAuthButtons'
 import { Onboarding } from '@/components/redesign/Onboarding'
 import { cn } from '@/lib/utils'
 
@@ -259,6 +260,8 @@ export default function RegisterPage() {
                 noValidate
                 className="space-y-4"
               >
+                <OAuthButtons mode="register" />
+
                 <Field id="username" label="Nombre de usuario" error={errors.username?.message}>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
