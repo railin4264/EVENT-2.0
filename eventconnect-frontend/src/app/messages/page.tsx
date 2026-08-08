@@ -245,7 +245,7 @@ function MessagesContent() {
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center overflow-hidden border-2 ${isActive ? 'border-primary' : 'border-transparent'}`}>
                           {room.type === 'direct' && room.participants.find(p => typeof p.user === 'object' && p.user._id !== user?._id && p.user.avatar) ? (
                             <img
-                              src={getImageUrl(room.participants.find(p => typeof p.user === 'object' && p.user._id !== user?._id)?.user?.avatar)}
+                              src={getImageUrl((room.participants.find(p => typeof p.user === 'object' && p.user._id !== user?._id)?.user as User | undefined)?.avatar)}
                               alt="Avatar"
                               className="w-full h-full object-cover"
                             />
@@ -305,7 +305,7 @@ function MessagesContent() {
                 <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-border/50">
                   {currentRoom.type === 'direct' && currentRoom.participants.find(p => typeof p.user === 'object' && p.user._id !== user?._id && p.user.avatar) ? (
                     <img
-                      src={getImageUrl(currentRoom.participants.find(p => typeof p.user === 'object' && p.user._id !== user?._id)?.user?.avatar)}
+                      src={getImageUrl((currentRoom.participants.find(p => typeof p.user === 'object' && p.user._id !== user?._id)?.user as User | undefined)?.avatar)}
                       alt="Avatar"
                       className="w-full h-full object-cover"
                     />

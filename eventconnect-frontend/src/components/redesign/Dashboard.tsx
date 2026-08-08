@@ -208,7 +208,7 @@ export function Dashboard() {
                     <div className="flex items-center space-x-1">
                       <Calendar className="w-4 h-4" />
                       <span className="text-sm">
-                        {formatEventDate(event.date)} • {formatEventTime(event.date)}
+                        {formatEventDate(new Date(event.date))} • {formatEventTime(new Date(event.date))}
                       </span>
                     </div>
                     <div className="flex items-center space-x-1">

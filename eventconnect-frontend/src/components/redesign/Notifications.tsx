@@ -275,7 +275,7 @@ export function Notifications({ isOpen, onClose }: NotificationsProps) {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-1 text-white/50 text-xs">
                             <Clock className="w-3 h-3" />
-                            <span>{notificationsService.formatTimeAgo(notification.createdAt)}</span>
+                            <span>{notificationsService.formatTimeAgo(new Date(notification.createdAt))}</span>
                           </div>
 
                           {notification.data?.actionRequired && (

@@ -90,7 +90,7 @@ export default function FeaturedEventsCarousel({
           <div className="relative w-full h-full">
             {currentEvent.images && currentEvent.images.length > 0 ? (
               <img
-                src={currentEvent.images[0]}
+                src={currentEvent.images[0].url}
                 alt={currentEvent.title}
                 className="w-full h-full object-cover"
               />

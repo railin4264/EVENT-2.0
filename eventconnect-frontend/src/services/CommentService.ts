@@ -15,7 +15,7 @@ export interface Comment {
   };
   content: string;
   parentId?: string | null;
-  replies: Comment[] | string[];
+  replies: (string | Comment)[];
   likes: string[];
   likesCount: number;
   repliesCount: number;

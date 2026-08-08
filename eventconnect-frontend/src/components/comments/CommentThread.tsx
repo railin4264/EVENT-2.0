@@ -6,7 +6,7 @@ import { MessageCircle, Heart, MoreVertical, Edit, Trash2, Flag } from 'lucide-r
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { AnimatedLikeButton } from '@/components/redesign/ui/animated-like-button'
-import { Avatar } from '@/components/redesign/ui/avatar'
+import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
 
 interface Comment {
@@ -26,7 +26,7 @@ interface Comment {
 }
 
 interface CommentThreadProps {
-  comments: Comment[]
+  comments?: Comment[]
   currentUserId?: string
   onReply: (commentId: string, content: string) => Promise<void>
   onLike: (commentId: string) => Promise<void>
@@ -336,7 +336,7 @@ export function CommentThread(props: CommentThreadProps) {
   return (
     <div className="space-y-4">
       <AnimatePresence mode="popLayout">
-        {props.comments.map((comment) => (
+        {props.comments?.map((comment) => (
           <CommentItem
             key={comment._id}
             comment={comment}

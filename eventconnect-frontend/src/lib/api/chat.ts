@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import type { ChatRoom } from '@/types/api.types'
 
 export interface ChatParticipant {
   user: {
@@ -148,7 +149,7 @@ export const getUserChats = async (page: number = 1, limit: number = 20) => {
 export const createDirectChat = async (userId: string) => {
   const response = await apiClient.post<{
     success: boolean
-    data: Chat
+    data: ChatRoom
   }>('/chat/direct', { userId })
   
   return response.data
@@ -158,7 +159,7 @@ export const createDirectChat = async (userId: string) => {
 export const createGroupChat = async (data: CreateGroupChatData) => {
   const response = await apiClient.post<{
     success: boolean
-    data: Chat
+    data: ChatRoom
   }>('/chat/group', data)
   
   return response.data

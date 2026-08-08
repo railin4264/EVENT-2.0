@@ -53,6 +53,8 @@ interface TribePost {
   images?: { url: string }[]
   reactions: { type: string; count: number }[]
   comments: number
+  likedByUser?: boolean
+  likes?: (string | { _id: string })[] | number
   createdAt: string
 }
 

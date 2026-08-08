@@ -95,7 +95,7 @@ export interface RegisterRequest {
   interests?: string[]
   bio?: string
   location?: string
-  birthDate: string
+  birthDate?: string
 }
 
 export interface LoginRequest {
@@ -181,6 +181,7 @@ export interface Event {
   endDate?: Date | string
   location: EventLocation
   images: EventImage[]
+  imageUrl?: string // optional shortcut (backend may return images[0]?.url as imageUrl)
   maxAttendees?: number
   attendees: EventAttendee[]
   createdBy: string | User
