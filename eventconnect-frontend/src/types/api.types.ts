@@ -124,6 +124,7 @@ export interface Event {
   isAttending?: boolean;
   isFavorite?: boolean;
   attendeesCount?: number;
+  imageUrl?: string;
 }
 
 export interface EventImage {

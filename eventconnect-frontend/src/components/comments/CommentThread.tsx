@@ -126,7 +126,7 @@ function CommentItem({
           src={comment.author.avatar}
           alt={comment.author.username}
           fallback={comment.author.firstName[0] + comment.author.lastName[0]}
-          size="md"
+          size="default"
         />
 
         {/* Content */}

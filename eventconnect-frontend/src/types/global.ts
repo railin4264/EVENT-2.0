@@ -31,8 +31,3 @@ export interface ApiResponse<T = any> {
 }
 
 export {};
-
-// Allow importing CSS from node_modules (e.g. leaflet/dist/leaflet.css) in
-// dynamic imports without a type error. Next.js handles the actual bundling.
-declare module '*.css';
-declare module 'leaflet/dist/leaflet.css';

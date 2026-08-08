@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Search, Users, Plus } from 'lucide-react'
 import * as chatAPI from '@/lib/api/chat'
+import type { ChatRoom } from '@/types/api.types'
 import { useAuthStore } from '@/stores/authStore'
 
 interface User {
@@ -19,7 +20,7 @@ interface User {
 interface CreateGroupChatProps {
   isOpen: boolean
   onClose: () => void
-  onGroupCreated: (chat: chatAPI.Chat) => void
+  onGroupCreated: (chat: ChatRoom) => void
   onError: (error: string) => void
   availableUsers?: User[]
   isLoadingUsers?: boolean
