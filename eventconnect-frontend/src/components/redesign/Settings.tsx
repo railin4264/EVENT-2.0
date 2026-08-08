@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings as SettingsIcon, User, Bell, Shield, LogOut, Moon, Globe, Eye, Lock, Mail, Loader2, Star , Palette, HelpCircle} from 'lucide-react'
+import { Settings as SettingsIcon, User, Bell, Shield, LogOut, Moon, Globe, Eye, Lock, Mail, Loader2, Star, Palette, HelpCircle } from 'lucide-react'
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { Label } from './ui/label'

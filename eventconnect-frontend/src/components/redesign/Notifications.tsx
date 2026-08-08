@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Bell, X, Check, Calendar, Users, MessageCircle, Heart, Star, MapPin, Clock, Filter, MoreVertical , Trophy, Gift} from 'lucide-react'
+import { Bell, X, Check, Calendar, Users, MessageCircle, Heart, Star, MapPin, Clock, Filter, MoreVertical, Trophy, Gift } from 'lucide-react'
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'

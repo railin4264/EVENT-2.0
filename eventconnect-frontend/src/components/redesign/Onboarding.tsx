@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRight, ChevronLeft, Star, Calendar, Users, MapPin, Check, Bell, Shield, Mail, Smartphone, Activity, Eye, MessageCircle, Globe , Trophy, Sparkles} from 'lucide-react'
+import { ArrowRight, ChevronLeft, Star, Calendar, Users, MapPin, Check, Bell, Shield, Mail, Smartphone, Activity, Eye, MessageCircle, Globe, Trophy, Sparkles } from 'lucide-react'
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'

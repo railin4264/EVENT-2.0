@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Star , Ticket} from 'lucide-react'
+import { Star, Ticket } from 'lucide-react'
 
 // Alias para icono no disponible en lucide-react 0.408.0
 

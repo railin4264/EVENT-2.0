@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, EyeOff, Mail, Lock, User, Calendar, MapPin, Star, ArrowRight, Loader2 , Sparkles} from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, Calendar, MapPin, Star, ArrowRight, Loader2, Sparkles } from 'lucide-react'
 
 // Alias for Sparkles (not available in lucide-react 0.408.0)
 import { Card } from './ui/card'

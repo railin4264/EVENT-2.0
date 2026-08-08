@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Camera, Type, Image, Plus, Check, Star, Send , Palette} from 'lucide-react'
+import { X, Camera, Type, Image, Plus, Check, Star, Send, Palette } from 'lucide-react'
 
 // Aliases para iconos no disponibles en lucide-react 0.408.0
 const Video = Camera

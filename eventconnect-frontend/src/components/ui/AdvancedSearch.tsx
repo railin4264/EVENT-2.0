@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Filter, X, Calendar, MapPin, Users, Star, Clock , DollarSign} from 'lucide-react'
+import { Search, Filter, X, Calendar, MapPin, Users, Star, Clock, DollarSign } from 'lucide-react'
 
 // Alias para icono no disponible en lucide-react 0.408.0
 import { cn } from '@/lib/utils'

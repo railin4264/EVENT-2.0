@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  MessageCircle, Calendar, Users, TrendingUp,
-  Plus, Search, Camera, Image as ImageIcon, Send, X
-} from 'lucide-react'
+import { MessageCircle, Calendar, Users, TrendingUp, Plus, Search, Camera, Image as ImageIcon, Send, X } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 import StoriesBar from '@/components/stories/StoriesBar'

@@ -1,0 +1,76 @@
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\Raili\pnpm-lock.yaml as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * C:\Users\Raili\OneDrive\Nueva carpeta\Imágenes\EVENT NOW 2.0\eventconnect-frontend\package-lock.json
+
+   ▲ Next.js 15.5.4
+   - Environments: .env.local, .env.production
+   - Experiments (use with caution):
+     · optimizePackageImports
+
+   Creating an optimized production build ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ Compiled successfully in 85s
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/27) ...
+(node:29904) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:31320) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+   Generating static pages (6/27) 
+   Generating static pages (13/27) 
+   Generating static pages (20/27) 
+ ✓ Generating static pages (27/27)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                Size  First Load JS
+┌ ○ /                                   5.31 kB         553 kB
+├ ○ /_not-found                           193 B         544 kB
+├ ○ /admin                                123 B         544 kB
+├ ○ /admin/analytics                    3.73 kB         550 kB
+├ ○ /admin/moderation                      3 kB         550 kB
+├ ƒ /checkout/[eventId]                 3.98 kB         556 kB
+├ ○ /dashboard                          3.14 kB         553 kB
+├ ○ /discovery                          10.9 kB         565 kB
+├ ○ /events                              3.7 kB         556 kB
+├ ƒ /events/[id]                        8.68 kB         569 kB
+├ ƒ /events/[id]/edit                   3.19 kB         551 kB
+├ ○ /events/create                      8.58 kB         555 kB
+├ ○ /feed                               6.08 kB         568 kB
+├ ○ /forgot-password                    2.01 kB         548 kB
+├ ○ /login                              2.83 kB         550 kB
+├ ○ /messages                           5.46 kB         555 kB
+├ ○ /notifications                      2.84 kB         555 kB
+├ ○ /privacy                              124 B         544 kB
+├ ○ /profile                            4.06 kB         557 kB
+├ ○ /register                           8.18 kB         558 kB
+├ ○ /search                             2.84 kB         550 kB
+├ ○ /settings                           11.4 kB         559 kB
+├ ○ /stories                            3.86 kB         551 kB
+├ ○ /stories/create                     3.32 kB         551 kB
+├ ○ /terms                                124 B         544 kB
+├ ○ /tickets                            2.57 kB         555 kB
+├ ƒ /tickets/[id]                       2.26 kB         554 kB
+├ ○ /tribes                             5.18 kB         554 kB
+├ ƒ /tribes/[id]                        3.41 kB         559 kB
+├ ○ /tribes/create                       5.9 kB         552 kB
+└ ƒ /users/[id]                         5.06 kB         558 kB
++ First Load JS shared by all            544 kB
+  ├ chunks/vendors-db1ecaf73453f9aa.js   541 kB
+  └ other shared chunks (total)         2.71 kB
+
+
+ƒ Middleware                            34.9 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+NEXT_BUILD_EXIT=0

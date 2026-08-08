@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Download, X, Star , Smartphone} from 'lucide-react'
+import { Download, X, Star, Smartphone } from 'lucide-react'
 
 // Alias para iconos no disponibles en lucide-react 0.408.0
 import { usePWA, useServiceWorker } from '@/hooks/usePWA'

@@ -1,5 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts'
-import { TrendingUp, Users, Calendar, Star, Eye, MessageCircle, Share , Award, Target} from 'lucide-react'
+import { TrendingUp, Users, Calendar, Star, Eye, MessageCircle, Share, Award, Target } from 'lucide-react'
 import { Card } from './ui/card'
 
 // Icon fallback for compatibility

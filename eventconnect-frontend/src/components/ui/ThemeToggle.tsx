@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sun, Moon, Star , Square} from 'lucide-react'
+import { Sun, Moon, Star, Square } from 'lucide-react'
 
 // Alias para icono no disponible en lucide-react 0.408.0
 import { useTheme } from 'next-themes'

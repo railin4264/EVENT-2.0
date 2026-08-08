@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Edit, Share, Users, Calendar, Star, MapPin, Camera, Plus, Loader2 , Trophy} from 'lucide-react'
+import { Settings, Edit, Share, Users, Calendar, Star, MapPin, Camera, Plus, Loader2, Trophy } from 'lucide-react'
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { Badge } from './ui/badge'

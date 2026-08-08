@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, MapPin, Calendar, X, Clock, Users, Star , Tag, Sliders, TrendingUp, Mic} from 'lucide-react'
+import { Search, MapPin, Calendar, X, Clock, Users, Star, Tag, Sliders, TrendingUp, Mic } from 'lucide-react'
 import { eventsService } from '@/lib/api/services'
 
 interface SearchFilters {

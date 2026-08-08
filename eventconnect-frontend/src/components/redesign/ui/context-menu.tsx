@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
-import { Check, ChevronRight, Star , Circle} from 'lucide-react';
+import { Check, ChevronRight, Star, Circle } from 'lucide-react';
 
 // Icon fallback for compatibility
 

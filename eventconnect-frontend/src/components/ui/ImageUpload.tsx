@@ -98,13 +98,13 @@ export function ImageUpload({
 
       if (multiple) {
         // Upload multiple files
-        const uploadPromises = fileArray.map(file => uploadToCloudinary(file))
+        const uploadPromises = fileArray.map(file => uploadToServer(file))
         const uploadedUrls = await Promise.all(uploadPromises)
         const newImages = [...currentImages, ...uploadedUrls]
         onChange(newImages.slice(0, maxFiles))
       } else {
         // Upload single file
-        const uploadedUrl = await uploadToCloudinary(fileArray[0])
+        const uploadedUrl = await uploadToServer(fileArray[0])
         onChange(uploadedUrl)
       }
     } catch (err) {

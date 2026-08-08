@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Star, Calendar, Users, Crown, Heart, Zap , Trophy, Sparkles, Award, Target, Flame, PartyPopper} from 'lucide-react'
+import { Star, Calendar, Users, Crown, Heart, Zap, Trophy, Sparkles, Award, Target, Flame, PartyPopper } from 'lucide-react'
 
 // Aliases para iconos no disponibles en lucide-react 0.408.0
 

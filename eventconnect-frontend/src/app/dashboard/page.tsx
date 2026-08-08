@@ -2,10 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import {
-  Calendar, Heart, Users, TrendingUp, Clock, Eye,
-  Plus, BarChart3, ArrowRight
-} from 'lucide-react'
+import { Calendar, Heart, Users, TrendingUp, Clock, Eye, Plus, BarChart3, ArrowRight } from 'lucide-react'
 import { EventCard } from '@/components/events/EventCard'
 import { useAuthStore } from '@/stores/authStore'
 import { apiClient } from '@/lib/api/client'

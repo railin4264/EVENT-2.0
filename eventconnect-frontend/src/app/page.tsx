@@ -3,11 +3,7 @@
 import { motion, useScroll, useTransform } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/authStore'
-import {
-  Calendar, Users, Heart, Star, ArrowRight, TrendingUp,
-  Shield, Zap, MapPin, Music, Ticket, MessageCircle,
-  Globe, Sparkles, ChevronRight
-} from 'lucide-react'
+import { Calendar, Users, Heart, Star, ArrowRight, TrendingUp, Shield, Zap, MapPin, Music, Ticket, MessageCircle, Globe, Sparkles, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'

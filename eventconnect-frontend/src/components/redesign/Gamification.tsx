@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Star, Zap, TrendingUp, Loader2 , Award, CircleDot} from 'lucide-react'
+import { Star, Zap, TrendingUp, Loader2, Award, CircleDot } from 'lucide-react'
 import { Card } from './ui/card'
 import { Progress } from './ui/progress'
 import { Badge } from './ui/badge'

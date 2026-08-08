@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
-import { Star , Circle} from 'lucide-react';
+import { Star, Circle } from 'lucide-react';
 
 // Icon fallback for compatibility
 

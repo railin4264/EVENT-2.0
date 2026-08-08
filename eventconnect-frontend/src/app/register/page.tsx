@@ -4,10 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Mail, Lock, Eye, EyeOff, User, Loader2,
-  ChevronRight, ChevronLeft, Calendar, ArrowRight, Sparkles, Phone
-} from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, User, Loader2, ChevronRight, ChevronLeft, Calendar, ArrowRight, Sparkles, Phone } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import InterestsSelector from '@/components/auth/InterestsSelector'
 import toast from 'react-hot-toast'

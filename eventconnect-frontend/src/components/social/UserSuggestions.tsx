@@ -7,7 +7,7 @@ import { Button } from '@/components/redesign/ui/button'
 import { Badge } from '@/components/redesign/ui/badge'
 import { useFollowsStore } from '@/stores/followsStore'
 import { FollowButton } from './FollowButton'
-import { Users, Star , Sparkles} from 'lucide-react'
+import { Users, Star, Sparkles } from 'lucide-react'
 
 // Alias para icono no disponible en lucide-react 0.408.0
 import { cn } from '@/lib/utils'

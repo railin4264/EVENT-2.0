@@ -5,17 +5,7 @@ import { ticketService } from '@/services';
 import type { Ticket } from '@/services/TicketService';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import {
-  Ticket as TicketIcon,
-  Calendar,
-  MapPin,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  QrCode,
-  ChevronRight,
-} from 'lucide-react';
+import { Ticket as TicketIcon, Calendar, MapPin, Clock, CheckCircle, XCircle, AlertCircle, QrCode, ChevronRight,  } from 'lucide-react';
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);

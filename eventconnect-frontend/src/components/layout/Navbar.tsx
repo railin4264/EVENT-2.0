@@ -4,11 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Menu, X, Home, Calendar, Users, MessageCircle, User,
-  Settings, LogOut, Search, PlusCircle, MapPin, ChevronDown,
-  LayoutDashboard, Compass
-} from 'lucide-react'
+import { Menu, X, Home, Calendar, Users, MessageCircle, User, Settings, LogOut, Search, PlusCircle, MapPin, ChevronDown, LayoutDashboard, Compass } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import NotificationCenter from '@/components/redesign/ui/notification-center'
 import { CompactThemeToggle } from '@/components/redesign/ui/theme-toggle'
