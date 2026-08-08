@@ -221,7 +221,9 @@ app.use(limiter);
 // Strict rate limiter for authentication routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // limit each IP to 20 auth requests per window (brute-force protection)
+  // In development we raise the ceiling so local smoke/functional testing isn't
+  // throttled; production keeps the strict brute-force protection.
+  max: process.env.NODE_ENV === 'production' ? 20 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many login attempts, please try again after 15 minutes' }

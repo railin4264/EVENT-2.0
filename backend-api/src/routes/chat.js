@@ -10,6 +10,18 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// Lookup a chat by either its Mongo _id (ObjectId) or its chatId slug.
+// The frontend/mobile pass the chat `_id`, while some internal flows use the
+// `chatId` slug, so accept both to avoid 404s.
+async function getChatById(id) {
+  if (!id) return null;
+  if (Chat.schema.paths._id && id.match(/^[0-9a-fA-F]{24}$/)) {
+    const byId = await Chat.findById(id);
+    if (byId) return byId;
+  }
+  return Chat.findOne({ chatId: id });
+}
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -201,7 +213,7 @@ router.get('/:chatId/messages',
       const limit = parseInt(req.query.limit) || 50;
       
       // Check if user is participant of the chat
-      const chat = await Chat.findOne({ chatId });
+      const chat = await getChatById(chatId);
       if (!chat) {
         return res.status(404).json({
           success: false,
@@ -260,7 +272,7 @@ router.post('/:chatId/messages',
       const { content, messageType = 'text', media, location, reference, referenceModel, replyTo } = req.body;
       
       // Check if user is participant of the chat
-      const chat = await Chat.findOne({ chatId });
+      const chat = await getChatById(chatId);
       if (!chat) {
         return res.status(404).json({
           success: false,
@@ -440,7 +452,7 @@ router.put('/:chatId/join',
     try {
       const { chatId } = req.params;
       
-      const chat = await Chat.findOne({ chatId });
+      const chat = await getChatById(chatId);
       if (!chat) {
         return res.status(404).json({
           success: false,
@@ -499,7 +511,7 @@ router.put('/:chatId/leave',
     try {
       const { chatId } = req.params;
       
-      const chat = await Chat.findOne({ chatId });
+      const chat = await getChatById(chatId);
       if (!chat) {
         return res.status(404).json({
           success: false,
@@ -563,7 +575,7 @@ router.post('/:chatId/upload',
       }
 
       // Check if user is participant of the chat
-      const chat = await Chat.findOne({ chatId });
+      const chat = await getChatById(chatId);
       if (!chat) {
         return res.status(404).json({
           success: false,
@@ -710,10 +722,9 @@ router.put('/:chatId/participants/:userId',
       const { chatId, userId } = req.params;
       const { role } = req.body;
 
-      const chat = await Chat.findOne({ 
-        chatId,
-        type: 'group'
-      });
+      const chat = await (Chat.schema.paths._id && chatId.match(/^[0-9a-fA-F]{24}$/)
+        ? Chat.findOne({ _id: chatId, type: 'group' })
+        : Chat.findOne({ chatId, type: 'group' }));
 
       if (!chat) {
         return res.status(404).json({
