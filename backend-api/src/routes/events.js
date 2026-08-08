@@ -586,11 +586,7 @@ router.get('/:id', optionalAuth, eventDetailsCache, async (req, res) => {
       event: eventResponse
     });
   } catch (error) {
-    logger.error('Get event error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    next(error);
   }
 });
 

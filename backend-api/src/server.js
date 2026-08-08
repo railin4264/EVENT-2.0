@@ -221,8 +221,8 @@ app.use(limiter);
 // Strict rate limiter for authentication routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  // In development we raise the ceiling so local smoke/functional testing isn't
-  // throttled; production keeps the strict brute-force protection.
+  // Strict in production (real brute-force protection). Relaxed in test/dev so
+  // functional suites (which share one IP) are not throttled mid-run.
   max: process.env.NODE_ENV === 'production' ? 20 : 1000,
   standardHeaders: true,
   legacyHeaders: false,

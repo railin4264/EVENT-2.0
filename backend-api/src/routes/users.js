@@ -352,7 +352,7 @@ router.get('/:id/attended-events', protect, async (req, res) => {
 // @desc    Get user by ID
 // @route   GET /api/users/:id
 // @access  Private
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
 
