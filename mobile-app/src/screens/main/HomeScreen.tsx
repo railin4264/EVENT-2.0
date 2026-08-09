@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Image, FlatList, Dimensions, StatusBar,
+  Platform, ActivityIndicator,
 } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,9 +16,9 @@ import { eventService } from '@/services';
 import { Event } from '@/types';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
-import Animated, { 
-  useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, 
-  interpolate, Extrapolation, withSpring,
+import Animated, {
+  useSharedValue, useAnimatedScrollHandler, useAnimatedStyle,
+  interpolate, Extrapolation, withSpring, withRepeat, withTiming,
   type SharedValue
 } from 'react-native-reanimated';
 
@@ -59,6 +62,15 @@ const MOCK_EVENTS: Partial<Event>[] = [
     location: { address: 'Cali, Colombia' } as any,
     price: 15000, attendees: ['a','b','c'] as any,
   },
+];
+
+const DARK_MAP = [
+  { elementType: 'geometry', stylers: [{ color: '#0c0b10' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#9ca3af' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0c0b10' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1f1d2b' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#131220' }] },
 ];
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
@@ -159,12 +171,113 @@ function GlassEventCard({ event, index }: { event: Partial<Event>; index: number
   );
 }
 
+// Pulsing map marker (reused pattern from MapScreen)
+function PulseMarker({ color = PINK }: { color?: string }) {
+  const pulse = useSharedValue(1);
+  React.useEffect(() => {
+    pulse.value = withRepeat(
+      withTiming(1.7, { duration: 1000 }),
+      -1,
+      true
+    );
+  }, []);
+  return (
+    <View style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View style={{ position: 'absolute', width: 34, height: 34, borderRadius: 17, backgroundColor: color + '28', transform: [{ scale: pulse }] }} />
+      <LinearGradient colors={[color, VIOLET] as any} style={mapStyles.pin}>
+        <Ionicons name="flash" size={13} color="#fff" />
+      </LinearGradient>
+    </View>
+  );
+}
+
+// Map preview section — shows nearby events on a real interactive map
+function MapPreviewSection({ events, loading, onOpenMap }: {
+  events: Partial<Event>[];
+  loading: boolean;
+  onOpenMap: () => void;
+}) {
+  const mapRef = React.useRef<MapView>(null);
+  const valid = events.filter(
+    (e) => e.location && typeof e.location !== 'string' && (e.location as any).coordinates
+  );
+  const region = valid.length
+    ? {
+        latitude: (valid[0].location as any).coordinates[1],
+        longitude: (valid[0].location as any).coordinates[0],
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+      }
+    : { latitude: 4.711, longitude: -74.072, latitudeDelta: 0.1, longitudeDelta: 0.1 };
+
+  return (
+    <View style={mapStyles.wrap}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Cerca de ti</Text>
+        <TouchableOpacity onPress={onOpenMap}>
+          <Text style={styles.sectionLink}>Ver mapa</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={mapStyles.card}>
+        <MapView
+          ref={mapRef}
+          style={StyleSheet.absoluteFillObject}
+          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+          customMapStyle={DARK_MAP}
+          initialRegion={region}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+          showsUserLocation
+          onPress={onOpenMap}
+        >
+          {valid.map((ev) => {
+            const c = (ev.location as any).coordinates;
+            const col = ev.category === 'music' ? '#f97316' : ev.category === 'food' ? '#10b981' : PINK;
+            return (
+              <Marker
+                key={ev._id}
+                coordinate={{ latitude: c[1], longitude: c[0] }}
+                onPress={onOpenMap}
+              >
+                <PulseMarker color={col} />
+              </Marker>
+            );
+          })}
+        </MapView>
+
+        {loading && (
+          <View style={mapStyles.overlay}>
+            <ActivityIndicator size="large" color={PINK} />
+          </View>
+        )}
+
+        {!loading && valid.length === 0 && (
+          <View style={mapStyles.overlay}>
+            <Ionicons name="map-outline" size={40} color="rgba(255,255,255,0.2)" />
+            <Text style={mapStyles.emptyText}>Activa la ubicación para ver eventos cerca</Text>
+          </View>
+        )}
+
+        <BlurView intensity={80} tint="dark" style={mapStyles.badge}>
+          <Ionicons name="location" size={14} color={NEON} />
+          <Text style={mapStyles.badgeText}>{valid.length} eventos cerca</Text>
+        </BlurView>
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   
   const [activeCategory, setActiveCategory] = useState('all');
   const [events, setEvents] = useState<Partial<Event>[]>(MOCK_EVENTS);
+  const [mapEvents, setMapEvents] = useState<Partial<Event>[]>([]);
+  const [mapLoading, setMapLoading] = useState(true);
   const scrollY = useSharedValue(0);
 
   const loadEvents = useCallback(async () => {
@@ -172,6 +285,26 @@ export default function HomeScreen() {
       const res = await eventService.getEvents({ limit: 10 });
       if (res?.data?.length) setEvents(res.data);
     } catch { }
+    // Load nearby events on a real map once we have the user's location
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({});
+        const nearby = await eventService.getNearbyEvents(
+          loc.coords.latitude,
+          loc.coords.longitude,
+          50,
+          30
+        );
+        setMapEvents(nearby.length ? nearby : MOCK_EVENTS);
+      } else {
+        setMapEvents(MOCK_EVENTS);
+      }
+    } catch {
+      setMapEvents(MOCK_EVENTS);
+    } finally {
+      setMapLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
@@ -286,6 +419,13 @@ export default function HomeScreen() {
             }}
           />
         </View>
+
+        {/* Nearby map preview — real interactive map with nearby events */}
+        <MapPreviewSection
+          events={mapEvents}
+          loading={mapLoading}
+          onOpenMap={() => router.push('/(tabs)/map' as any)}
+        />
 
         {/* For You Section */}
         <View style={styles.sectionHeader}>
@@ -424,4 +564,32 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 32 },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: '#fff', textAlign: 'center', marginTop: 16, marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.4)', textAlign: 'center', lineHeight: 20 },
+});
+
+// Map preview section styles
+const mapStyles = StyleSheet.create({
+  wrap: { marginTop: 36 },
+  card: {
+    marginHorizontal: 20,
+    height: 220,
+    borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  pin: { width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  overlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(12,11,16,0.7)',
+  },
+  emptyText: { fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 10, textAlign: 'center', paddingHorizontal: 24 },
+  badge: {
+    position: 'absolute', top: 14, left: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14,
+    overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+  },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 });

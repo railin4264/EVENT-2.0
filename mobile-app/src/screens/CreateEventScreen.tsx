@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   Alert,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input, Button, Card, Badge } from '@/components/ui';
@@ -48,6 +50,8 @@ export default function CreateEventScreen() {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [eventImage, setEventImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [insights, setInsights] = useState<any>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
 
   const {
     control,
@@ -72,6 +76,30 @@ export default function CreateEventScreen() {
     setSelectedCategory(categoryId);
     setValue('category', categoryId);
   };
+
+  // Creator tool: load real audience insights for the user's zone so they can
+  // see what resonates before publishing.
+  const loadInsights = async () => {
+    setInsightsLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setInsights({ hasData: false, message: 'Activa la ubicación para ver insights de tu zona.' });
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      const res = await api.get('/analytics/audience-insights', {
+        params: { lat: loc.coords.latitude, lng: loc.coords.longitude, radius: 25 },
+      });
+      setInsights(res.data?.data || res.data || null);
+    } catch (e) {
+      setInsights({ hasData: false, message: 'No pudimos cargar insights ahora. Intenta de nuevo.' });
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
+
+  useEffect(() => { loadInsights(); }, []);
 
   const handlePickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -289,6 +317,63 @@ export default function CreateEventScreen() {
           {errors.category && (
             <Text style={styles.errorText}>{errors.category.message}</Text>
           )}
+
+          {/* Creator tool: audience insights for the zone */}
+          <View style={styles.insightsBox}>
+            <View style={styles.insightsHeader}>
+              <Ionicons name="analytics" size={18} color={theme.colors.primary} />
+              <Text style={styles.insightsTitle}>Insights de tu zona</Text>
+              <TouchableOpacity onPress={loadInsights} disabled={insightsLoading}>
+                <Ionicons name="refresh" size={16} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {insightsLoading && (
+              <View style={styles.insightsRow}>
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+                <Text style={styles.insightsHint}>Analizando tu zona…</Text>
+              </View>
+            )}
+
+            {!insightsLoading && insights && !insights.hasData && (
+              <Text style={styles.insightsHint}>{insights.message || 'Sin datos en tu zona aún.'}</Text>
+            )}
+
+            {!insightsLoading && insights && insights.hasData && (
+              <View>
+                {insights.topCategories?.length > 0 && (
+                  <View style={styles.insightsRow}>
+                    <Text style={styles.insightsLabel}>Categorías que dominan:</Text>
+                    <View style={styles.chipRow}>
+                      {insights.topCategories.map((c: any) => (
+                        <View key={c.category} style={styles.insightChip}>
+                          <Text style={styles.insightChipText}>{c.label} {c.share}%</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+                {insights.bestDays?.length > 0 && (
+                  <View style={styles.insightsRow}>
+                    <Text style={styles.insightsLabel}>Mejores días:</Text>
+                    <Text style={styles.insightsValue}>{insights.bestDays.join(', ')}</Text>
+                  </View>
+                )}
+                {insights.priceBand && (
+                  <View style={styles.insightsRow}>
+                    <Text style={styles.insightsLabel}>Precio sugerido:</Text>
+                    <Text style={styles.insightsValue}>{insights.priceBand.recommendation}</Text>
+                  </View>
+                )}
+                {typeof insights.audienceConcentration === 'number' && (
+                  <View style={styles.insightsRow}>
+                    <Text style={styles.insightsLabel}>Audiencia en la zona:</Text>
+                    <Text style={styles.insightsValue}>{insights.audienceConcentration} asistentes · {insights.eventCount} eventos</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
         </Card>
 
         {/* Date & Time */}
@@ -523,6 +608,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.5)',
     marginTop: 4,
+  },
+  insightsBox: {
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  insightsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  insightsTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  insightsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  insightsLabel: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
+    marginRight: 4,
+  },
+  insightsValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+    flexShrink: 1,
+  },
+  insightsHint: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 4,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  insightChip: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  insightChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
   },
   changeImageButton: {
     position: 'absolute',

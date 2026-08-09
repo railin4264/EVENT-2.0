@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Tribe = require('../models/Tribe');
 const Order = require('../models/Order');
 const Event = require('../models/Event');
+const { getAudienceInsights } = require('../services/audienceInsights');
 
 const router = express.Router();
 
@@ -537,6 +538,30 @@ router.get('/revenue', protect, restrictTo('admin'), async (req, res) => {
     res.json({ success: true, revenueAnalytics, timeframe, generatedAt: new Date().toISOString() });
   } catch (error) {
     logger.error('Get revenue analytics error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @desc    Audience insights for creators by zone (derived from real nearby events)
+// @route   GET /api/analytics/audience-insights
+// @access  Private
+router.get('/audience-insights', protect, async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat);
+    const lng = parseFloat(req.query.lng);
+    const radiusKm = req.query.radius ? parseFloat(req.query.radius) : 25;
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return res.status(400).json({
+        success: false,
+        message: 'lat and lng query params are required',
+      });
+    }
+
+    const insights = await getAudienceInsights(lat, lng, radiusKm);
+    res.json({ success: true, data: insights });
+  } catch (error) {
+    logger.error('Audience insights error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
