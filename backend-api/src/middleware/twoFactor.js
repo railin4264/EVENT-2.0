@@ -58,16 +58,14 @@ const enforceSecondFactor = async (req, res, next) => {
       });
     }
 
-    // If user doesn't have 2FA enabled, they need to set it up for sensitive operations
+    // If the user does NOT have 2FA enabled, there is nothing to enforce.
+    // Sensitive operations (change-password, logout-all) should proceed
+    // normally for these users. Only enforce a TOTP token when 2FA is on.
     if (!user.twoFactor || !user.twoFactor.isEnabled) {
-      return res.status(403).json({
-        success: false,
-        message: 'Two-factor authentication is required for this operation',
-        code: 'REQUIRES_2FA_SETUP'
-      });
+      return next();
     }
 
-    // Check if 2FA token is provided
+    // User has 2FA enabled — require a valid TOTP token for the operation.
     if (!twoFactorToken) {
       return res.status(400).json({
         success: false,

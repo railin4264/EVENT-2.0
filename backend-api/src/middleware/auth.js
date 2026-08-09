@@ -71,6 +71,18 @@ const protect = async (req, res, next) => {
       });
     }
 
+    // Token revocation check: if this token has been explicitly revoked
+    // (e.g. via logout-all or password change) reject it even if the
+    // signature is still valid.
+    if (user.revokedTokens && user.revokedTokens.length > 0 && user.revokedTokens.includes(token)) {
+      logger.warn(`Rejected revoked access token for user: ${user.username}`);
+      return res.status(401).json({
+        success: false,
+        message: 'Session invalidated. Please log in again.',
+        code: 'AUTH_TOKEN_REVOKED'
+      });
+    }
+
     // NOTE: Access tokens are stateless JWT tokens and don't need to be stored in DB
     // Only refresh tokens are stored in user.refreshTokens for rotation/revocation
     // Token validity is already verified by jwtService.verifyAccessToken() above

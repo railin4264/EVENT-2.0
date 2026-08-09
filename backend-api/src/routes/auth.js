@@ -7,6 +7,7 @@ const { sanitizeBody, stripForbiddenUserFields } = require('../middleware/saniti
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const jwtService = require('../services/jwtService');
+const twoFactorService = require('../services/twoFactorService');
 const router = express.Router();
 
 
@@ -237,6 +238,25 @@ router.post('/login', sanitizeBody, validateLogin, async (req, res) => {
       });
     }
 
+    // Check if 2FA is enabled — don't issue tokens until the TOTP is verified
+    if (user.twoFactor && user.twoFactor.isEnabled) {
+      const tempToken = jwtService.generateTempToken(user);
+      logger.info(`2FA required for login: ${email}`);
+      return res.json({
+        success: true,
+        requiresTwoFactor: true,
+        tempToken,
+        user: {
+          id: user._id,
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName
+        }
+      });
+    }
+
     // Generate token pair using JWT service
     const tokens = jwtService.generateTokenPair(user);
 
@@ -246,9 +266,18 @@ router.post('/login', sanitizeBody, validateLogin, async (req, res) => {
     }
     user.refreshTokens.push(tokens.refreshToken);
 
-    // Limit refresh tokens to 5 per user
+    // Track the access token so it can be revoked on password change / logout-all
+    if (!user.tokens) {
+      user.tokens = [];
+    }
+    user.tokens.push({ token: tokens.accessToken });
+
+    // Limit tokens to 5 per user
     if (user.refreshTokens.length > 5) {
       user.refreshTokens = user.refreshTokens.slice(-5);
+    }
+    if (user.tokens.length > 5) {
+      user.tokens = user.tokens.slice(-5);
     }
 
     // NOTE: Access tokens are NOT stored in database because they are stateless JWT tokens
@@ -435,9 +464,16 @@ router.post('/logout', protect, async (req, res) => {
 // @access  Private
 router.post('/logout-all', protect, enforceSecondFactor, async (req, res) => {
   try {
-    // Clear all tokens
+    // Revoke the current token and clear all sessions
+    if (!req.user.revokedTokens) req.user.revokedTokens = [];
+    if (req.token) req.user.revokedTokens.push(req.token);
     req.user.tokens = [];
     req.user.refreshTokens = [];
+
+    // Keep the revoked list bounded
+    if (req.user.revokedTokens.length > 50) {
+      req.user.revokedTokens = req.user.revokedTokens.slice(-50);
+    }
 
     await req.user.save();
 
@@ -490,8 +526,13 @@ router.post('/change-password', protect, enforceSecondFactor, async (req, res) =
     user.password = newPassword;
     // Rotate all sessions: invalidate every existing token so stolen/old
     // tokens stop working immediately after a password change.
+    if (!user.revokedTokens) user.revokedTokens = [];
+    if (req.token) user.revokedTokens.push(req.token);
     user.tokens = [];
     user.refreshTokens = [];
+    if (user.revokedTokens.length > 50) {
+      user.revokedTokens = user.revokedTokens.slice(-50);
+    }
     await user.save();
 
     logger.info(`Password changed for user: ${user.username}`);
@@ -614,6 +655,102 @@ router.get('/verify-email/:token', async (req, res) => {
   } catch (error) {
     logger.error('Email verification error:', error);
     res.status(500).json({ success: false, message: 'Server error during verification' });
+  }
+});
+
+// @desc    Verify 2FA code after login (completes the 2FA challenge)
+// @route   POST /api/auth/verify-2fa
+// @access  Public (requires tempToken from login)
+router.post('/verify-2fa', async (req, res) => {
+  try {
+    const { tempToken, code } = req.body;
+
+    if (!tempToken || !code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Temp token and 2FA code are required'
+      });
+    }
+
+    // Validate 6-digit code format
+    if (!/^\d{6}$/.test(String(code))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid TOTP token'
+      });
+    }
+
+    // Verify temp token to recover the user id
+    let decoded;
+    try {
+      decoded = jwtService.verifyTempToken(tempToken);
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired setup token'
+      });
+    }
+
+    const user = await User.findById(decoded.id).select('+password');
+    if (!user || !user.twoFactor || !user.twoFactor.isEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid request'
+      });
+    }
+
+    // Verify TOTP
+    const isValid = twoFactorService.verifyToken(code, user.twoFactor.secret);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid TOTP token'
+      });
+    }
+
+    // Issue the real token pair now that 2FA is satisfied
+    const tokens = jwtService.generateTokenPair(user);
+
+    if (!user.refreshTokens) user.refreshTokens = [];
+    user.refreshTokens.push(tokens.refreshToken);
+
+    if (!user.tokens) user.tokens = [];
+    user.tokens.push({ token: tokens.accessToken });
+
+    if (user.refreshTokens.length > 5) user.refreshTokens = user.refreshTokens.slice(-5);
+    if (user.tokens.length > 5) user.tokens = user.tokens.slice(-5);
+
+    await user.save();
+
+    logger.info(`2FA verification successful for user: ${user.username}`);
+
+    const loginPayload = {
+      id: user._id,
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      name: `${user.firstName} ${user.lastName}`,
+      avatar: user.avatar,
+      role: user.role,
+      isActive: user.isActive
+    };
+
+    res.json({
+      success: true,
+      message: '2FA verification successful',
+      accessToken: tokens.accessToken,
+      token: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: loginPayload
+    });
+  } catch (error) {
+    logger.error('2FA verify error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during 2FA verification'
+    });
   }
 });
 

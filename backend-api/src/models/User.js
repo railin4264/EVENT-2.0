@@ -181,6 +181,11 @@ const userSchema = new mongoose.Schema({
   // Refresh tokens for JWT rotation
   refreshTokens: [{ type: String }],
 
+  // Revoked access tokens (blacklist). When a token is present here it is
+  // rejected by the protect middleware even though its signature is valid.
+  // Used to invalidate sessions on logout-all / password change.
+  revokedTokens: [{ type: String }],
+
   // Account verification
   isEmailVerified: { type: Boolean, default: false },
   emailVerificationToken: { type: String },

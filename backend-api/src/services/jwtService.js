@@ -35,6 +35,52 @@ class JWTService {
   }
 
   /**
+   * Generate a short-lived temp token used for the 2FA challenge after login.
+   * @param {Object} user - User object
+   * @returns {string} - Signed temp JWT (5 min)
+   */
+  generateTempToken(user) {
+    const tokenPayload = {
+      id: user._id.toString(),
+      type: 'temp',
+      iat: Math.floor(Date.now() / 1000)
+    };
+
+    return jwt.sign(tokenPayload, this.accessTokenSecret, {
+      expiresIn: '5m',
+      issuer: 'eventconnect-api',
+      audience: 'eventconnect-clients'
+    });
+  }
+
+  /**
+   * Verify a temp 2FA token
+   * @param {string} token - Temp token
+   * @returns {Object} - Decoded payload
+   */
+  verifyTempToken(token) {
+    try {
+      const decoded = jwt.verify(token, this.accessTokenSecret, {
+        issuer: 'eventconnect-api',
+        audience: 'eventconnect-clients'
+      });
+
+      if (decoded.type !== 'temp') {
+        throw new Error('Invalid token type');
+      }
+
+      return decoded;
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        throw new Error('Temp token expired');
+      } else if (error.name === 'JsonWebTokenError') {
+        throw new Error('Invalid temp token');
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Generate access token
    * @param {Object} payload - Token payload
    * @param {Object} options - Token options

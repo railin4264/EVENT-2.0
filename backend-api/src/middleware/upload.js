@@ -78,12 +78,28 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// Validate that a buffer is a real image by checking magic bytes
+const isValidImageBuffer = (buffer) => {
+  if (!buffer || buffer.length < 4) return false;
+  const header = buffer.subarray(0, 4);
+  // JPEG: FF D8 FF
+  if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) return true;
+  // PNG: 89 50 4E 47
+  if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) return true;
+  // GIF: 47 49 46 38
+  if (header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x38) return true;
+  // WEBP: 52 49 46 46 (RIFF) ... 57 45 42 50 (WEBP) at offset 8
+  if (header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46 &&
+      buffer.length >= 12 && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return true;
+  return false;
+};
+
 // Configure multer
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit to match frontend video limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit
     files: 5, // Maximum 5 files per request
   }
 });
@@ -163,12 +179,28 @@ const uploadMiddleware = {
       }
 
       if (req.file) {
-        // Additional validation for avatars
+        // Additional validation for avatars: must be an image mimetype AND real image bytes
         if (!req.file.mimetype.startsWith('image/')) {
           return res.status(400).json({
             success: false,
             message: 'El avatar debe ser una imagen'
           });
+        }
+
+        // Verify the file actually contains image data (magic bytes), not just a renamed file
+        try {
+          const fs = require('fs');
+          const buffer = fs.readFileSync(req.file.path);
+          if (!isValidImageBuffer(buffer)) {
+            // Remove the spoofed file
+            try { fs.unlinkSync(req.file.path); } catch (e) { /* ignore */ }
+            return res.status(400).json({
+              success: false,
+              message: 'El archivo no es una imagen válida'
+            });
+          }
+        } catch (readErr) {
+          logger.error('Error reading uploaded avatar for validation:', readErr);
         }
 
         req.file.url = getFileUrl(req, req.file);

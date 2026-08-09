@@ -126,7 +126,7 @@ router.put('/profile', [
   enforceSecondFactor,
   body('firstName').optional().isLength({ min: 1 }).trim().escape(),
   body('lastName').optional().isLength({ min: 1 }).trim().escape(),
-  body('bio').optional().isLength({ max: 500 }).trim(),
+  body('bio').optional().isLength({ max: 500 }).trim().escape(),
   body('phone').optional().isMobilePhone(),
   body('interests').optional().isArray().custom((value) => {
     if (value.length > 20) {
@@ -510,7 +510,7 @@ router.put('/me/profile', [
   body('firstName').optional().isLength({ min: 1, max: 50 }).trim().escape(),
   body('lastName').optional().isLength({ min: 1, max: 50 }).trim().escape(),
   body('username').optional().isLength({ min: 3, max: 50 }).trim().escape(),
-  body('bio').optional().isLength({ max: 500 }).trim(),
+  body('bio').optional().isLength({ max: 500 }).trim().escape(),
   body('phone').optional().isMobilePhone(),
   body('interests').optional().isArray().custom((value) => {
     if (value.length > 20) {
