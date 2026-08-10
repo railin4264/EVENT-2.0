@@ -28,11 +28,14 @@ const eventSchema = new mongoose.Schema({
     enum: [
       'music', 'música',
       'sports', 'deportes',
-      'technology', 'tecnologia', 'tecnología',
+      'social', 'sociales',
+      'technology', 'tecnologia', 'tecnología', 'tech',
       'food', 'comida', 'gastronomía',
       'art', 'arte',
       'business', 'negocios', 'empresarial',
       'education', 'educación', 'educacion',
+      'party', 'fiesta',
+      'health', 'salud', 'wellness',
       'other', 'otro'
     ]
   },
