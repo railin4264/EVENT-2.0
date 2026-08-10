@@ -172,6 +172,8 @@ async function getSystemUser() {
       username: 'eventconnect_system',
       email: 'system@eventconnect.app',
       password: require('crypto').randomBytes(32).toString('hex'),
+      firstName: 'EventConnect',
+      lastName: 'System',
       isEmailVerified: true,
       role: 'system'
     });
