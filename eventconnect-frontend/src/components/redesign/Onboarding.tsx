@@ -5,6 +5,7 @@ import { Button } from './ui/button'
 import { Badge } from './ui/badge'
 import { Progress } from './ui/progress'
 import { settingsService } from '@/lib/api/services/settings.service'
+import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
 interface OnboardingProps {
@@ -15,7 +16,7 @@ interface OnboardingProps {
 export function Onboarding({ user, onComplete }: OnboardingProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [preferences, setPreferences] = useState({
-    eventTypes: [] as string[],
+    eventTypes: ((user?.interests as string[]) || []) as string[],
     notifications: {
       eventReminders: true,
       newFollowers: true,
@@ -56,7 +57,7 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
 
   // All notification settings with full labels
   const notificationLabels: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
-    eventReminders:     { label: 'Recordatorios de eventos',  desc: 'Te recordaremos tus eventos próximos',      icon: <Bell className="w-4 h-4 text-violet-400" /> },
+    eventReminders:     { label: 'Recordatorios de eventos',  desc: 'Te recordaremos tus eventos próximos',      icon: <Bell className="w-4 h-4 text-primary" /> },
     newFollowers:       { label: 'Nuevos seguidores',         desc: 'Cuando alguien te siga',                    icon: <Users className="w-4 h-4 text-blue-400" /> },
     eventInvites:       { label: 'Invitaciones a eventos',    desc: 'Cuando te inviten a eventos',               icon: <Calendar className="w-4 h-4 text-green-400" /> },
     achievements:       { label: 'Logros y XP',               desc: 'Nuevos logros desbloqueados',               icon: <Trophy className="w-4 h-4 text-yellow-400" /> },
@@ -69,7 +70,7 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
   const privacyLabels: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
     profilePublic:        { label: 'Perfil público',         desc: 'Otros usuarios pueden ver tu perfil',            icon: <Globe className="w-4 h-4 text-blue-400" /> },
     showLocation:         { label: 'Mostrar ubicación',      desc: 'Tu ubicación será visible en eventos',           icon: <MapPin className="w-4 h-4 text-green-400" /> },
-    allowDirectMessages:  { label: 'Mensajes directos',      desc: 'Permitir mensajes de otros usuarios',            icon: <MessageCircle className="w-4 h-4 text-violet-400" /> },
+    allowDirectMessages:  { label: 'Mensajes directos',      desc: 'Permitir mensajes de otros usuarios',            icon: <MessageCircle className="w-4 h-4 text-primary" /> },
     showOnlineStatus:     { label: 'Estado en línea',        desc: 'Mostrar cuando estás activo en la plataforma',   icon: <Activity className="w-4 h-4 text-cyan-400" /> },
     showActivityStatus:   { label: 'Actividad reciente',     desc: 'Mostrar tus eventos y actividades recientes',    icon: <Eye className="w-4 h-4 text-pink-400" /> },
     dataCollection:       { label: 'Mejora de experiencia',  desc: 'Compartir datos anónimos para mejorar la app',   icon: <Shield className="w-4 h-4 text-orange-400" /> },
@@ -84,25 +85,24 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
   }
 
   const handleComplete = async () => {
-    const userId = user?._id || user?.id
-    if (!userId) {
-      // No ID yet (guest), just proceed
-      onComplete()
-      return
-    }
+    const userId = (user?._id || user?.id) as string
     try {
       await settingsService.updateSettings(userId, {
+        eventTypes: preferences.eventTypes,
         notifications: preferences.notifications,
-        privacy: preferences.privacy
+        privacy: preferences.privacy,
       })
       toast.success('Preferencias guardadas')
     } catch (error) {
       console.warn('Could not save preferences:', error)
       // Don't block — proceed even if API fails
     }
+    // Mark onboarding completed so it does not reappear on reload
+    try {
+      useAuthStore.setState((st: any) => ({ user: { ...(st.user || {}), onboardingCompleted: true } }))
+    } catch {}
     onComplete()
   }
-
   const prevStep = () => {
     if (currentStep > 0) setCurrentStep(currentStep - 1)
   }
@@ -140,7 +140,7 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
   const userName = user?.name || user?.username || 'Usuario'
 
   return (
-    <div className="min-h-screen bg-[#0C0B10] relative overflow-hidden">
+    <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Background Effects */}
       <div className="absolute inset-0 particle-bg">
         <div className="absolute inset-0 animated-bg opacity-20"></div>
@@ -153,8 +153,8 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
           {/* Progress */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-white/70 text-sm">Paso {currentStep + 1} de {steps.length}</span>
-              <span className="text-white/70 text-sm">{Math.round(progress)}%</span>
+              <span className="text-muted-foreground text-sm">Paso {currentStep + 1} de {steps.length}</span>
+              <span className="text-muted-foreground text-sm">{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-2" />
           </div>
@@ -166,26 +166,26 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
             {steps[currentStep].content === 'welcome' && (
               <div className="space-y-6">
                 <div className="inline-block p-6 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 mb-4">
-                  <Sparkles className="w-12 h-12 text-white" />
+                  <Sparkles className="w-12 h-12 text-foreground" />
                 </div>
-                <h1 className="text-3xl font-bold text-white mb-4">¡Hola {userName}! 👋</h1>
-                <p className="text-xl text-white/80 mb-6">{steps[currentStep].description}</p>
+                <h1 className="text-3xl font-bold text-foreground mb-4">¡Hola {userName}! 👋</h1>
+                <p className="text-xl text-muted-foreground mb-6">{steps[currentStep].description}</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="p-4 rounded-lg bg-white/5">
+                  <div className="p-4 rounded-lg bg-card">
                     <Calendar className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-                    <p className="text-white/70 text-sm">Descubre eventos únicos</p>
+                    <p className="text-muted-foreground text-sm">Descubre eventos únicos</p>
                   </div>
-                  <div className="p-4 rounded-lg bg-white/5">
+                  <div className="p-4 rounded-lg bg-card">
                     <Users className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                    <p className="text-white/70 text-sm">Conecta con personas</p>
+                    <p className="text-muted-foreground text-sm">Conecta con personas</p>
                   </div>
-                  <div className="p-4 rounded-lg bg-white/5">
-                    <MapPin className="w-8 h-8 text-violet-400 mx-auto mb-2" />
-                    <p className="text-white/70 text-sm">Explora tu ciudad</p>
+                  <div className="p-4 rounded-lg bg-card">
+                    <MapPin className="w-8 h-8 text-primary mx-auto mb-2" />
+                    <p className="text-muted-foreground text-sm">Explora tu ciudad</p>
                   </div>
-                  <div className="p-4 rounded-lg bg-white/5">
+                  <div className="p-4 rounded-lg bg-card">
                     <Trophy className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-                    <p className="text-white/70 text-sm">Gana logros y XP</p>
+                    <p className="text-muted-foreground text-sm">Gana logros y XP</p>
                   </div>
                 </div>
               </div>
@@ -195,8 +195,8 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
             {steps[currentStep].content === 'preferences' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">{steps[currentStep].title}</h2>
-                  <p className="text-white/70 mb-6">{steps[currentStep].description}</p>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">{steps[currentStep].title}</h2>
+                  <p className="text-muted-foreground mb-6">{steps[currentStep].description}</p>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {eventTypes.map((type) => (
@@ -205,19 +205,19 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
                       onClick={() => toggleEventType(type.id)}
                       className={`p-4 rounded-lg cursor-pointer transition-all hover:scale-105 ${
                         preferences.eventTypes.includes(type.id)
-                          ? `bg-gradient-to-r ${type.color} bg-opacity-20 border-2 border-white/30`
-                          : 'bg-white/5 border-2 border-transparent hover:border-white/20'
+                          ? `bg-gradient-to-r ${type.color} bg-opacity-20 border-2 border-border`
+                          : 'bg-card border-2 border-transparent hover:border-border'
                       }`}
                     >
                       <div className="text-3xl mb-2">{type.icon}</div>
-                      <p className="text-white text-sm font-medium">{type.name}</p>
+                      <p className="text-foreground text-sm font-medium">{type.name}</p>
                       {preferences.eventTypes.includes(type.id) && (
-                        <Check className="w-4 h-4 text-white mx-auto mt-2" />
+                        <Check className="w-4 h-4 text-foreground mx-auto mt-2" />
                       )}
                     </div>
                   ))}
                 </div>
-                <p className="text-white/60 text-sm">{preferences.eventTypes.length} tipos seleccionados</p>
+                <p className="text-muted-foreground text-sm">{preferences.eventTypes.length} tipos seleccionados</p>
               </div>
             )}
 
@@ -225,25 +225,25 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
             {steps[currentStep].content === 'notifications' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">{steps[currentStep].title}</h2>
-                  <p className="text-white/70 mb-6">{steps[currentStep].description}</p>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">{steps[currentStep].title}</h2>
+                  <p className="text-muted-foreground mb-6">{steps[currentStep].description}</p>
                 </div>
                 <div className="space-y-3 text-left">
                   {Object.entries(preferences.notifications).map(([key, value]) => {
                     const info = notificationLabels[key]
                     if (!info) return null
                     return (
-                      <div key={key} className="flex items-center justify-between p-4 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+                      <div key={key} className="flex items-center justify-between p-4 rounded-lg bg-card hover:bg-card transition-colors">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="shrink-0">{info.icon}</div>
                           <div className="min-w-0">
-                            <p className="text-white font-medium text-sm">{info.label}</p>
-                            <p className="text-white/50 text-xs truncate">{info.desc}</p>
+                            <p className="text-foreground font-medium text-sm">{info.label}</p>
+                            <p className="text-muted-foreground text-xs truncate">{info.desc}</p>
                           </div>
                         </div>
                         <button
                           onClick={() => toggleNotification(key)}
-                          className={`relative ml-4 w-12 h-6 rounded-full transition-colors shrink-0 ${value ? 'bg-violet-500' : 'bg-white/20'}`}
+                          className={`relative ml-4 w-12 h-6 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-muted'}`}
                         >
                           <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-0.5'}`} />
                         </button>
@@ -258,25 +258,25 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
             {steps[currentStep].content === 'privacy' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-white mb-2">{steps[currentStep].title}</h2>
-                  <p className="text-white/70 mb-6">{steps[currentStep].description}</p>
+                  <h2 className="text-2xl font-bold text-foreground mb-2">{steps[currentStep].title}</h2>
+                  <p className="text-muted-foreground mb-6">{steps[currentStep].description}</p>
                 </div>
                 <div className="space-y-3 text-left">
                   {Object.entries(preferences.privacy).map(([key, value]) => {
                     const info = privacyLabels[key]
                     if (!info) return null
                     return (
-                      <div key={key} className="flex items-center justify-between p-4 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+                      <div key={key} className="flex items-center justify-between p-4 rounded-lg bg-card hover:bg-card transition-colors">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="shrink-0">{info.icon}</div>
                           <div className="min-w-0">
-                            <p className="text-white font-medium text-sm">{info.label}</p>
-                            <p className="text-white/50 text-xs truncate">{info.desc}</p>
+                            <p className="text-foreground font-medium text-sm">{info.label}</p>
+                            <p className="text-muted-foreground text-xs truncate">{info.desc}</p>
                           </div>
                         </div>
                         <button
                           onClick={() => togglePrivacy(key)}
-                          className={`relative ml-4 w-12 h-6 rounded-full transition-colors shrink-0 ${value ? 'bg-violet-500' : 'bg-white/20'}`}
+                          className={`relative ml-4 w-12 h-6 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-muted'}`}
                         >
                           <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-0.5'}`} />
                         </button>
@@ -291,22 +291,22 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
             {steps[currentStep].content === 'complete' && (
               <div className="space-y-6">
                 <div className="inline-block p-6 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 mb-4">
-                  <Check className="w-12 h-12 text-white" />
+                  <Check className="w-12 h-12 text-foreground" />
                 </div>
-                <h2 className="text-3xl font-bold text-white mb-4">¡Configuración completa!</h2>
-                <p className="text-xl text-white/80 mb-6">Tu perfil está listo. ¡Es hora de comenzar a explorar!</p>
+                <h2 className="text-3xl font-bold text-foreground mb-4">¡Configuración completa!</h2>
+                <p className="text-xl text-muted-foreground mb-6">Tu perfil está listo. ¡Es hora de comenzar a explorar!</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="p-4 rounded-lg bg-white/5">
-                    <Badge className="bg-violet-500/20 text-violet-300 mb-2">+100 XP</Badge>
-                    <p className="text-white/70 text-sm">Bono de bienvenida</p>
+                  <div className="p-4 rounded-lg bg-card">
+                    <Badge className="bg-primary/20 text-primary mb-2">+100 XP</Badge>
+                    <p className="text-muted-foreground text-sm">Bono de bienvenida</p>
                   </div>
-                  <div className="p-4 rounded-lg bg-white/5">
+                  <div className="p-4 rounded-lg bg-card">
                     <Badge className="bg-blue-500/20 text-blue-300 mb-2">Logro: Nuevo Explorador</Badge>
-                    <p className="text-white/70 text-sm">Primer logro desbloqueado</p>
+                    <p className="text-muted-foreground text-sm">Primer logro desbloqueado</p>
                   </div>
-                  <div className="p-4 rounded-lg bg-white/5">
+                  <div className="p-4 rounded-lg bg-card">
                     <Badge className="bg-green-500/20 text-green-300 mb-2">Eventos recomendados</Badge>
-                    <p className="text-white/70 text-sm">Basados en tus intereses</p>
+                    <p className="text-muted-foreground text-sm">Basados en tus intereses</p>
                   </div>
                 </div>
               </div>
@@ -318,7 +318,7 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
             {currentStep > 0 ? (
             <button
               onClick={prevStep}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-white/20 text-white/80 hover:text-white hover:bg-white/10 transition-all text-sm font-medium"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-all text-sm font-medium"
             >
               <ChevronLeft className="w-4 h-4" />
               Anterior
@@ -332,7 +332,7 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
                 <div
                   key={index}
                   className={`w-2 h-2 rounded-full transition-colors ${
-                    index <= currentStep ? 'bg-violet-400' : 'bg-white/20'
+                    index <= currentStep ? 'bg-primary' : 'bg-muted'
                   }`}
                 />
               ))}
@@ -340,7 +340,7 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
 
             <Button
               onClick={nextStep}
-              className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+              className="bg-gradient-to-r bg-primary hover:bg-primary/90"
             >
               {currentStep === steps.length - 1 ? 'Comenzar' : 'Siguiente'}
               <ArrowRight className="w-4 h-4 ml-2" />

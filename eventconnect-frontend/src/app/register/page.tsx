@@ -64,7 +64,7 @@ function Field({
 }) {
   return (
     <div className={cn('space-y-1.5', className)}>
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label htmlFor={id} className="block text-sm font-medium text-muted-foreground">
         {label}
       </label>
       {children}
@@ -78,7 +78,7 @@ function Field({
 }
 
 const inputCls =
-  'w-full py-3 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60 transition-all'
+  'w-full py-3 text-sm rounded-xl border border-border bg-gray-50 bg-primary/5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -144,21 +144,21 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-white dark:bg-gray-950">
+    <div className="min-h-screen flex bg-white dark:bg-background">
 
       {/* ── Left panel ────────────────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:flex-1 flex-col justify-between relative overflow-hidden bg-gray-950 p-12">
+      <div className="hidden lg:flex lg:flex-1 flex-col justify-between relative overflow-hidden bg-background p-12">
         <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-teal-500/20 rounded-full blur-[120px] translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-emerald-500/15 rounded-full blur-[100px] -translate-x-1/3 translate-y-1/3" />
+          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-primary/15 rounded-full blur-[100px] -translate-x-1/3 translate-y-1/3" />
         </div>
 
         <div className="relative z-10 flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/30">
             <Calendar className="w-5 h-5 text-white" aria-hidden="true" />
           </div>
           <span className="text-xl font-bold text-white tracking-tight">
-            Event<span className="text-emerald-400">Now</span>
+            Event<span className="text-primary">Now</span>
           </span>
         </div>
 
@@ -168,14 +168,14 @@ export default function RegisterPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-6 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-sm font-medium">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-6 rounded-full bg-primary/15 border border-primary/25 text-primary text-sm font-medium">
               <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
               Únete a la comunidad
             </div>
             <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-tight mb-4 tracking-tight">
               Tu aventura<br />empieza<br />aquí
             </h1>
-            <p className="text-gray-400 text-base leading-relaxed max-w-sm">
+            <p className="text-muted-foreground text-base leading-relaxed max-w-sm">
               Crea tu cuenta gratuita y descubre miles de eventos exclusivos en tu ciudad.
             </p>
           </motion.div>
@@ -191,7 +191,7 @@ export default function RegisterPage() {
               '✓  Conecta con comunidades que te interesan',
               '✓  Tickets seguros con pagos cifrados',
             ].map((item) => (
-              <li key={item} className="text-sm text-gray-400 font-medium">{item}</li>
+              <li key={item} className="text-sm text-muted-foreground font-medium">{item}</li>
             ))}
           </motion.ul>
         </div>
@@ -209,11 +209,11 @@ export default function RegisterPage() {
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-10">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
               <Calendar className="w-4 h-4 text-white" aria-hidden="true" />
             </div>
-            <span className="text-lg font-bold text-gray-900 dark:text-white">
-              Event<span className="text-emerald-500">Now</span>
+            <span className="text-lg font-bold text-foreground">
+              Event<span className="text-primary">Now</span>
             </span>
           </div>
 
@@ -225,19 +225,19 @@ export default function RegisterPage() {
                   key={s}
                   className={cn(
                     'h-1 rounded-full transition-all duration-300',
-                    s === step ? 'flex-[2] bg-emerald-500' : s < step ? 'flex-1 bg-emerald-300 dark:bg-emerald-700' : 'flex-1 bg-gray-200 dark:bg-white/10'
+                    s === step ? 'flex-[2] bg-primary' : s < step ? 'bg-primary/60' : 'flex-1 bg-gray-200 bg-primary/10'
                   )}
                 />
               ))}
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+            <h2 className="text-2xl font-bold text-foreground mb-1">
               {step === 1 ? 'Crea tu cuenta' : 'Tus intereses'}
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-muted-foreground">
               {step === 1 ? (
                 <>
                   ¿Ya tienes cuenta?{' '}
-                  <Link href="/login" className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline underline-offset-2">
+                  <Link href="/login" className="font-semibold text-primary hover:underline underline-offset-2">
                     Inicia sesión
                   </Link>
                 </>
@@ -264,7 +264,7 @@ export default function RegisterPage() {
 
                 <Field id="username" label="Nombre de usuario" error={errors.username?.message}>
                   <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
                     <input
                       id="username" type="text" autoComplete="username"
                       {...register('username')}
@@ -295,7 +295,7 @@ export default function RegisterPage() {
 
                 <Field id="email" label="Correo electrónico" error={errors.email?.message}>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
                     <input
                       id="email" type="email" autoComplete="email"
                       {...register('email')}
@@ -307,7 +307,7 @@ export default function RegisterPage() {
 
                 <Field id="birthDate" label="Fecha de nacimiento" error={errors.birthDate?.message}>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
                     <input
                       id="birthDate" type="date"
                       {...register('birthDate')}
@@ -318,7 +318,7 @@ export default function RegisterPage() {
 
                 <Field id="password" label="Contraseña" error={errors.password?.message}>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
                     <input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
@@ -331,7 +331,7 @@ export default function RegisterPage() {
                       type="button"
                       onClick={() => setShowPassword((s) => !s)}
                       aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {showPassword
                         ? <EyeOff className="w-4 h-4" aria-hidden="true" />
@@ -343,7 +343,7 @@ export default function RegisterPage() {
 
                 <Field id="confirmPassword" label="Confirmar contraseña" error={errors.confirmPassword?.message}>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
                     <input
                       id="confirmPassword"
                       type={showPassword ? 'text' : 'password'}
@@ -357,7 +357,7 @@ export default function RegisterPage() {
 
                 <Field id="phone" label="Teléfono (opcional)" error={errors.phone?.message}>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden="true" />
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
                     <input
                       id="phone" type="tel" autoComplete="tel"
                       {...register('phone')}
@@ -374,17 +374,17 @@ export default function RegisterPage() {
                       type="checkbox"
                       checked={watch('acceptTerms')}
                       onChange={(e) => { setValue('acceptTerms', e.target.checked); trigger('acceptTerms') }}
-                      className="mt-0.5 w-4 h-4 shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-500 cursor-pointer"
+                      className="mt-0.5 w-4 h-4 shrink-0 rounded border-gray-300 text-primary focus:ring-emerald-500 accent-primary cursor-pointer"
                     />
-                    <span className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed select-none cursor-default">
+                    <span className="text-xs text-muted-foreground leading-relaxed select-none cursor-default">
                       Acepto los términos y condiciones y la política de privacidad
                     </span>
                   </div>
                   <div className="pl-6 flex gap-3">
-                    <Link href="/terms" target="_blank" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline underline-offset-2">
+                    <Link href="/terms" target="_blank" className="text-xs text-primary hover:underline underline-offset-2">
                       Términos
                     </Link>
-                    <Link href="/privacy" target="_blank" className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline underline-offset-2">
+                    <Link href="/privacy" target="_blank" className="text-xs text-primary hover:underline underline-offset-2">
                       Privacidad
                     </Link>
                   </div>
@@ -395,7 +395,7 @@ export default function RegisterPage() {
 
                 <button
                   type="submit"
-                  className="group w-full flex items-center justify-center gap-2 py-3 px-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-semibold text-sm transition-all hover:opacity-90 shadow-lg shadow-black/10 mt-2"
+                  className="group w-full flex items-center justify-center gap-2 py-3 px-4 bg-primary text-primary-foreground text-white dark:text-foreground rounded-xl font-semibold text-sm transition-all hover:opacity-90 shadow-lg shadow-black/10 mt-2"
                 >
                   Siguiente
                   <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
@@ -404,7 +404,7 @@ export default function RegisterPage() {
                 <div className="text-center pt-2">
                   <Link
                     href="/events"
-                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    className="text-xs text-muted-foreground dark:text-gray-500 hover:text-muted-foreground hover:text-foreground transition-colors"
                   >
                     ← Explorar sin cuenta
                   </Link>
@@ -440,7 +440,7 @@ export default function RegisterPage() {
                   <button
                     type="button"
                     onClick={() => setStep(1)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-xl border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-xl border border-border text-muted-foreground hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" aria-hidden="true" />
                     Atrás
@@ -448,7 +448,7 @@ export default function RegisterPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting || interests.length < 1}
-                    className="flex-[2] flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-xl bg-gray-900 dark:bg-white text-white dark:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all shadow-lg shadow-black/10"
+                    className="flex-[2] flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-xl bg-primary text-primary-foreground text-white dark:text-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all shadow-lg shadow-black/10"
                   >
                     {isSubmitting ? (
                       <>
