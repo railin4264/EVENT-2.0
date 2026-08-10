@@ -30,9 +30,25 @@ interface MapComponentProps {
   onEventSelect?: (event: DiscoveryEvent | null) => void
   onTribeSelect?: (tribe: any | null) => void
   categoryColors: { [key: string]: string }
-  showRadius?: boolean
-  radiusKm?: number
-  onLocationUpdate?: (location: UserLocation) => void
+  showRadius?: boolean;
+  radiusKm?: number;
+  onLocationUpdate?: (location: UserLocation) => void;
+  onMoveEnd?: (center: { lat: number; lng: number }) => void;
+}
+
+// Internal component to capture map move events (for "search in this area")
+function MapEvents({ onMoveEnd }: { onMoveEnd?: (c: { lat: number; lng: number }) => void }) {
+  const map = reactLeafletUseMap() as any;
+  useEffect(() => {
+    if (!map || !onMoveEnd) return;
+    const handler = () => {
+      const c = map.getCenter();
+      onMoveEnd({ lat: c.lat, lng: c.lng });
+    };
+    map.on('moveend', handler);
+    return () => map.off('moveend', handler);
+  }, [map, onMoveEnd]);
+  return null;
 }
 
 // Dynamically import Leaflet components with no SSR
@@ -65,6 +81,11 @@ const useMap = dynamic(
   { ssr: false }
 )
 
+// NOTE: useMap must be imported statically (not via dynamic) so it works as a
+// hook inside <MapContainer>. The file is 'use client' and MapContainer is
+// already client-only, so a static import is safe.
+import { useMap as reactLeafletUseMap } from 'react-leaflet'
+
 // Category icon mapping using Premium SVGs
 const categoryIcons: { [key: string]: string } = {
   'tecnología': '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>',
@@ -91,7 +112,8 @@ export default function MapComponent({
   categoryColors,
   showRadius = false,
   radiusKm = 5,
-  onLocationUpdate
+  onLocationUpdate,
+  onMoveEnd,
 }: MapComponentProps) {
   const [isLocating, setIsLocating] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
@@ -476,6 +498,7 @@ export default function MapComponent({
             )
           })}
         </MarkerClusterGroup>
+        <MapEvents onMoveEnd={onMoveEnd} />
       </MapContainer>
     </div>
   )
