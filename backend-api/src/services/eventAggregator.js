@@ -4,13 +4,12 @@
  * Pulls real, official events from public discovery APIs and normalizes
  * them into the local Event schema so the global map is never empty.
  *
- * Sources:
- *   - Ticketmaster Discovery API  (https://developer.ticketmaster.com/)
- *   - Eventbrite Public API       (https://www.eventbrite.com/platform/api)
- *
- * Both require an API key supplied via environment variables:
- *   TICKETMASTER_API_KEY
- *   EVENTBRITE_API_KEY
+ * Sources (each is skipped gracefully if its key is missing):
+ *   - Ticketmaster Discovery API  (TICKETMASTER_API_KEY)
+ *   - Eventbrite Public API       (EVENTBRITE_API_KEY)
+ *   - Bandsintown Public API      (BANDSINTOWN_APP_ID)   — live music by city
+ *   - Songkick API                (SONGKICK_API_KEY)     — live music by geo
+ *   - Meetup API                  (MEETUP_TOKEN)         — community/local events
  *
  * If a key is missing the source is skipped gracefully (no crash). A local
  * sample seeder (scripts/seed-events.js) provides demo events so the map is
@@ -23,6 +22,9 @@ const logger = require('../utils/logger');
 
 const TICKETMASTER_BASE = 'https://app.ticketmaster.com/discovery/v2/events.json';
 const EVENTBRITE_BASE = 'https://www.eventbriteapi.com/v3';
+const BANDSINTOWN_BASE = 'https://rest.bandsintown.com';
+const SONGKICK_BASE = 'https://api.songkick.com/api/3.0';
+const MEETUP_BASE = 'https://api.meetup.com';
 
 // Map a free-text category to the app's controlled category enum.
 const CATEGORY_MAP = {
@@ -30,26 +32,26 @@ const CATEGORY_MAP = {
   concert: 'music',
   festival: 'music',
   sports: 'sports',
-  theatre: 'arts',
-  theater: 'arts',
-  art: 'arts',
-  museum: 'arts',
-  film: 'arts',
+  theatre: 'art',
+  theater: 'art',
+  art: 'art',
+  museum: 'art',
+  film: 'art',
   food: 'food',
   foodanddrink: 'food',
   business: 'business',
   tech: 'technology',
   technology: 'technology',
   conference: 'technology',
-  workshop: 'workshop',
+  workshop: 'education',
   health: 'health',
   fitness: 'health',
   party: 'party',
   social: 'party',
-  community: 'community',
-  charity: 'community',
+  community: 'social',
+  charity: 'social',
   education: 'education',
-  family: 'family',
+  family: 'social',
   other: 'other'
 };
 
@@ -57,6 +59,20 @@ const normalizeCategory = (raw = '') => {
   const key = String(raw).toLowerCase().replace(/[^a-z]/g, '');
   return CATEGORY_MAP[key] || 'other';
 };
+
+/** Reverse-geocode lat/lng -> city name (OpenStreetMap Nominatim, free). */
+async function reverseGeocodeCity(lat, lng) {
+  try {
+    const { data } = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+      params: { format: 'json', lat, lon: lng, zoom: 10, addressdetails: 1 },
+      headers: { 'User-Agent': 'EventConnect/1.0 (aggregator)' },
+      timeout: 8000
+    });
+    return data?.address?.city || data?.address?.town || data?.address?.state || data?.address?.country || '';
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Ticketmaster Discovery -> Event documents
@@ -67,7 +83,7 @@ async function fetchFromTicketmaster({ lat, lng, radius = 50, size = 50, page = 
 
   try {
     const params = {
-      apikey: apiKey,
+      apikey: '***',
       size,
       page,
       sort: 'date,asc',
@@ -192,13 +208,180 @@ async function fetchFromEventbrite({ lat, lng, radius = 50, page = 1 } = {}) {
 }
 
 /**
+ * Bandsintown -> Event documents (live music, queried by city).
+ * Bandsintown has no lat/lng search, so we reverse-geocode to a city name.
+ */
+async function fetchFromBandsintown({ lat, lng, radius = 50 } = {}) {
+  const appId = process.env.BANDSINTOWN_APP_ID;
+  if (!appId || lat == null || lng == null) return [];
+
+  try {
+    const city = await reverseGeocodeCity(lat, lng);
+    if (!city) return [];
+
+    const { data } = await axios.get(`${BANDSINTOWN_BASE}/events/search`, {
+      params: { app_id: appId, location: city, radius: Math.max(radius, 10) },
+      timeout: 15000
+    });
+    const events = Array.isArray(data) ? data : [];
+
+    return events.map((ev) => {
+      const venue = ev.venue || {};
+      const latV = parseFloat(venue.latitude);
+      const lngV = parseFloat(venue.longitude);
+      const startDate = ev.datetime || ev.date;
+
+      return {
+        source: 'bandsintown',
+        sourceId: String(ev.id || `${ev.artist?.name}-${ev.datetime}`),
+        title: ev.title || `${ev.artist?.name} en vivo` || 'Concierto',
+        description: ev.description || `Show de ${ev.artist?.name || 'artista'} vía Bandsintown.`,
+        category: 'music',
+        tags: ['music', 'concert', (ev.artist?.name || '').toLowerCase()].filter(Boolean),
+        location: {
+          type: 'Point',
+          coordinates: [lngV, latV],
+          address: [venue.name, venue.city, venue.region, venue.country]
+            .filter(Boolean)
+            .join(', ')
+        },
+        venue: venue.name || '',
+        date: startDate ? new Date(startDate) : new Date(),
+        price: { amount: 0, currency: 'USD' },
+        images: ev.image_url ? [{ url: ev.image_url }] : [],
+        externalUrl: ev.url,
+        imported: true,
+        importedAt: new Date()
+      };
+    }).filter((e) => Number.isFinite(e.location.coordinates[0]) && Number.isFinite(e.location.coordinates[1]));
+  } catch (err) {
+    logger.error('Bandsintown fetch failed:', err?.response?.data || err.message);
+    return [];
+  }
+}
+
+/**
+ * Songkick -> Event documents (live music, native geo search).
+ */
+async function fetchFromSongkick({ lat, lng, radius = 50, page = 1 } = {}) {
+  const apiKey = process.env.SONGKICK_API_KEY;
+  if (!apiKey || lat == null || lng == null) return [];
+
+  try {
+    const params = {
+      apikey: '***',
+      page,
+      per_page: 50,
+      location: `geo:${lat},${lng}`,
+      radius
+    };
+    const { data } = await axios.get(`${SONGKICK_BASE}/events.json`, { params, timeout: 15000 });
+    const events = data?.results?.event || [];
+
+    return events.map((ev) => {
+      const venue = ev.venue || {};
+      const latV = parseFloat(venue.lat);
+      const lngV = parseFloat(venue.lng);
+      const startDate = ev.start?.datetime || ev.start?.date;
+
+      return {
+        source: 'songkick',
+        sourceId: String(ev.id),
+        title: ev.displayName || ev.type || 'Concierto',
+        description: `Evento de Songkick: ${ev.displayName || ev.type || ''}`,
+        category: normalizeCategory(ev.type || 'concert'),
+        tags: ['music', (ev.type || 'concert').toLowerCase()].filter(Boolean),
+        location: {
+          type: 'Point',
+          coordinates: [lngV, latV],
+          address: [venue.displayName, venue.city?.displayName, venue.metroArea?.displayName]
+            .filter(Boolean)
+            .join(', ')
+        },
+        venue: venue.displayName || '',
+        date: startDate ? new Date(startDate) : new Date(),
+        price: { amount: 0, currency: 'USD' },
+        images: [],
+        externalUrl: ev.uri,
+        imported: true,
+        importedAt: new Date()
+      };
+    }).filter((e) => Number.isFinite(e.location.coordinates[0]) && Number.isFinite(e.location.coordinates[1]));
+  } catch (err) {
+    logger.error('Songkick fetch failed:', err?.response?.data || err.message);
+    return [];
+  }
+}
+
+/**
+ * Meetup -> Event documents (community / local events).
+ * Requires an OAuth Bearer token (MEETUP_TOKEN).
+ */
+async function fetchFromMeetup({ lat, lng, radius = 50 } = {}) {
+  const token = process.env.MEETUP_TOKEN;
+  if (!token || lat == null || lng == null) return [];
+
+  try {
+    const params = {
+      lat,
+      lon: lng,
+      radius: Math.min(radius, 100),
+      page: 50
+    };
+    const { data } = await axios.get(`${MEETUP_BASE}/find/upcoming_events`, {
+      params,
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 15000
+    });
+    const events = data || [];
+
+    return events.map((ev) => {
+      const venue = ev.venue || {};
+      const latV = parseFloat(venue.lat ?? ev.venue?.lat);
+      const lngV = parseFloat(venue.lon ?? ev.venue?.lon);
+      const group = ev.group || {};
+      const startDate = ev.time ? new Date(ev.time) : new Date();
+
+      return {
+        source: 'meetup',
+        sourceId: String(ev.id),
+        title: ev.name || 'Evento de Meetup',
+        description: ev.description || ev.name || 'Evento comunitario importado desde Meetup.',
+        category: normalizeCategory(group.category?.name || 'community'),
+        tags: [group.category?.name, group.name].filter(Boolean),
+        location: {
+          type: 'Point',
+          coordinates: [lngV, latV],
+          address: [venue.name, ev.group?.localized_location || ev.group?.city]
+            .filter(Boolean)
+            .join(', ')
+        },
+        venue: venue.name || '',
+        date: startDate,
+        price: { amount: 0, currency: 'USD' },
+        images: [],
+        externalUrl: ev.link,
+        imported: true,
+        importedAt: new Date()
+      };
+    }).filter((e) => Number.isFinite(e.location.coordinates[0]) && Number.isFinite(e.location.coordinates[1]));
+  } catch (err) {
+    logger.error('Meetup fetch failed:', err?.response?.data || err.message);
+    return [];
+  }
+}
+
+/**
  * Aggregate from all configured sources, dedupe by source+sourceId, and
  * upsert into the database. Returns the count of newly created events.
  */
 async function aggregateAndStore({ lat, lng, radius = 50, size = 50 } = {}) {
   const incoming = [
     ...(await fetchFromTicketmaster({ lat, lng, radius, size })),
-    ...(await fetchFromEventbrite({ lat, lng, radius }))
+    ...(await fetchFromEventbrite({ lat, lng, radius })),
+    ...(await fetchFromBandsintown({ lat, lng, radius })),
+    ...(await fetchFromSongkick({ lat, lng, radius })),
+    ...(await fetchFromMeetup({ lat, lng, radius }))
   ];
 
   // Imported events need an owner. Use a dedicated "system" account so they
@@ -210,6 +393,8 @@ async function aggregateAndStore({ lat, lng, radius = 50, size = 50 } = {}) {
       username: 'eventconnect_system',
       email: 'system@eventconnect.app',
       password: require('crypto').randomBytes(32).toString('hex'),
+      firstName: 'EventConnect',
+      lastName: 'System',
       isEmailVerified: true,
       role: 'system'
     });
@@ -237,6 +422,9 @@ async function aggregateAndStore({ lat, lng, radius = 50, size = 50 } = {}) {
 module.exports = {
   fetchFromTicketmaster,
   fetchFromEventbrite,
+  fetchFromBandsintown,
+  fetchFromSongkick,
+  fetchFromMeetup,
   aggregateAndStore,
   normalizeCategory
 };

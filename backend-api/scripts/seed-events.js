@@ -190,12 +190,13 @@ async function main() {
     console.log(`Demo events seeded: ${demoCount}`);
   }
 
-  if (process.env.TICKETMASTER_API_KEY || process.env.EVENTBRITE_API_KEY) {
+  if (process.env.TICKETMASTER_API_KEY || process.env.EVENTBRITE_API_KEY ||
+      process.env.BANDSINTOWN_APP_ID || process.env.SONGKICK_API_KEY || process.env.MEETUP_TOKEN) {
     console.log('Aggregating real official events...');
     const result = await aggregator.aggregateAndStore({ size: 50 });
     console.log(`Official events -> fetched: ${result.fetched}, created: ${result.created}, updated: ${result.updated}`);
   } else {
-    console.log('No API keys set (TICKETMASTER_API_KEY / EVENTBRITE_API_KEY) — skipping official aggregation.');
+    console.log('No API keys set (TICKETMASTER/ EVENTBRITE/ BANDSINTOWN/ SONGKICK/ MEETUP) — skipping official aggregation.');
   }
 
   const total = await Event.countDocuments({ status: 'published' });
