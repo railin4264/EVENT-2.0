@@ -45,15 +45,20 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
   ]
 
   const eventTypes = [
-    { id: 'music', name: 'Música', icon: '🎵', color: 'from-pink-500 to-rose-500' },
-    { id: 'tech', name: 'Tecnología', icon: '💻', color: 'from-blue-500 to-cyan-500' },
-    { id: 'art', name: 'Arte', icon: '🎨', color: 'from-purple-500 to-violet-500' },
-    { id: 'food', name: 'Gastronomía', icon: '🍽️', color: 'from-orange-500 to-amber-500' },
-    { id: 'sports', name: 'Deportes', icon: '⚽', color: 'from-green-500 to-emerald-500' },
-    { id: 'gaming', name: 'Gaming', icon: '🎮', color: 'from-indigo-500 to-purple-500' },
-    { id: 'business', name: 'Negocios', icon: '💼', color: 'from-gray-500 to-slate-500' },
-    { id: 'wellness', name: 'Bienestar', icon: '🧘', color: 'from-teal-500 to-cyan-500' }
+    { id: 'music', name: 'Música', icon: '🎵' },
+    { id: 'tech', name: 'Tecnología', icon: '💻' },
+    { id: 'art', name: 'Arte', icon: '🎨' },
+    { id: 'food', name: 'Gastronomía', icon: '🍽️' },
+    { id: 'sports', name: 'Deportes', icon: '⚽' },
+    { id: 'gaming', name: 'Gaming', icon: '🎮' },
+    { id: 'business', name: 'Negocios', icon: '💼' },
+    { id: 'wellness', name: 'Bienestar', icon: '🧘' }
   ]
+
+  const INTEREST_COLORS: Record<string, string> = {
+    music: '#8B5CF6', tech: '#3B82F6', art: '#EC4899', food: '#F59E0B',
+    sports: '#10B981', gaming: '#6366F1', business: '#0EA5E9', wellness: '#14B8A6',
+  }
 
   // All notification settings with full labels
   const notificationLabels: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
@@ -205,14 +210,19 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
                       onClick={() => toggleEventType(type.id)}
                       className={`p-4 rounded-lg cursor-pointer transition-all hover:scale-105 ${
                         preferences.eventTypes.includes(type.id)
-                          ? `bg-gradient-to-r ${type.color} bg-opacity-20 border-2 border-border`
+                          ? `border-2`
                           : 'bg-card border-2 border-transparent hover:border-border'
                       }`}
-                    >
-                      <div className="text-3xl mb-2">{type.icon}</div>
-                      <p className="text-foreground text-sm font-medium">{type.name}</p>
+                  style={
+                    preferences.eventTypes.includes(type.id)
+                      ? { backgroundColor: (INTEREST_COLORS[type.id] || '#6366F1') + '22', borderColor: INTEREST_COLORS[type.id] || '#6366F1' }
+                      : undefined
+                  }
+                >
+                  <div className="text-3xl mb-2">{type.icon}</div>
+                      <p className="text-sm font-medium" style={{ color: preferences.eventTypes.includes(type.id) ? (INTEREST_COLORS[type.id] || '#6366F1') : undefined }}>{type.name}</p>
                       {preferences.eventTypes.includes(type.id) && (
-                        <Check className="w-4 h-4 text-foreground mx-auto mt-2" />
+                        <Check className="w-4 h-4 mx-auto mt-2" style={{ color: INTEREST_COLORS[type.id] || '#6366F1' }} />
                       )}
                     </div>
                   ))}
@@ -316,13 +326,14 @@ export function Onboarding({ user, onComplete }: OnboardingProps) {
           {/* Navigation */}
           <div className="flex items-center justify-between mt-8">
             {currentStep > 0 ? (
-            <button
-              onClick={prevStep}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-all text-sm font-medium"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Anterior
-            </button>
+            <Button
+  variant="ghost"
+  onClick={prevStep}
+  className="border border-border text-foreground hover:bg-primary/10"
+>
+  <ChevronLeft className="w-4 h-4" />
+  Anterior
+</Button>
             ) : (
               <div /> /* spacer to keep layout */
             )}
