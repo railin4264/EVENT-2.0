@@ -29,6 +29,9 @@ import {
 import { useAuthStore } from '@/stores/authStore'
 import { eventsService } from '@/lib/api/services'
 import type { Event } from '@/types/models'
+import { Button } from '@/components/redesign/ui/button'
+import { Input } from '@/components/redesign/ui/input'
+import { Card } from '@/components/redesign/ui/card'
 import toast from 'react-hot-toast'
 import MapComponent from '@/components/discovery/MapComponent'
 
@@ -286,124 +289,126 @@ export default function HomeScreen() {
   const selectedForMap = hoveredEvent || selectedEvent
 
   return (
-    <div className="flex flex-col h-screen bg-[#0b0b10] text-white">
+    <div className="flex flex-col h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-white/10 bg-[#0b0b10]/80 backdrop-blur z-20">
+      <header className="flex items-center gap-3 px-4 py-3 border-b border-border bg-background/80 backdrop-blur z-20">
         <div className="flex items-center gap-2 font-bold text-lg">
-          <span className="text-[#8B5CF6]">Event</span>
-          <span className="text-[#F43F5E]">Now</span>
+          <span className="text-primary">Event</span>
+          <span className="text-accent">Now</span>
         </div>
         <div className="flex-1 relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
             value={cityQuery}
             onChange={(e) => setCityQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && searchCity()}
             placeholder="Buscar eventos cerca de ti..."
-            className="w-full bg-white/10 rounded-full pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 ring-[#8B5CF6]"
+            className="rounded-full pl-9 pr-3"
           />
         </div>
-        <button
-          onClick={() => router.push('/create-event')}
-          className="flex items-center gap-1 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white px-3 py-2 rounded-full text-sm font-semibold transition"
-        >
+        <Button onClick={() => router.push('/create-event')} className="rounded-full">
           <Plus className="w-4 h-4" /> Crear evento
-        </button>
+        </Button>
         {isAuthenticated ? (
-          <Link href="/profile" className="text-sm text-white/80 hover:text-white">Mi perfil</Link>
+          <Link href="/profile" className="text-sm text-muted-foreground hover:text-foreground">Mi perfil</Link>
         ) : (
-          <Link href="/login" className="text-sm text-white/80 hover:text-white">Entrar</Link>
+          <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground">Entrar</Link>
         )}
       </header>
 
       {/* Quick categories */}
-      <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto border-b border-white/5 no-scrollbar">
+      <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto border-b border-border/50 no-scrollbar">
         {QUICK_CATEGORIES.map((c) => {
           const Icon = c.icon
           const active = selectedCategory === c.value
           return (
-            <button
+            <Button
               key={c.value}
+              variant={active ? 'default' : 'ghost'}
+              size="sm"
               onClick={() => setSelectedCategory(active ? '' : c.value)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition ${
-                active ? 'bg-white/15 text-white' : 'bg-white/5 text-white/60 hover:text-white'
-              }`}
+              className={`rounded-full whitespace-nowrap ${active ? '' : 'border border-border hover:bg-primary/10'}`}
             >
               <Icon className="w-4 h-4" style={{ color: c.color }} />
               {c.label}
-            </button>
+            </Button>
           )
         })}
       </div>
 
       {/* Date filters + sort + city + view toggle */}
-      <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto border-b border-white/5 text-sm no-scrollbar">
+      <div className="flex items-center gap-2 px-4 py-2 overflow-x-auto border-b border-border/50 text-sm no-scrollbar">
         {DATE_FILTERS.map((d) => (
-          <button
+          <Button
             key={d.value}
+            variant={dateFilter === d.value ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setDateFilter(dateFilter === d.value ? '' : d.value)}
-            className={`px-3 py-1 rounded-full whitespace-nowrap transition ${
-              dateFilter === d.value ? 'bg-[#F43F5E] text-white' : 'bg-white/5 text-white/60 hover:text-white'
-            }`}
+            className={`rounded-full whitespace-nowrap ${dateFilter === d.value ? '' : 'border border-border hover:bg-primary/10'}`}
           >
             {d.label}
-          </button>
+          </Button>
         ))}
         <div className="flex-1" />
-        <div className="hidden md:flex items-center gap-1 text-white/60">
-          <MapPin className="w-4 h-4 text-[#8B5CF6]" />
-          <span className="font-medium text-white">{cityName || 'Detectando...'}</span>
+        <div className="hidden md:flex items-center gap-1 text-muted-foreground">
+          <MapPin className="w-4 h-4 text-primary" />
+          <span className="font-medium text-foreground">{cityName || 'Detectando...'}</span>
         </div>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value)}
-          className="bg-white/10 rounded-full px-2 py-1 outline-none"
+          className="rounded-full px-2 py-1 outline-none bg-background text-foreground border border-border"
         >
           {SORT_OPTIONS.map((s) => (
-            <option key={s.value} value={s.value} className="bg-[#0b0b10]">{s.label}</option>
+            <option key={s.value} value={s.value} className="bg-background">{s.label}</option>
           ))}
         </select>
-        <div className="flex items-center bg-white/10 rounded-full p-0.5">
-          <button
+        <div className="flex items-center rounded-full p-0.5 border border-border">
+          <Button
+            variant={view === 'map' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setView('map')}
-            className={`p-1.5 rounded-full ${view === 'map' ? 'bg-[#8B5CF6] text-white' : 'text-white/60'}`}
+            className="rounded-full p-1.5"
             aria-label="Mapa"
           >
             <MapIcon className="w-4 h-4" />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={view === 'list' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setView('list')}
-            className={`p-1.5 rounded-full ${view === 'list' ? 'bg-[#8B5CF6] text-white' : 'text-white/60'}`}
+            className="rounded-full p-1.5"
             aria-label="Lista"
           >
             <List className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Live now block */}
       {liveEvents.length > 0 && (
-        <div className="px-4 py-2 bg-[#F43F5E]/10 border-b border-[#F43F5E]/20">
-          <div className="flex items-center gap-2 text-[#F43F5E] font-semibold text-sm mb-2">
+        <div className="px-4 py-2 bg-accent/10 border-b border-accent/20">
+          <div className="flex items-center gap-2 text-accent font-semibold text-sm mb-2">
             <Radio className="w-4 h-4 animate-pulse" /> En vivo ahora
           </div>
           <div className="flex gap-2 overflow-x-auto no-scrollbar">
             {liveEvents.map((e) => {
               const dist = location ? haversine(location.lat, location.lng, (e.location as any)?.coordinates?.[1], (e.location as any)?.coordinates?.[0]) : 0
               return (
-                <button
+                <Button
                   key={(e as any)._id}
+                  variant="ghost"
                   onClick={() => handleSelectEvent(e)}
-                  className="flex items-center gap-2 bg-black/30 rounded-xl px-3 py-2 min-w-[220px] text-left hover:bg-black/50 transition"
+                  className="flex items-center gap-2 bg-card rounded-xl px-3 py-2 min-w-[220px] justify-start hover:bg-primary/10"
                 >
-                  <span className="w-2 h-2 rounded-full bg-[#F43F5E] animate-pulse" />
+                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
                   <div className="min-w-0">
                     <div className="text-sm font-medium truncate">{(e as any).title}</div>
-                    <div className="text-xs text-white/50">
+                    <div className="text-xs text-muted-foreground">
                       {formatDistance(dist)} · {((e as any).interestedCount || 0)} aquí
                     </div>
                   </div>
-                </button>
+                </Button>
               )
             })}
           </div>
@@ -426,42 +431,39 @@ export default function HomeScreen() {
               radiusKm={5}
             />
           ) : (
-            <div className="flex-1 flex items-center justify-center text-white/40">Cargando mapa...</div>
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">Cargando mapa...</div>
           )}
           {/* Search this zone */}
           {pendingZone && (
-            <button
+            <Button
               onClick={applyZone}
-              className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#8B5CF6] hover:bg-[#7C3AED] text-white px-4 py-2.5 rounded-full shadow-lg font-semibold text-sm z-[1000]"
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-full shadow-lg font-semibold text-sm z-[1000]"
             >
               Buscar eventos en esta zona
-            </button>
+            </Button>
           )}
         </div>
 
         {/* List (desktop always; mobile when view=list) */}
         <div
           ref={listRef}
-          className={`${view === 'list' ? 'flex' : 'hidden'} md:flex w-full md:w-[400px] flex-col border-l border-white/10 overflow-y-auto bg-[#0b0b10]`}
+          className={`${view === 'list' ? 'flex' : 'hidden'} md:flex w-full md:w-[400px] flex-col border-l border-border overflow-y-auto bg-background`}
         >
-          <div className="flex items-center justify-between px-4 py-3 sticky top-0 bg-[#0b0b10] z-10 border-b border-white/5">
+          <div className="flex items-center justify-between px-4 py-3 sticky top-0 bg-background z-10 border-b border-border/50">
             <h2 className="font-semibold">Cerca de ti</h2>
-            <span className="text-sm text-white/50">{filteredSorted.length} eventos</span>
+            <span className="text-sm text-muted-foreground">{filteredSorted.length} eventos</span>
           </div>
           {isLoading ? (
-            <div className="flex-1 flex items-center justify-center text-white/40">
+            <div className="flex-1 flex items-center justify-center text-muted-foreground">
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
           ) : filteredSorted.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-white/40 gap-3 p-8 text-center">
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 p-8 text-center">
               <Compass className="w-10 h-10" />
               <p>No hay eventos cerca todavía.</p>
-              <button
-                onClick={() => router.push('/create-event')}
-                className="bg-[#8B5CF6] hover:bg-[#7C3AED] px-4 py-2 rounded-full text-sm font-semibold"
-              >
+              <Button onClick={() => router.push('/create-event')} className="rounded-full">
                 Crea el primero
-              </button>
+              </Button>
             </div>
           ) : (
             filteredSorted.map((e) => {
@@ -469,14 +471,14 @@ export default function HomeScreen() {
               const dist = location ? haversine(location.lat, location.lng, event.location?.coordinates?.[1], event.location?.coordinates?.[0]) : 0
               const isSel = selectedForMap?._id === event._id
               return (
-                <button
+                <Card
                   key={event._id}
                   data-event-id={event._id}
                   onMouseEnter={() => setHoveredEvent(e)}
                   onMouseLeave={() => setHoveredEvent(null)}
                   onClick={() => handleSelectEvent(e)}
-                  className={`text-left p-4 border-b border-white/5 transition hover:bg-white/5 ${
-                    isSel ? 'bg-white/10 ring-1 ring-[#8B5CF6]' : ''
+                  className={`gap-0 p-4 border-b border-border rounded-none cursor-pointer transition hover:bg-primary/5 ${
+                    isSel ? 'bg-primary/10 ring-1 ring-primary' : ''
                   }`}
                 >
                   <div className="flex gap-3">
@@ -492,13 +494,13 @@ export default function HomeScreen() {
                           {event.category}
                         </span>
                         {isLive(event.date) && (
-                          <span className="text-xs text-[#F43F5E] font-semibold flex items-center gap-1">
+                          <span className="text-xs text-accent font-semibold flex items-center gap-1">
                             <Radio className="w-3 h-3" /> EN VIVO
                           </span>
                         )}
                       </div>
                       <h3 className="font-semibold truncate">{event.title}</h3>
-                      <div className="text-xs text-white/50 mt-1 flex flex-col gap-0.5">
+                      <div className="text-xs text-muted-foreground mt-1 flex flex-col gap-0.5">
                         <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(event.date)}</span>
                         <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {event.location?.address} · {formatDistance(dist)}</span>
                         <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {event.interestedCount || 0} interesados</span>
@@ -507,13 +509,13 @@ export default function HomeScreen() {
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-sm font-semibold">{event.price?.amount ? `${event.price.currency} ${event.price.amount}` : 'Gratis'}</span>
                         <span className="flex items-center gap-2">
-                          <span className="text-[#F43F5E]"><Heart className="w-4 h-4" /></span>
-                          <span className="bg-[#8B5CF6] px-3 py-1 rounded-full text-xs font-semibold">Ver evento</span>
+                          <span className="text-accent"><Heart className="w-4 h-4" /></span>
+                          <span className="bg-primary text-primary-foreground px-3 py-1 rounded-full text-xs font-semibold">Ver evento</span>
                         </span>
                       </div>
                     </div>
                   </div>
-                </button>
+                </Card>
               )
             })
           )}
