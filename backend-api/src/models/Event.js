@@ -204,7 +204,9 @@ const eventSchema = new mongoose.Schema({
       default: 'USD',
       uppercase: true,
       enum: {
-        values: ['USD', 'EUR', 'GBP', 'DOP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BRL'],
+        values: ['USD', 'EUR', 'GBP', 'DOP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BRL',
+          'VES', 'PYG', 'BOB', 'UYU', 'CRC', 'INR', 'EGP', 'AED', 'JPY', 'KRW',
+          'AUD', 'CAD', 'CZK', 'SEK', 'NOK', 'DKK', 'CHF', 'PLN', 'TRY', 'ZAR'],
         message: 'Currency {VALUE} is not supported'
       }
     }
