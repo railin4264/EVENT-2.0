@@ -501,6 +501,28 @@ router.put('/me/settings', protect, enforceSecondFactor, async (req, res) => {
   }
 });
 
+
+// @desc    Update user settings by id (alias used by the web settings page)
+// @route   PUT /api/users/:id/settings
+// @access  Private
+router.put('/:id/settings', protect, async (req, res) => {
+  try {
+    if (req.user.id !== req.params.id) {
+      return res.status(403).json({ success: false, message: 'Not authorized to update this user' });
+    }
+    const { notifications, privacy, preferences } = req.body;
+    const settings = {};
+    if (notifications) settings.notifications = notifications;
+    if (privacy) settings.privacy = privacy;
+    if (preferences) settings.preferences = preferences;
+    const user = await User.findByIdAndUpdate(req.user.id, { settings }, { new: true, runValidators: true }).select('-password');
+    res.json({ success: true, message: 'Settings updated successfully', settings: user.settings });
+  } catch (error) {
+    logger.error('Update settings by id error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @desc    Update user profile (comprehensive)
 // @route   PUT /api/users/me/profile
 // @access  Private
