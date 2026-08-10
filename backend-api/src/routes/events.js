@@ -366,8 +366,10 @@ router.get('/nearby', async (req, res) => {
         maxAttendees: event.maxAttendees,
         status: event.status,
         tags: event.tags,
-        images: event.images
-      }));
+        images: event.images,
+        organizer: event.organizer,
+        interestedCount: event.interestedCount
+        }));
 
       return res.json({
         success: true,
@@ -413,7 +415,9 @@ router.get('/nearby', async (req, res) => {
       maxAttendees: event.maxAttendees,
       status: event.status,
       tags: event.tags,
-      images: event.images
+      images: event.images,
+      organizer: event.organizer,
+      interestedCount: event.interestedCount
     }));
 
     res.json({
