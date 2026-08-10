@@ -76,6 +76,9 @@ const C = {
 
 function ev(title, description, category, tags, key, venue, days, price, currency) {
   const [lng, lat, city, country] = C[key];
+  const organizers = ['Railin Events', 'EventNow RD', 'Pulsar Live', 'Urban Noise', 'Cultura Viva', 'Noche Capital', 'Marea Fest', 'Sonora Group'];
+  const org = organizers[Math.abs(hashStr(title)) % organizers.length];
+  const interested = (Math.abs(hashStr(title + 'i')) % 480) + 24;
   return {
     title,
     description,
@@ -85,8 +88,16 @@ function ev(title, description, category, tags, key, venue, days, price, currenc
     venue,
     date: daysFromNow(days),
     price: { amount: price, currency },
+    organizer: org,
+    interestedCount: interested,
     images: [{ url: `https://picsum.photos/seed/${slug(title)}/800/400` }],
   };
+}
+
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
+  return h;
 }
 
 function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40); }
@@ -147,6 +158,9 @@ const DEMO_EVENTS = [
   ev('Mumbai Film Festival', 'Cine de Bollywood y autor.', 'art', ['film', 'bollywood', 'festival'], 'mumbai', 'NCPA', 26, 20, 'INR'),
   ev('El Cairo Ramadan Nights', 'Noches culturales durante Ramadán.', 'social', ['social', 'culture', 'ramadan'], 'cairo', 'Al-Azhar Park', 8, 0, 'EGP'),
   ev('CDMX Lucha Libre Night', 'La lucha libre más espectacular.', 'sports', ['sports', 'wrestling', 'show'], 'ciudadMexico', 'Arena México', 5, 18, 'MXN'),
+  // Live-right-now events (date = now) so the "EN VIVO" block has data
+  { title: 'Basket en Parque Mirador', description: 'Partido amistoso abierto al público.', category: 'sports', tags: ['sports', 'basket', 'live'], location: { type: 'Point', coordinates: [-3.7038, 40.4168], address: 'Madrid, España' }, venue: 'Parque Mirador', date: new Date(), price: { amount: 0, currency: 'EUR' }, organizer: 'EventNow RD', interestedCount: 32, images: [{ url: 'https://picsum.photos/seed/live-basket/800/400' }] },
+  { title: 'Jam Session Centro', description: 'Música en vivo, lleva tu instrumento.', category: 'music', tags: ['music', 'jam', 'live'], location: { type: 'Point', coordinates: [-3.7038, 40.4168], address: 'Madrid, España' }, venue: 'Sala Clamores', date: new Date(Date.now() - 30 * 60000), price: { amount: 10, currency: 'EUR' }, organizer: 'Sonora Group', interestedCount: 58, images: [{ url: 'https://picsum.photos/seed/live-jam/800/400' }] },
 ];
 
 async function getSystemUser() {

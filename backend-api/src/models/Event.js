@@ -144,6 +144,19 @@ const eventSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  // Display name of the organizer (populated for imported/demo events so the
+  // card can show "by X" without an extra user lookup).
+  organizer: {
+    type: String,
+    trim: true
+  },
+  // Cached count of interested users (denormalized so the card can render
+  // "👥 N interesados" without loading the attendees array).
+  interestedCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   status: {
     type: String,
     enum: ['draft', 'published', 'cancelled', 'completed', 'expired'],
