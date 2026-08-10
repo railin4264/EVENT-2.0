@@ -170,12 +170,26 @@ export default function HomeScreen() {
           await reverseGeocode(loc)
           loadNearby(loc)
         },
-        () => {
-          const fallback = { lat: 40.4168, lng: -3.7038, address: 'Madrid, España' }
-          setLocation(fallback)
-          setSearchCenter(fallback)
-          setCityName('Madrid')
-          loadNearby(fallback)
+        async () => {
+          // GPS denied -> try IP-based geolocation (free, no API key needed)
+          try {
+            const ip = await fetch('https://ip-api.com/json/?fields=status,city,lat,lon,country').then((r) => r.json())
+            if (ip && ip.status === 'success' && ip.lat && ip.lon) {
+              const loc = { lat: ip.lat, lng: ip.lon, address: (ip.city || '') + ', ' + (ip.country || '') }
+              setLocation(loc)
+              setSearchCenter(loc)
+              setCityName(ip.city || '')
+              loadNearby(loc)
+              return
+            }
+          } catch {
+            /* ignore */
+          }
+          // Last resort: neutral world view, prompt user to pick a city
+          setLocation({ lat: 20, lng: 0, address: 'Mundo' })
+          setSearchCenter({ lat: 20, lng: 0, address: 'Mundo' })
+          setCityName('Elige una ciudad')
+          setIsLoading(false)
         },
         { enableHighAccuracy: true, timeout: 10000 }
       )
