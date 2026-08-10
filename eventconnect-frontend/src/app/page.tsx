@@ -406,7 +406,7 @@ export default function HomeScreen() {
               events={filteredSorted as any}
               categoryColors={CATEGORY_COLORS}
               selectedEvent={selectedForMap as any}
-              onEventSelect={handleSelectEvent}
+              onEventSelect={(e) => handleSelectEvent((e as unknown as Event) ?? null)}
               onMoveEnd={(c) => setPendingZone({ lat: c.lat, lng: c.lng })}
               showRadius
               radiusKm={5}
