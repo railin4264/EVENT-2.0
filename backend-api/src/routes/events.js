@@ -87,6 +87,9 @@ router.get('/', optionalAuth, eventListCache, async (req, res) => {
     }
 
     if (req.query.createdBy) {
+      if (!/^[0-9a-fA-F]{24}$/.test(req.query.createdBy)) {
+        return res.status(400).json({ success: false, message: "Invalid createdBy ID" });
+      }
       filter.createdBy = req.query.createdBy;
     }
 

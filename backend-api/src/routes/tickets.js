@@ -7,6 +7,22 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// @desc    Get current user's tickets
+// @route   GET /api/tickets/my-tickets
+// @access  Private
+router.get('/my-tickets', protect, async (req, res) => {
+  try {
+    const tickets = await Ticket.find({ user: req.user.id })
+      .populate('event', 'title date location images category')
+      .sort('-createdAt')
+      .limit(50);
+    res.json({ success: true, data: tickets, count: tickets.length });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+
 // @desc    List tickets for the authenticated user
 // @route   GET /api/tickets
 // @access  Private

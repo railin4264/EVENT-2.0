@@ -89,6 +89,9 @@ router.get('/', tribeListCache, async (req, res) => {
 // @route   GET /api/tribes/:id
 // @access  Public
 router.get('/:id', async (req, res) => {
+  if (!req.params.id || !req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+    return res.status(400).json({ success: false, message: 'Invalid tribe ID' });
+  }
   try {
     const tribe = await Tribe.findById(req.params.id)
       .populate('creator', 'username firstName lastName avatar')

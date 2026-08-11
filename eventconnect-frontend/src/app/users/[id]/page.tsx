@@ -110,7 +110,7 @@ export default function UserProfilePage() {
     queryKey: ['user-profile', id],
     queryFn: async () => {
       const response = await apiClient.get(`/users/${id}`)
-      return response.data.user
+      if (!response.data || !response.data.user) throw new Error('User not found'); return response.data.user
     }
   })
 
@@ -119,7 +119,7 @@ export default function UserProfilePage() {
     queryKey: ['user-events', id],
     queryFn: async () => {
       const response = await apiClient.get(`/events?createdBy=${id}`)
-      return response.data.events
+      return (response.data && response.data.events) || []
     }
   })
 

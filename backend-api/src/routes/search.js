@@ -351,4 +351,18 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
+// @desc    Trending searches
+// @route   GET /api/search/trending
+// @access  Public
+router.get('/trending', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      trending: ['conciertos', 'fiestas', 'tech', 'arte', 'deportes', 'networking', 'food', 'musica']
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 module.exports = router;

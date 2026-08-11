@@ -30,9 +30,9 @@ export default function GamificationProfile() {
       .then(([p, a, c, l]) => {
         if (!active) return
         setProfile(p?.data || null)
-        setAchievements(a?.data || [])
-        setChallenges(c?.data || [])
-        setLeaderboard(l?.data || [])
+        setAchievements(Array.isArray(a?.data) ? a.data : [])
+        setChallenges(Array.isArray(c?.data) ? c.data : [])
+        setLeaderboard(Array.isArray(l?.data) ? l.data : (Array.isArray(l?.data?.entries) ? l.data.entries : (Array.isArray(l?.data?.leaderboard) ? l.data.leaderboard : [])))
       })
       .catch((e) => active && setError(e?.message || 'No se pudo cargar la gamificación'))
       .finally(() => active && setLoading(false))

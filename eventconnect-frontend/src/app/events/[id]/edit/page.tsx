@@ -67,7 +67,7 @@ export default function EditEventPage() {
   useEffect(() => {
     if (eventData) {
       const event = eventData
-      const dateObj = new Date(event.date)
+      const dateObj = (event.date && !isNaN(new Date(event.date).getTime())) ? new Date(event.date) : new Date()
       reset({
         title: event.title || '',
         description: event.description || '',
@@ -88,7 +88,7 @@ export default function EditEventPage() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: EventFormData) => {
-      const dateTime = new Date(`${data.date}T${data.time}`)
+      const dateTime = (data.date && !isNaN(new Date(data.date + 'T' + data.time).getTime())) ? new Date(data.date + 'T' + data.time) : new Date()
       const payload = {
         title: data.title,
         description: data.description,

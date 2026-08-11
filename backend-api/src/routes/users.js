@@ -352,9 +352,12 @@ router.get('/:id/attended-events', protect, async (req, res) => {
 // @desc    Get user by ID
 // @route   GET /api/users/:id
 // @access  Private
-router.get('/:id', protect, async (req, res, next) => {
+router.get('/:id', async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    if (!req.params.id || !req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid user ID' });
+    }
+    const user = await User.findById(req.params.id).select('-password -email');
 
     if (!user) {
       return res.status(404).json({

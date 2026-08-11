@@ -159,3 +159,7 @@ backend-api/logs/
 jest_output.txt
 output.txt
 backend-api/.mongod-uri
+
+# TypeScript incremental build artifacts
+tsconfig.tsbuildinfo
+**/tsconfig.tsbuildinfo
