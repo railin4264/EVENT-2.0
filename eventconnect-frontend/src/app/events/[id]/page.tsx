@@ -296,6 +296,7 @@ export default function EventDetailPage() {
           <>
             <img
               src={getImageUrl(event.images[0])}
+              onError={(e) => { e.currentTarget.style.display = "none" }}
               alt={event.title}
               className="w-full h-full object-cover"
             />

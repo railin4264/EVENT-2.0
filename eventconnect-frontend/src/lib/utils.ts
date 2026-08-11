@@ -21,27 +21,31 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
  * Get full URL for image uploads
  * Converts relative paths like "uploads/..." to full backend URLs
  */
-export function getImageUrl(imageUrl: string | undefined | null): string {
-  if (!imageUrl) return '/default-avatar.png'
+export function getImageUrl(imageUrl: string | { url?: string } | undefined | null): string {
+  let url: string | undefined
+  if (!imageUrl) url = undefined
+  else if (typeof imageUrl === 'string') url = imageUrl
+  else if (imageUrl && typeof imageUrl === 'object' && 'url' in imageUrl) url = (imageUrl as { url?: string }).url
+  if (!url) return '/default-avatar.png'
 
   // If already a full URL (http:// or https://), return as is
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
   }
 
   // Remove /api from NEXT_PUBLIC_API_URL if present
   const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '')
 
   // If starts with /uploads, it's a backend upload, prepend backend base URL
-  if (imageUrl.startsWith('/uploads')) {
-    return `${API_URL}${imageUrl}`
+  if (url.startsWith('/uploads')) {
+    return API_URL + url
   }
 
   // If starts with / but not /uploads, it's a local public path, return as is
-  if (imageUrl.startsWith('/')) {
-    return imageUrl
+  if (url.startsWith('/')) {
+    return url
   }
 
   // Otherwise, it's a backend upload path without leading slash, prepend backend base URL
-  return `${API_URL}/${imageUrl}`
+  return API_URL + "/" + url
 }

@@ -135,7 +135,7 @@ export default function HomeScreen() {
       const response = await eventsService.getNearbyEvents({
         latitude: loc.lat,
         longitude: loc.lng,
-        radius: 50,
+        radius: (loc as any).radiusKm || 50,
         limit: 200,
       })
       const list: Event[] = (response as any)?.events || (response as any)?.data || []
@@ -190,10 +190,11 @@ export default function HomeScreen() {
             /* ignore */
           }
           // Last resort: neutral world view, prompt user to pick a city
-          setLocation({ lat: 20, lng: 0, address: 'Mundo' })
-          setSearchCenter({ lat: 20, lng: 0, address: 'Mundo' })
-          setCityName('Elige una ciudad')
-          setIsLoading(false)
+          const worldLoc = { lat: 20, lng: 0, address: 'Mundo', radiusKm: 20000 } as any
+          setLocation(worldLoc)
+          setSearchCenter(worldLoc)
+          setCityName('Mundo')
+          loadNearby(worldLoc)
         },
         { enableHighAccuracy: true, timeout: 10000 }
       )

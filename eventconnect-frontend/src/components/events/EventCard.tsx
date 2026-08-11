@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Calendar, MapPin, Users, Heart, Share } from 'lucide-react'
@@ -22,6 +23,7 @@ export function EventCard({
   onFavorite,
   onShare
 }: EventCardProps) {
+  const [imgError, setImgError] = useState(false)
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('es-ES', {
@@ -55,11 +57,12 @@ export function EventCard({
       {/* Image Section */}
       <Link href={`/events/${event._id}`}>
         <div className="relative aspect-[16/9] overflow-hidden bg-black/20">
-          {event.images && event.images.length > 0 ? (
+          {event.images && event.images.length > 0 && !imgError ? (
             <Image
               src={getImageUrl(event.images[0].url)}
               alt={event.title}
               fill
+              onError={() => setImgError(true)}
               className="object-cover transition-transform duration-300 group-hover:scale-110"
               sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
