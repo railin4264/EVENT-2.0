@@ -11,6 +11,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import OAuthButtons from '@/components/auth/OAuthButtons'
+import { ParticleField } from '@/components/redesign/ui/particle-field'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'El correo es requerido').email('Email inválido'),
@@ -138,7 +139,8 @@ function LoginForm() {
       </div>
 
       {/* ── Right panel: form ─────────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-8 py-12">
+      <div className="relative flex-1 flex items-center justify-center px-4 sm:px-8 py-12">
+        <ParticleField className="pointer-events-none opacity-60" color="16, 185, 129" />
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

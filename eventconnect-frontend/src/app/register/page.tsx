@@ -12,6 +12,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import OAuthButtons from '@/components/auth/OAuthButtons'
+import { ParticleField } from '@/components/redesign/ui/particle-field'
 import { Onboarding } from '@/components/redesign/Onboarding'
 import { cn } from '@/lib/utils'
 
@@ -144,7 +145,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex bg-white dark:bg-background">
+    <div className="relative min-h-screen flex bg-white dark:bg-background">
+      <ParticleField className="pointer-events-none opacity-50" color="139, 92, 246" />
 
       {/* ── Left panel ────────────────────────────────────────────────── */}
       <div className="hidden lg:flex lg:flex-1 flex-col justify-between relative overflow-hidden bg-background p-12">
