@@ -32,6 +32,7 @@ import type { Event } from '@/types/models'
 import { Button } from '@/components/redesign/ui/button'
 import { Input } from '@/components/redesign/ui/input'
 import { Card } from '@/components/redesign/ui/card'
+import { BorderBeam } from '@/components/redesign/ui/border-beam'
 import toast from 'react-hot-toast'
 import MapComponent from '@/components/discovery/MapComponent'
 
@@ -306,9 +307,12 @@ export default function HomeScreen() {
             className="rounded-full pl-9 pr-3"
           />
         </div>
-        <Button onClick={() => router.push('/create-event')} className="rounded-full">
-          <Plus className="w-4 h-4" /> Crear evento
-        </Button>
+        <div className="relative rounded-full">
+          <Button onClick={() => router.push('/create-event')} className="rounded-full">
+            <Plus className="w-4 h-4" /> Crear evento
+          </Button>
+          <BorderBeam duration={14} colorFrom="#8B5CF6" colorTo="#22D3EE" />
+        </div>
         {isAuthenticated ? (
           <Link href="/profile" className="text-sm text-muted-foreground hover:text-foreground">Mi perfil</Link>
         ) : (
@@ -461,9 +465,12 @@ export default function HomeScreen() {
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 p-8 text-center">
               <Compass className="w-10 h-10" />
               <p>No hay eventos cerca todavía.</p>
-              <Button onClick={() => router.push('/create-event')} className="rounded-full">
-                Crea el primero
-              </Button>
+              <div className="relative rounded-full">
+                <Button onClick={() => router.push('/create-event')} className="rounded-full">
+                  Crea el primero
+                </Button>
+                <BorderBeam duration={14} colorFrom="#8B5CF6" colorTo="#22D3EE" />
+              </div>
             </div>
           ) : (
             filteredSorted.map((e) => {
