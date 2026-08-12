@@ -1,65 +1,43 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { authService } from '@/lib/api/services'
-import type { User, RegisterRequest } from '@/types/models'
+import { createContext, useContext, ReactNode } from 'react'
+import { useAuthStore } from '@/stores/authStore'
+import type { User, RegisterRequest } from '@/types/api.types'
 
 interface AuthContextType {
   user: User | null
   isLoading: boolean
+  isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
-  logout: () => Promise<void>
+  logout: () => void
   register: (data: RegisterRequest) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    checkAuth()
-  }, [])
-
-  const checkAuth = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      if (token) {
-        const user = await authService.getCurrentUser()
-        setUser(user)
-      }
-    } catch (error) {
-      console.error('Error checking auth:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Unify with the Zustand authStore so there is a single source of truth.
+  // Previously this Context kept its own localStorage['token'] which was never
+  // written by the login flow -> components using useAuth() always saw user=null.
+  const user = useAuthStore((s) => s.user)
+  const isLoading = useAuthStore((s) => s.isLoading)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const loginStore = useAuthStore((s) => s.login)
+  const logoutStore = useAuthStore((s) => s.logout)
+  const registerStore = useAuthStore((s) => s.register)
 
   const login = async (email: string, password: string) => {
-    const response = await authService.login({ email, password })
-    if (response.success) {
-      setUser(response.user)
-      localStorage.setItem('token', response.token)
-    }
-  }
-
-  const logout = async () => {
-    await authService.logout()
-    setUser(null)
-    localStorage.removeItem('token')
+    await loginStore({ email, password } as any)
   }
 
   const register = async (data: RegisterRequest) => {
-    const response = await authService.register(data)
-    if (response.success) {
-      setUser(response.user)
-      localStorage.setItem('token', response.token)
-    }
+    await registerStore(data as any)
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, register }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, isAuthenticated, login, logout: logoutStore, register }}
+    >
       {children}
     </AuthContext.Provider>
   )

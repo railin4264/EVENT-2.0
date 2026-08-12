@@ -84,7 +84,7 @@ export const API_ENDPOINTS = {
   // Notifications
   NOTIFICATIONS: {
     LIST: '/notifications',
-    UNREAD: '/notifications/unread',
+    UNREAD: '/notifications/unread-count',
     READ: (id: string) => `/notifications/${id}/read`,
     READ_ALL: '/notifications/read-all',
     DELETE: (id: string) => `/notifications/${id}`,
@@ -92,7 +92,7 @@ export const API_ENDPOINTS = {
 
   // Chat
   CHAT: {
-    CONVERSATIONS: '/chat/conversations',
+    CONVERSATIONS: '/chat/chats',
     CONVERSATION: (id: string) => `/chat/conversations/${id}`,
     CREATE_CONVERSATION: '/chat/conversations',
     MESSAGES: (conversationId: string) => `/chat/messages/${conversationId}`,
@@ -158,8 +158,8 @@ export const API_ENDPOINTS = {
   FOLLOWS: {
     FOLLOW: (userId: string) => `/follows/${userId}`,
     UNFOLLOW: (userId: string) => `/follows/${userId}`,
-    FOLLOWERS: '/follows/followers',
-    FOLLOWING: '/follows/following',
+    FOLLOWERS: (userId: string) => `/follows/followers/${userId}`,
+    FOLLOWING: (userId: string) => `/follows/following/${userId}`,
   },
 
   // Upload

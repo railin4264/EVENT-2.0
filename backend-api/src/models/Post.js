@@ -151,9 +151,14 @@ postSchema.virtual('sharesCount').get(function() {
   return this.shares.length;
 });
 
-// Method to check if user liked the post
+// Method to check if user liked the post (handles both ObjectId[] and [{user}] shapes)
 postSchema.methods.isLikedByUser = function(userId) {
-  return this.likes.some(like => like.user.toString() === userId.toString());
+  if (!this.likes || !userId) return false;
+  const uid = userId.toString();
+  return this.likes.some(like => {
+    const likeUserId = like && like.user ? like.user.toString() : (like ? like.toString() : null);
+    return likeUserId === uid;
+  });
 };
 
 // Method to check if user shared the post

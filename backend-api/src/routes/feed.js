@@ -515,11 +515,41 @@ router.put('/:id', protect, async (req, res) => {
   }
 });
 
+// @desc    Get trending feed posts
+// @route   GET /api/feed/trending
+// @access  Private
+router.get('/trending', protect, async (req, res) => {
+  try {
+    const posts = await Post.find({ isDeleted: false, isSponsored: true })
+      .populate('user', 'username firstName lastName avatar verified bio')
+      .sort('-createdAt')
+      .limit(20);
+    const formattedPosts = posts.map(post => ({
+      id: post._id,
+      type: post.type,
+      content: post.content,
+      image: post.images && post.images.length > 0 ? post.images[0].url : undefined,
+      stats: { likes: post.likesCount, comments: post.commentsCount, shares: post.sharesCount },
+      timestamp: getTimeAgo(post.createdAt),
+      liked: post.isLikedByUser(req.user.id),
+      isSponsored: post.isSponsored
+    }));
+    res.json({ success: true, count: formattedPosts.length, data: formattedPosts });
+  } catch (error) {
+    logger.error('Trending feed error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 // @desc    Get post by ID
 // @route   GET /api/feed/:id
 // @access  Public
 router.get('/:id', async (req, res) => {
   try {
+    // Guard against non-ObjectId params (e.g. "trending") hitting this route
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid post ID' });
+    }
     const post = await Post.findOne({ _id: req.params.id, isDeleted: false })
       .populate('user', 'username firstName lastName avatar verified bio')
       .populate('eventData.eventId', 'title location date attendees')

@@ -5,6 +5,7 @@
 
 import { apiClient } from '../client'
 import { API_ENDPOINTS } from '@/lib/config'
+import { useAuthStore } from '@/stores/authStore'
 import type {
   User,
   PublicUser,
@@ -125,8 +126,11 @@ class UsersService {
    * Get user's followers
    */
   async getFollowers(userId?: string): Promise<PublicUser[]> {
+    const me = useAuthStore.getState().user as any
+    const id = userId || (me && (me._id || me.id))
+    if (!id) return []
     const response = await apiClient.get<ApiResponse<PublicUser[]>>(
-      API_ENDPOINTS.FOLLOWS.FOLLOWERS
+      API_ENDPOINTS.FOLLOWS.FOLLOWERS(id)
     )
 
     return response.data.data || []
@@ -136,8 +140,11 @@ class UsersService {
    * Get users that current user is following
    */
   async getFollowing(userId?: string): Promise<PublicUser[]> {
+    const me = useAuthStore.getState().user as any
+    const id = userId || (me && (me._id || me.id))
+    if (!id) return []
     const response = await apiClient.get<ApiResponse<PublicUser[]>>(
-      API_ENDPOINTS.FOLLOWS.FOLLOWING
+      API_ENDPOINTS.FOLLOWS.FOLLOWING(id)
     )
 
     return response.data.data || []
