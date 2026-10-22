@@ -13,8 +13,8 @@ interface OAuthButtonsProps {
 export default function OAuthButtons({ mode = 'login' }: OAuthButtonsProps) {
   const [loading, setLoading] = useState<OAuthProvider | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Default to Google enabled so button renders instantly without layout shift
-  const [providers, setProviders] = useState<string[]>(['google'])
+  // Only providers the backend reports as enabled: an unconfigured one would lead to an error.
+  const [providers, setProviders] = useState<string[]>([])
 
   useEffect(() => {
     let active = true
@@ -23,11 +23,9 @@ export default function OAuthButtons({ mode = 'login' }: OAuthButtonsProps) {
         const remote = (result.data?.providers || [])
           .filter(provider => provider.enabled !== false)
           .map(provider => (provider.provider || provider.name).toLowerCase())
-        if (remote.length > 0) {
-          setProviders(remote)
-        }
+        setProviders(remote)
       }
-    }).catch(() => { /* Google simulation/live remains available */ })
+    }).catch(() => { /* Without the provider list, email sign-in remains available */ })
     return () => { active = false }
   }, [])
 

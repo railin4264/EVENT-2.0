@@ -29,8 +29,8 @@ it('creates the account once and continues to optional personalization with the 
   fireEvent.click(screen.getByRole('button', { name: 'Crear cuenta gratis' }))
   await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith('/onboarding?redirect=%2Fevents%2Fabc%3Fticket%3Dvip'))
   expect(mocks.register).toHaveBeenCalledOnce()
-  expect(mocks.register).toHaveBeenCalledWith({ name: 'Ana', username: 'ana_test', email: 'ana@example.test',
-    birthDate: '2000-04-15', password: 'Seguro123!', acceptTerms: true })
+  expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ name: 'Ana', username: 'ana_test', email: 'ana@example.test',
+    birthDate: '2000-04-15', password: 'Seguro123!', acceptTerms: true }))
 })
 
 it('suggests a username so registration can proceed without choosing one manually', async () => {

@@ -25,7 +25,7 @@ import { apiClient } from '@/lib/api/client'
 interface TripBudgetCalculatorProps {
   eventId: string
   eventTitle: string
-  eventCity?: string
+  eventCity: string
   eventCountry?: string
   eventPrice?: {
     amount: number
@@ -84,8 +84,8 @@ interface BudgetCalculationResult {
 export function TripBudgetCalculator({
   eventId,
   eventTitle,
-  eventCity = 'Santo Domingo',
-  eventCountry = 'República Dominicana',
+  eventCity,
+  eventCountry,
   eventPrice,
   startDate,
   endDate
@@ -299,7 +299,7 @@ export function TripBudgetCalculator({
 
   const copyToClipboard = () => {
     const text = `🎉 *Presupuesto Estimado & Serrucho: ${eventTitle}*
-📍 Destino: ${eventCity}, ${eventCountry}
+📍 Destino: ${[eventCity, eventCountry].filter(Boolean).join(', ')}
 👥 Grupo: ${travelersCount} personas | 🌙 Noches: ${nightsCount}
 
 📋 *Desglose General:*

@@ -197,3 +197,13 @@ describe('OAuth callback account protection', () => {
     expect(remaining.oauthAccounts[0].accessToken).toBe('retained-facebook-access');
   });
 });
+
+test('a forged simulated Google code cannot sign in as another account outside local development', async () => {
+  const victim = Buffer.from(JSON.stringify({ email: 'victim@example.com', name: 'Victim' })).toString('base64');
+  for (const configured of [true, false]) {
+    if (!configured) delete process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const state = await oauthService.generateState('google', '/');
+    await expect(oauthService.verifyGoogleToken('dev_google_' + victim, state)).rejects.toThrow();
+  }
+  await expect(oauthService.getGoogleAuthUrl('/')).rejects.toThrow();
+});

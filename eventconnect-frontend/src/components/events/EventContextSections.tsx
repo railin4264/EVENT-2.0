@@ -6,7 +6,6 @@ import { useAuthStore } from '@/stores/authStore'
 import { EventSectionDisclosure } from './EventSectionDisclosure'
 import { SoloGoersSection } from './SoloGoersSection'
 import { EventPlusOneSection } from './EventPlusOneSection'
-import { EventSongVotingSection } from './EventSongVotingSection'
 import VibeRadarSection from './VibeRadarSection'
 import SafetyCoroSection from './SafetyCoroSection'
 import { EventAfterRadarSection } from './EventAfterRadarSection'
@@ -33,10 +32,9 @@ export function EventContextSections({ event, phase, isOrganizer, onUpdate }: {
   if (phase === 'cancelled') return null
 
   if (phase === 'upcoming') return (
-    <EventSectionDisclosure title="Organiza tu plan" description="Acompañantes, mesa para quienes van solos y canciones para el evento.">
+    <EventSectionDisclosure title="Organiza tu plan" description="Acompañantes y mesa para quienes van solos.">
       <SoloGoersSection eventId={event._id} isOrganizer={isOrganizer} />
       <EventPlusOneSection eventId={event._id} />
-      <EventSongVotingSection eventId={event._id} />
       <EventSectionDisclosure title="Historias del evento" description="Mira lo que comparte la comunidad antes de llegar.">
         <StoriesBar eventId={event._id} event={event} />
       </EventSectionDisclosure>

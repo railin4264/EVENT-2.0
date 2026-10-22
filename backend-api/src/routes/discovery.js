@@ -208,16 +208,8 @@ router.get('/trending', optionalAuth, discoveryScope, async (req, res) => {
       hideReligious: req.query.hideReligious,
       userPreferences: req.user?.settings?.preferences
     });
-    let rows = await trendingIds({ scope: req.discoveryScope, categoryFilter, user: req.user, limit });
-    if (rows.length < limit) {
-      const taken = new Set(rows.map(r => String(r._id)));
-      const geo = req.discoveryScope.geo;
-      const fallbackFilter = { ...upcoming(req.user), ...scopeFilter(req.discoveryScope), _id: { $nin: [...taken] } };
-      if (geo) fallbackFilter.location = geoFilter(geo.lat, geo.lng, geo.radiusKm);
-      if (categoryFilter !== null && categoryFilter !== undefined) fallbackFilter.category = categoryFilter;
-      const fallbackEvents = await Event.find(fallbackFilter).sort({ date: 1, _id: 1 }).limit(limit - rows.length).select('_id');
-      rows = rows.concat(fallbackEvents.map(e => ({ _id: e._id, score: 1.0 })));
-    }
+    // Only events with real interaction count as trending; an empty list is an honest answer.
+    const rows = await trendingIds({ scope: req.discoveryScope, categoryFilter, user: req.user, limit });
     const scoreById = new Map(rows.map(r => [String(r._id), Math.round(r.score * 10) / 10]));
     const items = await hydrate(rows, d => ({ badge: 'trending', badgeLabel: 'En tendencia', trendingScore: scoreById.get(String(d._id)) }));
     res.set('Cache-Control', req.user ? 'private, no-cache' : 'public, max-age=60');

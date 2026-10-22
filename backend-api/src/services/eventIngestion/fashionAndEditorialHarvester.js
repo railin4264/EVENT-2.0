@@ -17,6 +17,7 @@ const { computeH3Hierarchy } = require('./h3SpatialIndexer');
 const { invalidateCache } = require('../../middleware/cache');
 const { getCategoryFallbackImage } = require('../../utils/imageFallbacks');
 const logger = require('../../utils/logger') || console;
+const { demoCatalogEnabled, DEMO_CATALOG_SKIP } = require('./demoCatalogGuard');
 
 const FASHION_EDITORIAL_EVENTS = [
   // ==========================================
@@ -318,6 +319,7 @@ class FashionAndEditorialHarvester {
   }
 
   async syncAll() {
+    if (!demoCatalogEnabled()) return { ...DEMO_CATALOG_SKIP };
     const curator = await this.ensureCuratorUser();
     let created = 0;
     let updated = 0;

@@ -291,6 +291,7 @@ it.each([404, 410, 429])('offers a safe return to the map after HTTP %s', async 
 })
 
 it('loads music and company only after opening their section', async () => {
+  mocks.get.mockResolvedValue({ data: { event: fixture({ category: 'music' }) } })
   mount()
   await screen.findByRole('heading', { name: 'Música en la ciudad' })
   expect(mocks.get.mock.calls.some(([url]) => /\/songs|\/coro-match/.test(url))).toBe(false)
@@ -298,6 +299,16 @@ it('loads music and company only after opening their section', async () => {
   expect(await screen.findByText('Lista de canciones de prueba')).toBeTruthy()
 })
 
+
+it('keeps song requests to musical events and transport tools to in-person events', async () => {
+  mocks.get.mockResolvedValue({ data: { event: fixture({ category: 'technology', isVirtual: true, virtualLink: 'https://stream.example.com/' }) } })
+  mount()
+  await screen.findByRole('heading', { name: 'Música en la ciudad' })
+  expect(screen.queryByRole('button', { name: /Música y compañía/ })).toBeNull()
+  expect(screen.queryByRole('button', { name: /Planifica tu salida/ })).toBeNull()
+  expect(screen.queryByRole('button', { name: /Personas con quienes ir/ })).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Transmisión en línea' })).toBeTruthy()
+})
 
 it('recovers from render errors without exposing internal error messages', () => {
   vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -29,7 +29,7 @@ describe('contextual event sections', () => {
     fireEvent.click(disclosure)
     expect(screen.getByText('solo-marker')).toBeTruthy()
     expect(screen.getByText('plus-marker')).toBeTruthy()
-    expect(screen.getByText('songs-marker')).toBeTruthy()
+    expect(screen.queryByText('songs-marker')).toBeNull()
     expect(screen.queryByText('vibe-marker')).toBeNull()
     expect(screen.queryByText('after-marker')).toBeNull()
     expect(screen.queryByText(/album-/)).toBeNull()

@@ -15,6 +15,7 @@ const { computeH3Hierarchy } = require('./h3SpatialIndexer');
 const { PLANETARY_ITEMS, sanitizeTag } = require('./planetaryCatalog');
 const { invalidateCache } = require('../../middleware/cache');
 const logger = require('../../utils/logger') || console;
+const { demoCatalogEnabled, DEMO_CATALOG_SKIP } = require('./demoCatalogGuard');
 
 /**
  * Seeds or updates the global planetary catalog in MongoDB.
@@ -24,6 +25,7 @@ const logger = require('../../utils/logger') || console;
  * @returns {Promise<{ success: boolean, created: number, updated: number, total: number, byCountry: Object }>}
  */
 async function seedPlanetaryEvents({ dryRun = false } = {}) {
+  if (!demoCatalogEnabled()) return { ...DEMO_CATALOG_SKIP };
   try {
     // 1. Get or confirm the Official Admin Curator
     let curator = await User.findOne({ role: 'admin' });

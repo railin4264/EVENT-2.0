@@ -32,4 +32,4 @@ function safeAttendanceEntries(attendees = [], viewerId) {
   });
 }
 
-module.exports = { PROFILE_FIELDS, summarizeAttendance, safeAttendanceEntries };
+module.exports = { PROFILE_FIELDS, publicProfile, summarizeAttendance, safeAttendanceEntries };

@@ -121,38 +121,25 @@ class CronService {
    */
   setupEventJobs() {
     // Hourly event expiration check - runs every hour at minute 15
-    // Automatic event ingestion (Ticketmaster / ICS feeds / etc.) - every 6 hours
+    // Real event ingestion every 6 hours: approved registry sources, plus the
+    // discovery APIs (Ticketmaster, Songkick, ICS/JSON feeds) when explicitly
+    // enabled. Aggregated imports land in pending_review for moderation.
+    // Static demo catalogs never run here: their dates are fabricated.
     this.jobs.eventIngestion = this.createJob('eventIngestion', '5 */6 * * *', async () => {
       try {
         if (process.env.EVENT_INGESTION_ENABLED === 'false') return;
         const registered = await require('./eventIngestion/GlobalPipelineOrchestrator').runGlobalIngestionCycle({ dueOnly: true });
         logger.info('Registered source ingestion', registered.stats);
-        try {
-          const { seedPlanetaryEvents } = require('./eventIngestion/planetaryEventHarvester');
-          await seedPlanetaryEvents();
-          const { syncVirtualStreams } = require('./eventIngestion/virtualEventHarvester');
-          await syncVirtualStreams();
-          const { syncClinicalTrials } = require('./eventIngestion/clinicalTrialsHarvester');
-          await syncClinicalTrials();
-          const { syncRDTickets } = require('./eventIngestion/rdTicketsHarvester');
-          await syncRDTickets();
-          const { syncUniversityAgendas } = require('./eventIngestion/universityAgendaHarvester');
-          await syncUniversityAgendas();
-          const { syncCivicPoliticalAgendas } = require('./eventIngestion/civicPoliticalAgendaHarvester');
-          await syncCivicPoliticalAgendas();
-          const { syncAstronomyEvents } = require('./eventIngestion/astronomyEventsHarvester');
-          await syncAstronomyEvents();
-          const { syncSpecializedGlobalEvents } = require('./eventIngestion/sciFiMysteryGreenHarvester');
-          await syncSpecializedGlobalEvents();
-          const { syncActionSportsAndCrafts } = require('./eventIngestion/actionSportsAndCraftsHarvester');
-          await syncActionSportsAndCrafts();
-          const fashionHarvester = require('./eventIngestion/fashionAndEditorialHarvester');
-          await fashionHarvester.syncAll();
-          const globalMetropolisHarvester = require('./eventIngestion/globalMetropolisAndNichesHarvester');
-          await globalMetropolisHarvester.syncAll();
-          logger.info('Planetary & virtual streams rolling refresh completed');
-        } catch (planErr) {
-          logger.warn('Planetary scheduled refresh warning: ' + planErr.message);
+        const aggregator = require('./eventAggregator');
+        if (process.env.EVENT_AGGREGATOR_ENABLED === 'true' && aggregator.hasAnySourceConfigured()) {
+          for (const zone of aggregator.ingestionZones()) {
+            try {
+              const result = await aggregator.aggregateAndStore(zone);
+              logger.info('Aggregated event ingestion', { zone: zone.label, ...result });
+            } catch (zoneError) {
+              logger.warn('Aggregated ingestion failed for zone', { zone: zone.label, error: zoneError.message });
+            }
+          }
         }
       } catch (error) {
         logger.error('Error in scheduled event ingestion:', error);

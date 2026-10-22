@@ -18,6 +18,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/services/api';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Avatar } from '@/components/ui/Avatar';
 
 interface NotificationData {
   _id: string;
@@ -204,13 +205,7 @@ export default function NotificationsScreen() {
 
         {/* Avatar (if sender exists) */}
         {item.sender && (
-          <Image
-            source={{
-              uri: item.sender.avatar ||
-                `https://ui-avatars.com/api/?name=${item.sender.firstName}+${item.sender.lastName}&background=6366f1&color=fff&size=100`
-            }}
-            style={styles.senderAvatar}
-          />
+          <Avatar uri={item.sender.avatar || undefined} name={`${item.sender.firstName || ''} ${item.sender.lastName || ''}`.trim()} size="sm" style={styles.senderAvatar} />
         )}
 
         {/* Content */}

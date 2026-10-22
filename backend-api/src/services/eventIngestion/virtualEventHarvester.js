@@ -11,6 +11,7 @@
 
 const Event = require('../../models/Event');
 const User = require('../../models/User');
+const { demoCatalogEnabled, DEMO_CATALOG_SKIP } = require('./demoCatalogGuard');
 
 const GLOBAL_VIRTUAL_EVENTS = [
   // 1. Live Streams
@@ -274,6 +275,7 @@ const GLOBAL_VIRTUAL_EVENTS = [
  * @returns {Promise<{ created: number, updated: number, total: number }>}
  */
 async function syncVirtualEvents() {
+  if (!demoCatalogEnabled()) return { ...DEMO_CATALOG_SKIP };
   const adminUser = await User.findOne({ role: 'admin' }) || await User.findOne();
   if (!adminUser) {
     console.warn('[VirtualHarvester] No admin or valid user found to author virtual events.');

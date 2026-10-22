@@ -10,7 +10,9 @@ const { app } = require('../src/server');
 let adult, minor, tokens, fixtures;
 const location = (city, country, countryCode, coordinates) => ({ type: 'Point', coordinates, address: `${city} lugar público`, city, country, countryCode });
 const seed = (title, place, extra = {}) => Event.create({ title, description: 'Evento público de prueba geográfica aislada', category: 'music',
-  date: new Date(Date.now() + 5 * 86400000), createdBy: adult._id, location: place, timeZone: 'UTC', ...extra });
+  date: new Date(Date.now() + 5 * 86400000), createdBy: adult._id, location: place, timeZone: 'UTC',
+  // One real interest signal: /trending lists only events with interaction.
+  interestedCount: 1, ...extra });
 const get = (path, token) => token ? request(app).get(path).set('Authorization', `Bearer ${token}`) : request(app).get(path);
 const items = response => response.body.events || response.body.data;
 const routes = ['/api/events', '/api/events/featured', '/api/events/trending', '/api/events/for-you'];

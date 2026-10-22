@@ -25,8 +25,8 @@ function summarizeVibe(event, now = Date.now()) {
   for (const report of reports) counts[report.vibe]++;
   // Most recent report breaks a tie; legacy accumulated counters are never used.
   const currentVibe = reports.reduce((best, report) => counts[report.vibe] > (counts[best] || 0) ? report.vibe : best, reports[0]?.vibe || 'none');
+  // Aggregates only: individual ballots and their comments never leave the server.
   return { currentVibe, counts, reportsCount: reports.length,
-    recentReports: reports.map(r => ({ vibe: r.vibe, comment: r.comment, reportedAt: r.reportedAt })),
     lastReportedAt: reports[0]?.reportedAt || null, reportWindowMinutes: 120 };
 }
 

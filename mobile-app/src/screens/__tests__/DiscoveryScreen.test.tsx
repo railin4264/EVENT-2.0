@@ -1,6 +1,6 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { Text, TouchableOpacity } from 'react-native';
+import { Text, TextInput, TouchableOpacity } from 'react-native';
 import DiscoveryScreen from '../main/DiscoveryScreen';
 import { eventService } from '../../services';
 const mockPush = jest.fn();
@@ -30,7 +30,22 @@ test('a late category response cannot replace the current category', async () =>
   let release: (_value: unknown) => void = () => {};
   (eventService.getEvents as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
   await mount(); await press('Música');
-  expect(eventService.getEvents).toHaveBeenLastCalledWith({ limit: 50, category: 'music' });
+  expect(eventService.getEvents).toHaveBeenLastCalledWith({ page: 1, limit: 30, category: 'music' });
   await act(async () => release({ success: true, data: [{ ...event, title: 'Stale event' }] }));
   expect(screenText()).not.toContain('Stale event'); expect(screenText()).toContain(event.title);
+});
+test('search runs on the server across the whole catalog, not on the loaded sample', async () => {
+  await mount();
+  await act(async () => root.root.findByType(TextInput).props.onChangeText('salsa'));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
+  expect(eventService.getEvents).toHaveBeenLastCalledWith({ page: 1, limit: 30, search: 'salsa' });
+});
+test('more results load page by page', async () => {
+  (eventService.getEvents as jest.Mock).mockResolvedValueOnce({ success: true, data: [event], pagination: { page: 1, pages: 2, total: 2 } })
+    .mockResolvedValueOnce({ success: true, data: [{ ...event, _id: 'event-b', title: 'Segunda página' }], pagination: { page: 2, pages: 2, total: 2 } });
+  await mount();
+  const list = root.root.findAll(node => typeof node.props.onEndReached === 'function')[0];
+  await act(async () => list.props.onEndReached());
+  expect(eventService.getEvents).toHaveBeenLastCalledWith({ page: 2, limit: 30 });
+  expect(screenText()).toContain('Segunda página'); expect(screenText()).toContain(event.title);
 });

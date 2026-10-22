@@ -73,48 +73,79 @@ async function fetchFromTicketmaster({ lat, lng, radius = 50, size = 50, page = 
     if (lat != null && lng != null) {
       params.geoPoint = `${lat},${lng}`;
       params.radius = radius;
+      params.unit = 'km';
     }
 
     const { data } = await axios.get(TICKETMASTER_BASE, { params, timeout: 15000 });
     const events = data?._embedded?.events || [];
+    const totalPages = Number(data?.page?.totalPages) || 0;
 
-    return events.map((ev) => {
+    // Only events with an exact start time and an active sale status: a missing
+    // time or price is left unknown rather than shown as midnight or "free".
+    const mapped = events.filter((ev) => ev.dates?.start?.dateTime && !ev.dates?.start?.timeTBA &&
+      !['cancelled', 'canceled', 'postponed', 'offsale'].includes(String(ev.dates?.status?.code || '').toLowerCase())
+    ).map((ev) => {
       const venue = ev._embedded?.venues?.[0];
       const latV = parseFloat(venue?.location?.latitude);
       const lngV = parseFloat(venue?.location?.longitude);
       const category = ev.classifications?.[0]?.segment?.name || ev.classifications?.[0]?.genre?.name || 'other';
-      const startDate = ev.dates?.start?.dateTime || ev.dates?.start?.localDate;
+      const genre = ev.classifications?.[0]?.genre?.name;
+      const countryCode = String(venue?.country?.countryCode || '').toUpperCase();
 
       return {
         source: 'ticketmaster',
         sourceId: ev.id,
         title: ev.name,
-        description: ev.description || ev.info || 'Evento importado desde Ticketmaster.',
+        description: ev.description || ev.info || ev.pleaseNote || `${ev.name} en ${venue?.name || venue?.city?.name || 'su recinto'}.`,
         category: normalizeCategory(category),
-        tags: [category].filter(Boolean),
+        tags: [category, genre].filter(tag => tag && tag !== 'Undefined'),
         location: {
           type: 'Point',
           coordinates: [lngV, latV],
           address: [venue?.address?.line1, venue?.city?.name, venue?.state?.stateCode, venue?.country?.countryCode]
             .filter(Boolean)
-            .join(', ')
+            .join(', '),
+          venue: venue?.name || '',
+          city: venue?.city?.name || '',
+          country: venue?.country?.name || '',
+          ...(/^[A-Z]{2}$/.test(countryCode) ? { countryCode } : {})
         },
         venue: venue?.name || '',
-        date: startDate ? new Date(startDate) : new Date(),
+        date: new Date(ev.dates.start.dateTime),
+        timeZone: ev.dates?.timezone || venue?.timezone,
         price: {
           amount: ev.priceRanges?.[0]?.min ?? 0,
           currency: ev.priceRanges?.[0]?.currency || 'USD'
         },
-        images: (ev.images || []).slice(0, 5).map((img) => ({ url: img.url })),
+        images: (ev.images || []).filter(img => !img.fallback).sort((a, b) => (b.width || 0) - (a.width || 0)).slice(0, 5).map((img) => ({ url: img.url })),
         externalUrl: ev.url,
+        ticketUrl: ev.url,
         imported: true,
         importedAt: new Date()
       };
     }).filter((e) => Number.isFinite(e.location.coordinates[0]) && Number.isFinite(e.location.coordinates[1]));
+    mapped.totalPages = totalPages;
+    return mapped;
   } catch (err) {
     logger.error('Ticketmaster fetch failed:', err?.response?.data || err.message);
     return [];
   }
+}
+
+/**
+ * Recorre varias páginas de una zona. Ticketmaster solo sirve hasta el elemento 1000
+ * de una consulta (size * page < 1000) y 5000 llamadas al día: TICKETMASTER_MAX_PAGES
+ * limita el gasto por zona en cada ciclo.
+ */
+async function fetchTicketmasterPages({ lat, lng, radius, size = 100 } = {}) {
+  const maxPages = Math.min(Math.max(Number(process.env.TICKETMASTER_MAX_PAGES) || 5, 1), Math.floor(999 / size) + 1);
+  const all = [];
+  for (let page = 0; page < maxPages && size * page < 1000; page++) {
+    const batch = await fetchFromTicketmaster({ lat, lng, radius, size, page });
+    all.push(...batch);
+    if (!batch.totalPages || page + 1 >= batch.totalPages) break;
+  }
+  return all;
 }
 
 // These providers require organizer-specific or separately approved integrations.
@@ -140,11 +171,10 @@ async function fetchFromSongkick({ lat, lng, radius = 50, page = 1 } = {}) {
     const { data } = await axios.get(`${SONGKICK_BASE}/events.json`, { params, timeout: 15000 });
     const events = data?.results?.event || [];
 
-    return events.map((ev) => {
+    return events.filter((ev) => ev.start?.datetime && ev.status !== 'cancelled').map((ev) => {
       const venue = ev.venue || {};
       const latV = parseFloat(venue.lat);
       const lngV = parseFloat(venue.lng);
-      const startDate = ev.start?.datetime || ev.start?.date;
 
       return {
         source: 'songkick',
@@ -158,13 +188,18 @@ async function fetchFromSongkick({ lat, lng, radius = 50, page = 1 } = {}) {
           coordinates: [lngV, latV],
           address: [venue.displayName, venue.city?.displayName, venue.metroArea?.displayName]
             .filter(Boolean)
-            .join(', ')
+            .join(', '),
+          venue: venue.displayName || '',
+          city: venue.city?.displayName || venue.metroArea?.displayName || '',
+          country: venue.city?.country?.displayName || venue.metroArea?.country?.displayName || ''
         },
         venue: venue.displayName || '',
-        date: startDate ? new Date(startDate) : new Date(),
+        date: new Date(ev.start.datetime),
+        // Songkick publishes no prices: the ticket link stands in for an unknown price.
         price: { amount: 0, currency: 'USD' },
         images: [],
         externalUrl: ev.uri,
+        ticketUrl: ev.uri,
         imported: true,
         importedAt: new Date()
       };
@@ -187,6 +222,23 @@ function hasAnySourceConfigured() {
 function defaultZone() {
   const c = defaultCoords();
   return { lat: c.lat, lng: c.lng, radius: Number(process.env.INGESTION_RADIUS_KM) || 150, size: 100 };
+}
+
+/**
+ * Ciudades a consultar en cada ciclo, desde INGESTION_ZONES:
+ * "Santo Domingo|18.4861|-69.9312|60;Madrid|40.4168|-3.7038|50" (nombre|lat|lng|radioKm).
+ * Las entradas inválidas se ignoran; sin zonas válidas se usa la zona por defecto.
+ * Los feeds ICS/JSON no dependen de la zona y solo se leen en la primera.
+ */
+function ingestionZones() {
+  const zones = String(process.env.INGESTION_ZONES || '').split(';').map(entry => {
+    const [label, lat, lng, radius] = entry.split('|').map(part => part.trim());
+    const zone = { label, lat: Number(lat), lng: Number(lng), radius: Number(radius) || 50, size: 100 };
+    return label && Math.abs(zone.lat) <= 90 && Math.abs(zone.lng) <= 180 && Number.isFinite(zone.lat) && Number.isFinite(zone.lng) &&
+      zone.radius > 0 && zone.radius <= 500 ? zone : null;
+  }).filter(Boolean).slice(0, 40);
+  const list = zones.length ? zones : [{ label: 'default', ...defaultZone() }];
+  return list.map((zone, index) => ({ ...zone, includeFeeds: index === 0 }));
 }
 
 /**
@@ -228,12 +280,13 @@ function toEventDoc(item) {
     tags,
     date,
     endDate: endDate && Number.isFinite(endDate.getTime()) && endDate >= date ? endDate : undefined,
-    location: { type: 'Point', coordinates: coords, address, venue: String(item.location?.venue || item.venue || '').slice(0, 100), city: String(item.location?.city || '').slice(0, 100), country: String(item.location?.country || '').slice(0, 100) },
+    location: { type: 'Point', coordinates: coords, address, venue: String(item.location?.venue || item.venue || '').slice(0, 100), city: String(item.location?.city || '').slice(0, 100), country: String(item.location?.country || '').slice(0, 100),
+      ...(/^[A-Z]{2}$/.test(item.location?.countryCode || '') ? { countryCode: item.location.countryCode } : {}) },
     price: { amount, currency },
     images: (item.images || []).filter(i => i && /^https?:\/\//i.test(i.url)).slice(0, 5),
     externalUrl: item.externalUrl && /^https?:\/\//i.test(item.externalUrl) ? item.externalUrl : undefined,
     ticketUrl: item.ticketUrl && /^https?:\/\//i.test(item.ticketUrl) ? item.ticketUrl : (amount > 0 ? item.externalUrl : undefined),
-    paymentMode: amount > 0 ? 'external' : 'free',
+    paymentMode: amount > 0 || item.ticketUrl ? 'external' : 'free',
     imported: true,
     importedAt: new Date(),
     organizer: item.organizer || item.source,
@@ -257,15 +310,15 @@ function toEventDoc(item) {
  * Agrega desde todas las fuentes configuradas, deduplica por source+sourceId y hace upsert.
  * Cada evento se valida de forma aislada: uno inválido no detiene la ingesta.
  */
-async function aggregateAndStore({ lat, lng, radius = 50, size = 50 } = {}) {
+async function aggregateAndStore({ lat, lng, radius = 50, size = 50, includeFeeds = true } = {}) {
   const incoming = [
-    ...(await fetchFromTicketmaster({ lat, lng, radius, size })),
+    ...(await fetchTicketmasterPages({ lat, lng, radius, size })),
     ...(await fetchFromEventbrite({ lat, lng, radius })),
     ...(await fetchFromBandsintown({ lat, lng, radius })),
     ...(await fetchFromSongkick({ lat, lng, radius })),
     ...(await fetchFromMeetup({ lat, lng, radius })),
-    ...(await fetchIcsFeeds()),
-    ...(await fetchJsonFeeds())
+    ...(includeFeeds ? await fetchIcsFeeds() : []),
+    ...(includeFeeds ? await fetchJsonFeeds() : [])
   ];
 
   const User = require('../models/User');
@@ -311,6 +364,7 @@ async function aggregateAndStore({ lat, lng, radius = 50, size = 50 } = {}) {
 
 module.exports = {
   fetchFromTicketmaster,
+  fetchTicketmasterPages,
   fetchFromEventbrite,
   fetchFromBandsintown,
   fetchFromSongkick,
@@ -318,6 +372,7 @@ module.exports = {
   aggregateAndStore,
   hasAnySourceConfigured,
   defaultZone,
+  ingestionZones,
   toEventDoc,
   normalizeCategory
 };

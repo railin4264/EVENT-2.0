@@ -63,7 +63,9 @@ const sourceSchema = new mongoose.Schema({
       'manual_organizer',
       'madrid_open_data',
       'helsinki_linked_events',
-      'nyc_parks_open_data'
+      'nyc_parks_open_data',
+      'paris_open_data',
+      'catalunya_open_data'
     ],
     default: 'rest_api'
   },

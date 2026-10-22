@@ -15,6 +15,7 @@ const User = require('../../models/User');
 const { computeH3Hierarchy } = require('./h3SpatialIndexer');
 const { invalidateCache } = require('../../middleware/cache');
 const logger = require('../../utils/logger') || console;
+const { demoCatalogEnabled, DEMO_CATALOG_SKIP } = require('./demoCatalogGuard');
 
 const RD_MAJOR_EVENTS = [
   // --- LIDOM Béisbol Invernal ---
@@ -186,6 +187,7 @@ const RD_MAJOR_EVENTS = [
  * Seeds and maintains live Dominican Republic tickets and sports calendar.
  */
 async function syncRDTickets({ dryRun = false } = {}) {
+  if (!demoCatalogEnabled()) return { ...DEMO_CATALOG_SKIP };
   try {
     let curator = await User.findOne({ username: 'eventnow_oficial' }) || await User.findOne({ role: 'admin' }) || await User.findOne();
     if (!curator) {

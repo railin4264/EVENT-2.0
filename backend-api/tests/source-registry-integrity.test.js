@@ -257,3 +257,17 @@ test('friend publication rejects unknown price and preserves a confirmed foreign
   const saved = await publishFriendPlan({ ...plan, price: { amount: 2500, currency: 'JPY' } }, admin.id);
   expect(saved.price.amount).toBe(2500); expect(saved.price.currency).toBe('JPY'); expect(saved.timeZone).toBe('Asia/Tokyo');
 });
+
+test('every public open-data adapter can be registered for administrator review', async () => {
+  const { OPEN_DATA_SOURCES, seedSourceRegistry } = require('../src/services/eventIngestion/sourceRegistrySeeder');
+  const { PUBLIC_AGENDAS } = require('../src/services/eventIngestion/publicAgendaAdapters');
+  expect(OPEN_DATA_SOURCES.map(s => s.adapterType).sort()).toEqual(Object.keys(PUBLIC_AGENDAS).sort());
+  await seedSourceRegistry();
+  for (const seed of OPEN_DATA_SOURCES) {
+    const saved = await Source.findOne({ sourceId: seed.sourceId });
+    expect(saved).not.toBeNull();
+    await expect(saved.validate()).resolves.toBeUndefined();
+    expect(saved.status).toBe('evaluating');
+    expect(saved.license.commercialAllowed).toBe(false);
+  }
+});

@@ -18,6 +18,7 @@ const User = require('../../models/User');
 const { computeH3Hierarchy } = require('./h3SpatialIndexer');
 const { invalidateCache } = require('../../middleware/cache');
 const logger = require('../../utils/logger') || console;
+const { demoCatalogEnabled, DEMO_CATALOG_SKIP } = require('./demoCatalogGuard');
 
 const UNIVERSITY_EVENTS = [
   // ==========================================
@@ -453,6 +454,7 @@ const UNIVERSITY_EVENTS = [
  * Seeds and maintains university & academic agendas.
  */
 async function syncUniversityAgendas({ dryRun = false } = {}) {
+  if (!demoCatalogEnabled()) return { ...DEMO_CATALOG_SKIP };
   try {
     let curator = await User.findOne({ username: 'eventnow_oficial' }) || await User.findOne({ role: 'admin' }) || await User.findOne();
     if (!curator) {

@@ -243,7 +243,8 @@ export function CoroMatchSection({ eventId, eventTitle }: CoroMatchSectionProps)
           {queue.map((member, idx) => {
             const memberUser: any = member.user || {}
             const fullName = `${memberUser.firstName || ''} ${memberUser.lastName || ''}`.trim() || memberUser.username || 'Pana EventNow'
-            const avatar = memberUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=random`
+            const avatar: string | undefined = memberUser.avatar || undefined
+            const initials = fullName.split(/s+/).map((part: string) => part[0]).join('').slice(0, 2).toUpperCase()
             const phone = member.contactPhone?.replace(/\D/g, '')
 
             return (
@@ -253,11 +254,15 @@ export function CoroMatchSection({ eventId, eventTitle }: CoroMatchSectionProps)
               >
                 <div>
                   <div className="flex items-center gap-3">
-                    <img
-                      src={avatar}
-                      alt={fullName}
-                      className="w-10 h-10 rounded-xl object-cover border border-white/10"
-                    />
+                    {avatar ? (
+                      <img
+                        src={avatar}
+                        alt={fullName}
+                        className="w-10 h-10 rounded-xl object-cover border border-white/10"
+                      />
+                    ) : (
+                      <span aria-hidden="true" className="flex w-10 h-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-primary/15 text-xs font-bold text-primary">{initials}</span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <h5 className="text-xs font-bold text-white truncate">{fullName}</h5>
                       <span className="text-[10px] text-primary font-medium block">

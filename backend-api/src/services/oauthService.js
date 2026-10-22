@@ -102,6 +102,7 @@ class OAuthService {
       const state = await this.generateState('google', originalUrl);
 
       if (!this.isConfigured('google')) {
+        if (process.env.NODE_ENV !== 'development') throw new Error('Google OAuth is not configured');
         logger.info('Google credentials not configured in .env; providing simulated multi-account Google selection');
         return {
           authUrl: '/oauth/google/dev-select?state=' + state + '&redirect=' + encodeURIComponent(originalUrl || '/'),
@@ -139,6 +140,11 @@ class OAuthService {
       }
 
       if (typeof code === 'string' && code.startsWith('dev_google_')) {
+        // The simulated picker trusts a client-supplied email: outside local development
+        // without real credentials it would let anyone sign in as any account.
+        if (process.env.NODE_ENV !== 'development' || this.isConfigured('google')) {
+          throw new Error('Simulated Google sign-in is disabled');
+        }
         const encoded = code.replace('dev_google_', '');
         let devData = {};
         try {
@@ -337,13 +343,15 @@ class OAuthService {
         name: 'Google',
         icon: 'google',
         color: '#db4437',
-        enabled: true, devMode: !Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET && process.env.GOOGLE_OAUTH_REDIRECT_URI)
+        // The simulated account picker exists only for local development.
+        enabled: this.isConfigured('google') || process.env.NODE_ENV === 'development',
+        devMode: !this.isConfigured('google')
       },
       facebook: {
         name: 'Facebook',
         icon: 'facebook',
         color: '#4267b2',
-        enabled: !!process.env.FACEBOOK_APP_ID
+        enabled: this.isConfigured('facebook')
       }
     };
 

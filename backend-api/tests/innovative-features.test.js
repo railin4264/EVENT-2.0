@@ -80,7 +80,9 @@ describe('Innovative RD Features: Vibe Radar, Spontaneous Coro, Safety & Local M
       expect(getRes.status).toBe(200);
       expect(getRes.body.data.currentVibe).toBe('lit');
       expect(getRes.body.data.reportsCount).toBe(1);
-      expect(getRes.body.data.recentReports[0].comment).toBe('¡La acústica está brutal!');
+      // Individual ballots and comments stay private; only aggregates are public.
+      expect(getRes.body.data).not.toHaveProperty('recentReports');
+      expect(JSON.stringify(getRes.body)).not.toContain('La acústica está brutal');
     });
 
     it('rejects invalid vibe types', async () => {

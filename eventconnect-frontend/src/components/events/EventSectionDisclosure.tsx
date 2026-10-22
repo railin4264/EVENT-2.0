@@ -3,8 +3,8 @@
 import { useId, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 
-export function EventSectionDisclosure({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState(false)
+export function EventSectionDisclosure({ title, description, defaultOpen = false, children }: { title: string; description?: string; defaultOpen?: boolean; children: ReactNode }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
   const contentId = useId()
   return (
     <section className="mb-6 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">

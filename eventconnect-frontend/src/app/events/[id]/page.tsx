@@ -27,10 +27,7 @@ import EventNavigationPills from '@/components/events/EventNavigationPills'
 import EventCalendarButtons from '@/components/events/EventCalendarButtons'
 import EventTransitEmergencyPanel from '@/components/events/EventTransitEmergencyPanel'
 import EventStoryGeneratorModal from '@/components/events/EventStoryGeneratorModal'
-import AfterPartySection from '@/components/events/AfterPartySection'
-import LiveEventWall from '@/components/events/LiveEventWall'
 import HostOperationsPanel from '@/components/events/HostOperationsPanel'
-import TouristGuideModal from '@/components/events/TouristGuideModal'
 import { VirtualStagePlayer, type VirtualDetails } from '@/components/events/VirtualStagePlayer'
 import { TripBudgetCalculator } from '@/components/events/TripBudgetCalculator'
 import UniversalTimezoneClock from '@/components/events/UniversalTimezoneClock'
@@ -39,6 +36,7 @@ import { Baby, HeartHandshake, ShieldCheck as ShieldCheckIcon, Stethoscope } fro
 import { useLocaleStore } from '@/stores/localeStore'
 
 import { getEventPhase } from '@/components/events/event-phase'
+import { eventSectionPlan } from '@/components/events/event-section-plan'
 import { EventSongVotingSection } from '@/components/events/EventSongVotingSection'
 import { EventContextSections } from '@/components/events/EventContextSections'
 import { EventSectionDisclosure } from '@/components/events/EventSectionDisclosure'
@@ -70,6 +68,8 @@ interface Event {
     coordinates: [number, number]
     address: string
     venue?: string
+    city?: string
+    country?: string
     countryCode?: string
   }
   price: {
@@ -185,7 +185,6 @@ export default function EventDetailPage() {
   const [isSerruchoModalOpen, setIsSerruchoModalOpen] = useState(false)
   const [isFlyerModalOpen, setIsFlyerModalOpen] = useState(false)
   const [isBoostModalOpen, setIsBoostModalOpen] = useState(false)
-  const [isTouristModalOpen, setIsTouristModalOpen] = useState(false)
 
   useEffect(() => {
     setOptimisticState({})
@@ -454,6 +453,7 @@ export default function EventDetailPage() {
   const isFull = event.maxAttendees > 0 && (verifiedRegistrations ?? 0) >= event.maxAttendees
   const occupancy = eventOccupancy(verifiedRegistrations ?? 0, event.maxAttendees)
   const mapHref = eventMapHref(event)
+  const sections = eventSectionPlan({ phase, category: event.category, isVirtual: event.isVirtual, eventType: event.eventType, countryCode: event.location?.countryCode, coordinates: event.location?.coordinates, imported: Boolean(event.publicSource) })
   const hasOrganizer = Boolean(event.createdBy._id)
   const isOrganizer = hasOrganizer && (user?.id || user?._id) === event.createdBy._id
 
@@ -946,10 +946,10 @@ export default function EventDetailPage() {
               className="glass border-white/10 rounded-3xl p-8 mb-8 backdrop-blur-xl bg-white/5 shadow-xl"
             >
               <h3 className="text-2xl font-extrabold text-foreground mb-6">
-                {event.isVirtual ? 'Transmisión Virtual' : 'Ubicación Física'}
+                {sections.online && sections.inPerson ? 'Presencial y en línea' : sections.online ? 'Transmisión en línea' : 'Ubicación'}
               </h3>
 
-              {event.isVirtual ? (
+              {sections.virtualStage && (
                 <>
                   <VirtualStagePlayer
                     eventId={String(id)}
@@ -962,9 +962,10 @@ export default function EventDetailPage() {
                     isAttendee={Boolean(optimisticState.isAttending ?? event.isAttending)}
                     onAttendRequest={handleJoinEvent}
                   />
-                  <UniversalTimezoneClock eventDate={event.date} isVirtual={true} />
+                  {sections.timezoneClock && <UniversalTimezoneClock eventDate={event.date} isVirtual={true} />}
                 </>
-              ) : (
+              )}
+              {sections.inPerson && (
                 <>
                   <div className="space-y-2 mb-6">
                     {event.location?.venue && (
@@ -987,52 +988,46 @@ export default function EventDetailPage() {
                       {event.isSecretLocation && !event.isAttending ? 'El mapa estará disponible cuando se confirme tu asistencia.' : 'El organizador publicará la ubicación cuando esté confirmada.'}
                     </p>
                   )}
-                  <UniversalTimezoneClock eventDate={event.date} isVirtual={false} />
                 </>
               )}
             </motion.div>
 
-            {/* Mobility & Hospitality Concierge */}
-            <EventHospitalityWidget event={event as any} onOpenSerrucho={() => setIsSerruchoModalOpen(true)} />
+            {(sections.navigation || sections.weather || sections.calendar || sections.transitDominicanRepublic) && (
+              <section aria-label="Antes de ir" className="my-6 space-y-6">
+                {sections.navigation && <EventNavigationPills coordinates={event.location?.coordinates} address={event.location?.address} title={event.title} />}
+                {sections.weather && <EventWeatherCard coordinates={event.location?.coordinates} locationName={event.location?.venue || event.location?.address} />}
+                {sections.calendar && <EventCalendarButtons title={event.title} description={event.description} date={event.date} endDate={event.endDate} location={event.location?.address} />}
+                {sections.transitDominicanRepublic && <EventTransitEmergencyPanel coordinates={event.location?.coordinates} locationName={event.location?.address} />}
+              </section>
+            )}
 
-            {/* Clima Satelital Open-Meteo en Vivo */}
-            <div className="my-6">
-              <EventWeatherCard coordinates={event.location?.coordinates} locationName={event.location?.venue || event.location?.address} />
-            </div>
+            {(sections.hospitality || sections.tripBudget || sections.soloTraveler) && (
+              <EventSectionDisclosure title="Planifica tu salida" description="Transporte, alojamiento, presupuesto y compañía si viajas solo.">
+                {sections.hospitality && <EventHospitalityWidget event={event as any} onOpenSerrucho={() => setIsSerruchoModalOpen(true)} />}
+                {sections.tripBudget && event.location?.city && (
+                  <TripBudgetCalculator
+                    eventId={String(id)}
+                    eventTitle={event.title}
+                    eventCity={event.location.city}
+                    eventCountry={event.location?.country}
+                    eventPrice={event.price}
+                    startDate={event.date}
+                    endDate={event.endDate}
+                  />
+                )}
+                {sections.soloTraveler && <SoloTravelerBuddySection eventId={String(id)} />}
+              </EventSectionDisclosure>
+            )}
 
-            {/* Navegación 1-Tap Waze, Google Maps & Apple Maps */}
-            <div className="my-6">
-              <EventNavigationPills coordinates={event.location?.coordinates} address={event.location?.address} title={event.title} />
-            </div>
-
-            {/* Agendar en Google Calendar & Apple iCal */}
-            <div className="my-6">
-              <EventCalendarButtons title={event.title} description={event.description} date={event.date} endDate={event.endDate} location={event.location?.address} />
-            </div>
-
-            {/* Asistencia Rápida, Politur y Transporte Oficial RD */}
-            <div className="my-6">
-              {event.location?.countryCode === 'DO' && <EventTransitEmergencyPanel coordinates={event.location?.coordinates} locationName={event.location?.address} />}
-            </div>
-
-            {/* Trip & Outing Budget Calculator with Serrucho Split */}
-            <TripBudgetCalculator
-              eventId={String(id)}
-              eventTitle={event.title}
-              eventCity={(event.location as any)?.city || event.location?.venue || 'Santo Domingo'}
-              eventCountry={(event.location as any)?.country || 'República Dominicana'}
-              eventPrice={event.price}
-              startDate={event.date}
-              endDate={event.endDate}
-            />
-
-            {/* Cultural Buddy & Solo Traveler / Nomad Table */}
-            <SoloTravelerBuddySection eventId={String(id)} />
-
-            <EventSectionDisclosure title="Música y compañía" description="Propón canciones y encuentra personas con quienes ir.">
-              <EventSongVotingSection eventId={String(id)} />
-              <CoroMatchSection key={`${id}:${identity}`} eventId={String(id)} eventTitle={event.title} />
-            </EventSectionDisclosure>
+            {(sections.songVoting || sections.companions) && (
+              <EventSectionDisclosure
+                title={sections.songVoting ? 'Música y compañía' : 'Personas con quienes ir'}
+                description={sections.songVoting ? 'Propón canciones y encuentra personas con quienes ir.' : 'Encuentra personas con quienes ir al evento.'}
+              >
+                {sections.songVoting && <EventSongVotingSection eventId={String(id)} />}
+                {sections.companions && <CoroMatchSection key={`${id}:${identity}`} eventId={String(id)} eventTitle={event.title} />}
+              </EventSectionDisclosure>
+            )}
 
             <EventContextSections
               key={`${id}:${identity}:${phase}`}
@@ -1042,38 +1037,23 @@ export default function EventDetailPage() {
               onUpdate={() => { void refetch() }}
             />
 
-            {/* Smart Plan Chaining - The Official After-Party */}
-            <div className="my-6">
-              <AfterPartySection
-                eventId={String(id)}
-                eventCoordinates={event.location?.coordinates}
-                venueName={event.location?.venue}
-                city={(event.location as any)?.city || event.location?.venue || 'Santo Domingo'}
-              />
-            </div>
-
-            {/* Live Event Ephemeral Wall */}
-            <div className="my-6">
-              <LiveEventWall
-                eventId={String(id)}
-                eventTitle={event.title}
-                isAttendee={Boolean(optimisticState.isAttending ?? event.isAttending)}
-              />
-            </div>
-
-            {/* Verified Organizer / Host Operations Panel */}
             {isOrganizer && (
               <div className="my-6">
                 <HostOperationsPanel
                   eventId={String(id)}
-                  eventTitle={event.title}
-                  confirmedCount={verifiedRegistrations || event.attendeesCount || 0}
-                  maxCapacity={event.maxAttendees || 200}
+                  confirmedCount={verifiedRegistrations ?? 0}
+                  maxCapacity={event.maxAttendees}
+                  canCheckIn={sections.inPerson}
                 />
               </div>
             )}
 
-            <EventSectionDisclosure title="Preguntas y conversación" description="Consulta dudas o conversa con la comunidad del evento.">
+            <EventSectionDisclosure
+              key={`conversation:${phase}`}
+              title={sections.conversationOpen ? 'Muro en vivo' : 'Preguntas y conversación'}
+              description={sections.conversationOpen ? 'Lo que comparten quienes están en el evento ahora.' : 'Consulta dudas o conversa con la comunidad del evento.'}
+              defaultOpen={sections.conversationOpen}
+            >
             {/* Comments Section */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -1391,12 +1371,6 @@ export default function EventDetailPage() {
               onClose={() => setIsBoostModalOpen(false)}
               eventId={String(id)}
               eventTitle={event.title}
-            />
-            <TouristGuideModal
-              isOpen={isTouristModalOpen}
-              onClose={() => setIsTouristModalOpen(false)}
-              city={(event.location as any)?.city || event.location?.venue || 'Santo Domingo'}
-              country={(event.location as any)?.country || 'República Dominicana'}
             />
           </>
         )}

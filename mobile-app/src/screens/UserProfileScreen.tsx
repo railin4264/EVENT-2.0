@@ -16,6 +16,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/services/api';
+import { Avatar } from '@/components/ui/Avatar';
 
 interface UserProfile {
   id: string;
@@ -177,13 +178,7 @@ export default function UserProfileScreen() {
 
         {/* Private Profile View */}
         <View style={styles.privateProfileContainer}>
-          <Image
-            source={{
-              uri: profile.avatar ||
-                `https://ui-avatars.com/api/?name=${profile.firstName}+${profile.lastName}&background=6366f1&color=fff&size=200`
-            }}
-            style={styles.privateAvatar}
-          />
+          <Avatar uri={profile.avatar || undefined} name={`${profile.firstName || ''} ${profile.lastName || ''}`.trim()} size="xl" />
           <View style={styles.privateUserInfo}>
             <Text style={[styles.privateName, { color: theme.colors.text }]}>
               {profile.firstName} {profile.lastName}
@@ -266,13 +261,7 @@ export default function UserProfileScreen() {
 
         {/* Profile Info */}
         <View style={styles.profileContainer}>
-          <Image
-            source={{
-              uri: profile.avatar ||
-                `https://ui-avatars.com/api/?name=${profile.firstName}+${profile.lastName}&background=6366f1&color=fff&size=200`
-            }}
-            style={styles.avatar}
-          />
+          <Avatar uri={profile.avatar || undefined} name={`${profile.firstName || ''} ${profile.lastName || ''}`.trim()} size="xl" />
 
           <View style={styles.userInfoContainer}>
             <View style={styles.nameContainer}>

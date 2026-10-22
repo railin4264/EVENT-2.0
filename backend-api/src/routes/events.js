@@ -11,7 +11,7 @@ const { buildCategoryFilterQuery } = require('../utils/categories');
 const { buildAgeRestrictionFilter, ageIsAllowed } = require('../utils/eventVisibility');
 const { parseEventListFilters, eventListConstraints, activeEventTimeFilter } = require('../utils/eventListFilters');
 const { hasEventParticipation, toggleSocialVote } = require('../services/eventSocialAccess');
-const { PROFILE_FIELDS, summarizeAttendance, safeAttendanceEntries } = require('../utils/attendanceSummary');
+const { PROFILE_FIELDS, publicProfile, summarizeAttendance, safeAttendanceEntries } = require('../utils/attendanceSummary');
 const { memoryUploadLimit, receiveMemoryImage, storeMemoryImage, findMemoryImage, openMemoryImage,
   deleteMemoryImage, serializeMemory } = require('../services/privateMemoryStorage');
 
@@ -1317,7 +1317,14 @@ router.get('/:id/solo-attendees', optionalAuth, async (req, res) => {
     if (['draft', 'pending_review'].includes(event.status) && !manager) return res.status(404).json({ success: false, message: 'Evento no encontrado' });
     if (event.isPrivate && !manager && !await hasEventParticipation(event, req.user?._id)) return res.status(403).json({ success: false, message: 'Este evento es privado' });
     if (!manager && !ageIsAllowed(event, req.user)) return res.status(403).json({ success: false, message: 'No cumples los requisitos de edad del evento' });
-    const soloMatches = (event.attendees || []).filter(a => a.isSolo && a.user);
+    // Only confirmed attendance from public profiles, once per person: the same rule as the faces list.
+    const seenSolo = new Set();
+    const soloMatches = (event.attendees || []).filter(a => {
+      const key = String(a.user?._id || '');
+      if (!a.isSolo || !key || seenSolo.has(key) || !['attending', 'confirmed'].includes(a.status) || !publicProfile(a.user)) return false;
+      seenSolo.add(key);
+      return true;
+    });
     const soloList = soloMatches.map(a => {
       const u = a.user || {};
       return {

@@ -598,7 +598,11 @@ eventSchema.pre('validate', function (next) {
     this.set('location', undefined);
   }
   const amount = this.price && this.price.amount ? this.price.amount : 0;
-  if (amount <= 0) {
+  // An imported listing with a ticket link but no published price is not free:
+  // its price is unknown and lives on the seller's page.
+  if (amount <= 0 && this.imported && this.ticketUrl) {
+    this.paymentMode = 'external';
+  } else if (amount <= 0) {
     this.paymentMode = 'free';
   } else if (this.paymentMode === 'free' || !this.paymentMode) {
     this.paymentMode = this.ticketUrl ? 'external' : 'onsite';

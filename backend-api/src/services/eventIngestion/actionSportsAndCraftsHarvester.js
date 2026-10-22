@@ -18,6 +18,7 @@ const { computeH3Hierarchy } = require('./h3SpatialIndexer');
 const { invalidateCache } = require('../../middleware/cache');
 const { getCategoryFallbackImage } = require('../../utils/imageFallbacks');
 const logger = require('../../utils/logger') || console;
+const { demoCatalogEnabled, DEMO_CATALOG_SKIP } = require('./demoCatalogGuard');
 
 const ACTION_CRAFTS_EVENTS = [
   // ==========================================
@@ -367,6 +368,7 @@ const ACTION_CRAFTS_EVENTS = [
  * Seeds and maintains action sports, motor, running, crafts & virtual events.
  */
 async function syncActionSportsAndCrafts({ dryRun = false } = {}) {
+  if (!demoCatalogEnabled()) return { ...DEMO_CATALOG_SKIP };
   try {
     let curator = await User.findOne({ username: 'eventnow_oficial' }) || await User.findOne({ role: 'admin' }) || await User.findOne();
     if (!curator) {

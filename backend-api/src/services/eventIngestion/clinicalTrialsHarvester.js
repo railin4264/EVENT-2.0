@@ -19,6 +19,7 @@ const { fetchSource } = require('./safeSourceFetch');
 const { computeH3Hierarchy } = require('./h3SpatialIndexer');
 const { invalidateCache } = require('../../middleware/cache');
 const logger = require('../../utils/logger') || console;
+const { demoCatalogEnabled, DEMO_CATALOG_SKIP } = require('./demoCatalogGuard');
 
 const TARGET_LOCATIONS = [
   { country: 'Dominican Republic', countryCode: 'DO', city: 'Santo Domingo', coords: [-69.9312, 18.4861] },
@@ -43,6 +44,7 @@ function sanitizeTitle(title) {
  * @returns {Promise<{ success: boolean, created: number, updated: number, total: number }>}
  */
 async function syncClinicalTrials({ dryRun = false } = {}) {
+  if (!demoCatalogEnabled()) return { ...DEMO_CATALOG_SKIP };
   try {
     let curator = await User.findOne({ username: 'eventnow_oficial' }) || await User.findOne({ role: 'admin' }) || await User.findOne();
     if (!curator) {

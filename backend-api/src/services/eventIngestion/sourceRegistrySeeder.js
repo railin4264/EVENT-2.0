@@ -9,6 +9,7 @@
 
 const Source = require('../../models/Source');
 const logger = require('../../utils/logger') || console;
+const { PUBLIC_AGENDAS } = require('./publicAgendaAdapters');
 
 const SEED_SOURCES = [
   {
@@ -207,9 +208,23 @@ const SEED_SOURCES = [
   }
 ];
 
+// Municipal open-data agendas with a ready adapter. They still start in evaluation:
+// an administrator reviews the licence in /admin/sources before anything is imported.
+const OPEN_DATA_SOURCES = Object.entries(PUBLIC_AGENDAS).map(([adapterType, agenda]) => ({
+  sourceId: agenda.sourceId || adapterType.replace(/_/g, '-'),
+  name: agenda.name,
+  domain: new URL(agenda.endpoint).hostname,
+  classification: 'D',
+  status: 'evaluating',
+  adapterType,
+  coverage: { country: agenda.country, cities: agenda.city ? [agenda.city] : [], languages: agenda.languages || [] },
+  accessConfig: { endpointUrl: agenda.endpoint, apiKeyRequired: false, documentationUrl: agenda.dataset, termsUrl: agenda.terms },
+  license: { licenseType: agenda.license || 'Datos abiertos municipales', attributionRequired: true, attributionText: 'Fuente: ' + agenda.name }
+}));
+
 async function seedSourceRegistry() {
   let seeded = 0;
-  for (const src of SEED_SOURCES) {
+  for (const src of [...SEED_SOURCES, ...OPEN_DATA_SOURCES]) {
     try {
       await Source.findOneAndUpdate(
         { sourceId: src.sourceId },
@@ -227,5 +242,6 @@ async function seedSourceRegistry() {
 
 module.exports = {
   SEED_SOURCES,
+  OPEN_DATA_SOURCES,
   seedSourceRegistry
 };
