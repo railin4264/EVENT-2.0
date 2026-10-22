@@ -77,7 +77,7 @@ function normalizeAgendaRow(row, url, source) {
       venue: row.venue || row.location?.venue, city: row.city || row.location?.city,
       country: row.country || row.location?.country },
     price: { amount: Number.isFinite(amount) ? amount : 0, currency },
-    images: row.image ? [{ url: row.image }] : [], externalUrl: row.url,
+    images: row.image ? [{ url: row.image }] : [{ url: require('../../utils/imageFallbacks').getCategoryFallbackImage({ category: row.category, tags: row.tags, title: row.title }) }], externalUrl: row.url,
     ticketUrl: row.ticketUrl,
     organizer: row.organizer
   });

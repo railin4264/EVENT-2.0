@@ -406,7 +406,42 @@ export default function DiscoveryPage() {
             onClick={() => setSearchQuery(searchQuery === 'universidad' ? '' : 'universidad')}
             className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'universidad' ? 'border-amber-400 bg-amber-500/25 text-amber-100 shadow-sm shadow-amber-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-amber-500/40 hover:text-white')}
           >
-            🎓 Universidades del Mundo
+            🎓 Universidades
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'monstertruck' ? '' : 'monstertruck')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'monstertruck' ? 'border-red-400 bg-red-500/25 text-red-100 shadow-sm shadow-red-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-red-500/40 hover:text-white')}
+          >
+            🏎️ Monster Trucks & Motor
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'jetski' ? '' : 'jetski')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'jetski' ? 'border-cyan-400 bg-cyan-500/25 text-cyan-100 shadow-sm shadow-cyan-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-cyan-500/40 hover:text-white')}
+          >
+            🌊 Jet Ski & Acuáticos
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'running' ? '' : 'running')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'running' ? 'border-lime-400 bg-lime-500/25 text-lime-100 shadow-sm shadow-lime-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-lime-500/40 hover:text-white')}
+          >
+            🏃 Running en el Parque
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'ciclismo' ? '' : 'ciclismo')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'ciclismo' ? 'border-emerald-400 bg-emerald-500/25 text-emerald-100 shadow-sm shadow-emerald-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-emerald-500/40 hover:text-white')}
+          >
+            🚴 Ciclismo & Bici
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'workshop' ? '' : 'workshop')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'workshop' ? 'border-orange-400 bg-orange-500/25 text-orange-100 shadow-sm shadow-orange-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-orange-500/40 hover:text-white')}
+          >
+            🛠️ Talleres & Oficios
           </button>
         </div>
 

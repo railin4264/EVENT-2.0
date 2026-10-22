@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Calendar, MapPin, Users, Ticket, Heart, Share, Bookmark } from 'lucide-react'
 import type { Event } from '@/types/api.types'
+import { getImageUrl } from '@/lib/utils'
 
 interface ModernEventCardProps {
   event: Event & { distance?: number }
@@ -55,24 +56,13 @@ export default function ModernEventCard({ event, onClick, categoryColor }: Moder
     >
       {/* Image Section */}
       <div className="relative h-56 overflow-hidden bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-800">
-        {event.images && event.images.length > 0 ? (
-          <>
-            <img
-              src={typeof event.images[0] === 'string' ? event.images[0] : event.images[0].url}
-              alt={event.title}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-            />
-            {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-          </>
-        ) : (
-          <div
-            className="w-full h-full transition-all duration-500 group-hover:scale-110"
-            style={{
-              background: `linear-gradient(135deg, ${categoryColor}dd 0%, ${categoryColor}aa 100%)`
-            }}
-          />
-        )}
+        <img
+          src={getImageUrl(event.images?.[0]?.url || (typeof event.images?.[0] === 'string' ? event.images[0] : null), event.category, event.title)}
+          alt={event.title}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+        />
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
         {/* Date Badge */}
         <motion.div

@@ -44,20 +44,14 @@ export function EventCard({
       {/* Image Section */}
       <Link href={`/events/${event._id}`}>
         <div className="relative aspect-[16/9] overflow-hidden bg-black/20">
-          {event.images && event.images.length > 0 && !imgError ? (
-            <Image
-              src={getImageUrl(event.images[0].url)}
-              alt={event.title}
-              fill
-              onError={() => setImgError(true)}
-              className="object-cover transition-transform duration-300 group-hover:scale-110"
-              sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/40 to-secondary/40 backdrop-blur-md">
-              <Calendar className="h-16 w-16 text-white/50 drop-shadow-lg" />
-            </div>
-          )}
+          <Image
+            src={imgError ? getImageUrl(null, event.category, event.title) : getImageUrl(event.images?.[0]?.url, event.category, event.title)}
+            alt={event.title}
+            fill
+            onError={() => setImgError(true)}
+            className="object-cover transition-transform duration-300 group-hover:scale-110"
+            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+          />
 
           {/* Category Badge */}
           <div className="absolute top-3 left-3 flex flex-col gap-2">

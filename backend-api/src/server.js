@@ -144,6 +144,8 @@ const startServer = async () => {
         await syncAstronomyEvents();
         const { syncSpecializedGlobalEvents } = require('./services/eventIngestion/sciFiMysteryGreenHarvester');
         await syncSpecializedGlobalEvents();
+        const { syncActionSportsAndCrafts } = require('./services/eventIngestion/actionSportsAndCraftsHarvester');
+        await syncActionSportsAndCrafts();
       } catch (planetErr) {
         logger.warn('Seed planetary ecosystem skipped/error: ' + planetErr.message);
       }

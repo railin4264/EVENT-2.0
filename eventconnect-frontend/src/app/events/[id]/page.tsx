@@ -461,17 +461,12 @@ export default function EventDetailPage() {
     <div className="min-h-screen bg-transparent pb-24">
       {/* Hero Section */}
       <div className="relative min-h-[60svh] lg:min-h-[70svh] bg-gradient-to-br from-primary/30 to-secondary/30">
-        {event.images && event.images.length > 0 && (
-          <>
-            <img
-              src={getImageUrl(event.images[0])}
-              onError={(e) => { e.currentTarget.style.display = "none" }}
-              alt={event.title}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10"></div>
-          </>
-        )}
+        <img
+          src={getImageUrl(event.images?.[0], event.category, event.title)}
+          alt={event.title}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10"></div>
 
         <div className="relative flex min-h-[60svh] items-end pt-8 lg:min-h-[70svh]">
           <div className="container-padding w-full">

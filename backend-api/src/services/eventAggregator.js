@@ -240,6 +240,10 @@ function toEventDoc(item) {
     status: 'pending_review'
   };
   if (doc.ticketUrl && !/^https?:\/\//i.test(doc.ticketUrl)) delete doc.ticketUrl;
+  if (!doc.images || doc.images.length === 0) {
+    const { getCategoryFallbackImage } = require('../utils/imageFallbacks');
+    doc.images = [{ url: getCategoryFallbackImage({ category: doc.category, tags: doc.tags, title: doc.title, isVirtual: doc.isVirtual }), caption: doc.title }];
+  }
   if (typeof item.timeZone === 'string') {
     try {
       new Intl.DateTimeFormat('en', { timeZone: item.timeZone }).format();
