@@ -142,6 +142,8 @@ const startServer = async () => {
         await syncCivicPoliticalAgendas();
         const { syncAstronomyEvents } = require('./services/eventIngestion/astronomyEventsHarvester');
         await syncAstronomyEvents();
+        const { syncSpecializedGlobalEvents } = require('./services/eventIngestion/sciFiMysteryGreenHarvester');
+        await syncSpecializedGlobalEvents();
       } catch (planetErr) {
         logger.warn('Seed planetary ecosystem skipped/error: ' + planetErr.message);
       }

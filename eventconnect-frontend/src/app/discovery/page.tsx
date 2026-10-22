@@ -370,6 +370,46 @@ export default function DiscoveryPage() {
           </button>
         </div>
 
+        {/* Global Topics & Fascination Trends Rail (Sci-Fi, Ghosts, UFOs, Clean Energy, Universities) */}
+        <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Temas del radar mundial">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-purple-300">Temas:</span>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'scifi' ? '' : 'scifi')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'scifi' ? 'border-purple-400 bg-purple-500/25 text-purple-100 shadow-sm shadow-purple-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-purple-500/40 hover:text-white')}
+          >
+            🚀 Sci-Fi & Cyberpunk
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'misterio' ? '' : 'misterio')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'misterio' ? 'border-indigo-400 bg-indigo-500/25 text-indigo-100 shadow-sm shadow-indigo-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-indigo-500/40 hover:text-white')}
+          >
+            👻 Fantasmas & Leyendas
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'ovni' ? '' : 'ovni')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'ovni' ? 'border-teal-400 bg-teal-500/25 text-teal-100 shadow-sm shadow-teal-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-teal-500/40 hover:text-white')}
+          >
+            🛸 OVNIs & Astrobiología
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'energialimpia' ? '' : 'energialimpia')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'energialimpia' ? 'border-emerald-400 bg-emerald-500/25 text-emerald-100 shadow-sm shadow-emerald-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-emerald-500/40 hover:text-white')}
+          >
+            ⚡ Energía Limpia & Planeta
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'universidad' ? '' : 'universidad')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'universidad' ? 'border-amber-400 bg-amber-500/25 text-amber-100 shadow-sm shadow-amber-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-amber-500/40 hover:text-white')}
+          >
+            🎓 Universidades del Mundo
+          </button>
+        </div>
+
         {/* Global & Regional Quick-Jump Hotspots Rail */}
         <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Zonas rápidas del radar">
           <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{hubsLabel}</span>

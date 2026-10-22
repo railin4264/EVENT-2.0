@@ -218,6 +218,234 @@ const UNIVERSITY_EVENTS = [
     externalUrl: 'https://derecho.uba.ar',
     imageUrl: 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=1200&q=80',
     activityType: 'charla abierta'
+  },
+
+  // ==========================================
+  // REINO UNIDO (UK)
+  // ==========================================
+  {
+    sourceId: 'univ:oxford-sheldonian-global-ethics',
+    title: '🏛️ Oxford Sheldonian Colloquium: Global Ethics & Future Technologies',
+    description: 'Encuentro académico abierto en el histórico Sheldonian Theatre de la Universidad de Oxford. Conferencias magistrales sobre gobernanza de IA, bioética e impacto social de la automatización.',
+    category: 'education',
+    tags: ['oxford', 'university', 'ethics', 'ai', 'academico', 'reinounido'],
+    daysFromNow: 8,
+    time: '17:00',
+    durationHours: 3.5,
+    venue: 'Sheldonian Theatre (University of Oxford)',
+    address: 'Broad St, Oxford OX1 3AZ',
+    city: 'Oxford',
+    country: 'Reino Unido',
+    countryCode: 'GB',
+    coordinates: [-1.2555, 51.7538],
+    price: { amount: 0, currency: 'GBP' },
+    externalUrl: 'https://ox.ac.uk',
+    imageUrl: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1200&q=80',
+    activityType: 'charla abierta'
+  },
+  {
+    sourceId: 'univ:cambridge-cavendish-quantum-symposium',
+    title: '🔬 Cambridge Cavendish Open Symposium: Quantum Computing Frontiers',
+    description: 'El célebre Cavendish Laboratory de la Universidad de Cambridge abre su simposio anual para estudiantes e investigadores. Presentación de avances en computación cuántica, nuevos materiales y superconductividad.',
+    category: 'science',
+    tags: ['cambridge', 'quantum', 'physics', 'science', 'uk', 'free'],
+    daysFromNow: 11,
+    time: '14:00',
+    durationHours: 4,
+    venue: 'Cavendish Laboratory (University of Cambridge)',
+    address: 'JJ Thomson Ave, Cambridge CB3 0HE',
+    city: 'Cambridge',
+    country: 'Reino Unido',
+    countryCode: 'GB',
+    coordinates: [0.0917, 52.2091],
+    price: { amount: 0, currency: 'GBP' },
+    externalUrl: 'https://cam.ac.uk',
+    imageUrl: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?w=1200&q=80',
+    activityType: 'laboratorio abierto'
+  },
+
+  // ==========================================
+  // FRANCIA (FR)
+  // ==========================================
+  {
+    sourceId: 'univ:sorbonne-grand-amphi-philosophie',
+    title: '🎓 Grande Conférence de la Sorbonne: Littérature et Sciences Humaines',
+    description: 'Dans le prestigieux Grand Amphithéâtre de la Sorbonne à Paris. Débat public sur les nouvelles perspectives de la philosophie contemporaine, des humanités numériques et de la création littéraire.',
+    category: 'education',
+    tags: ['sorbonne', 'paris', 'france', 'philosophie', 'conference', 'gratuit'],
+    daysFromNow: 9,
+    time: '18:30',
+    durationHours: 3,
+    venue: 'Grand Amphithéâtre de la Sorbonne',
+    address: '47 Rue des Écoles, 5e arrondissement',
+    city: 'París',
+    country: 'Francia',
+    countryCode: 'FR',
+    coordinates: [2.3429, 48.8485],
+    price: { amount: 0, currency: 'EUR' },
+    externalUrl: 'https://sorbonne-universite.fr',
+    imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200&q=80',
+    activityType: 'charla abierta'
+  },
+
+  // ==========================================
+  // ESTADOS UNIDOS ADICIONALES (HARVARD, STANFORD, COLUMBIA)
+  // ==========================================
+  {
+    sourceId: 'univ:harvard-sanders-theatre-science-symposium',
+    title: '🧬 Harvard Sanders Theatre Public Lecture: Genomic Medicine & Bioethics',
+    description: 'Conferencia magistral pública en Sanders Theatre en Cambridge. Científicos de Harvard Medical School y el Broad Institute debaten sobre medicina personalizada, edición génica CRISPR y salud global.',
+    category: 'science',
+    tags: ['harvard', 'cambridge', 'boston', 'science', 'genomics', 'free'],
+    daysFromNow: 6,
+    time: '16:00',
+    durationHours: 3,
+    venue: 'Sanders Theatre / Harvard Science Center',
+    address: '45 Quincy St, Cambridge, MA',
+    city: 'Cambridge',
+    country: 'Estados Unidos',
+    countryCode: 'US',
+    coordinates: [-71.1154, 42.3758],
+    price: { amount: 0, currency: 'USD' },
+    externalUrl: 'https://harvard.edu',
+    imageUrl: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=1200&q=80',
+    activityType: 'charla abierta'
+  },
+  {
+    sourceId: 'univ:stanford-silicon-valley-ai-summit',
+    title: '💻 Stanford AI & Human-Centered Computing Summit',
+    description: 'En el corazón de Silicon Valley. Stanford Institute for Human-Centered AI (HAI) convoca a investigadores, fundadores de startups y estudiantes para discutir modelos abiertos y robótica colaborativa.',
+    category: 'technology',
+    tags: ['stanford', 'siliconvalley', 'ai', 'tech', 'california', 'startups'],
+    daysFromNow: 13,
+    time: '10:00',
+    durationHours: 6,
+    venue: 'Memorial Auditorium - Stanford University',
+    address: '551 Jane Stanford Way, Stanford, CA',
+    city: 'Stanford',
+    country: 'Estados Unidos',
+    countryCode: 'US',
+    coordinates: [-122.1697, 37.4275],
+    price: { amount: 0, currency: 'USD' },
+    externalUrl: 'https://stanford.edu',
+    imageUrl: 'https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200&q=80',
+    activityType: 'hackathon'
+  },
+  {
+    sourceId: 'univ:columbia-low-library-climate-forum',
+    title: '🌍 Columbia Climate School Global Forum: Sustainable Urban Energy',
+    description: 'Columbia University en Manhattan. Encuentro de la Escuela del Clima con urbanistas y líderes climáticos internacionales sobre resiliencia urbana, energía solar comunitaria y reducción de emisiones.',
+    category: 'science',
+    tags: ['columbia', 'nyc', 'climate', 'energy', 'newyork', 'sustainability'],
+    daysFromNow: 7,
+    time: '15:00',
+    durationHours: 3.5,
+    venue: 'Low Memorial Library - Columbia University',
+    address: '535 W 116th St, Manhattan, NY',
+    city: 'New York',
+    country: 'Estados Unidos',
+    countryCode: 'US',
+    coordinates: [-73.9626, 40.8075],
+    price: { amount: 0, currency: 'USD' },
+    externalUrl: 'https://columbia.edu',
+    imageUrl: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?w=1200&q=80',
+    activityType: 'charla abierta'
+  },
+
+  // ==========================================
+  // COLOMBIA (CO)
+  // ==========================================
+  {
+    sourceId: 'univ:uniandes-bogota-cumbre-emprendimiento-social',
+    title: '💡 Cumbre de Emprendimiento Social & Sostenibilidad: UniAndes',
+    description: 'Auditorio Mario Laserna de la Universidad de los Andes en Bogotá. Presentación de modelos de negocio con impacto ecológico, microcréditos rurales y tecnologías limpias creadas por universitarios.',
+    category: 'business',
+    tags: ['uniandes', 'bogota', 'emprendimiento', 'sostenibilidad', 'colombia'],
+    daysFromNow: 9,
+    time: '14:00',
+    durationHours: 5,
+    venue: 'Auditorio Mario Laserna (Universidad de los Andes)',
+    address: 'Carrera 1 Este # 19A-40, La Candelaria',
+    city: 'Bogotá',
+    country: 'Colombia',
+    countryCode: 'CO',
+    coordinates: [-74.0664, 4.6018],
+    price: { amount: 0, currency: 'COP' },
+    externalUrl: 'https://uniandes.edu.co',
+    imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200&q=80',
+    activityType: 'feria de emprendedores'
+  },
+
+  // ==========================================
+  // CHILE (CL)
+  // ==========================================
+  {
+    sourceId: 'univ:uchile-casa-central-foro-ciencia',
+    title: '🔭 Encuentro Abierto de Astronomía & Ciencias de la Tierra: Casa Central UChile',
+    description: 'La Universidad de Chile invita a la ciudadanía a su Casa Central en la Alameda de Santiago. Catedráticos del Departamento de Astronomía (DAS) y sismología comparten investigaciones recientes.',
+    category: 'science',
+    tags: ['uchile', 'santiago', 'astronomia', 'chile', 'ciencia', 'gratis'],
+    daysFromNow: 10,
+    time: '18:00',
+    durationHours: 3,
+    venue: 'Casa Central de la Universidad de Chile',
+    address: 'Av. Libertador Bernardo O Higgins 1058, Santiago Centro',
+    city: 'Santiago',
+    country: 'Chile',
+    countryCode: 'CL',
+    coordinates: [-70.6517, -33.4442],
+    price: { amount: 0, currency: 'CLP' },
+    externalUrl: 'https://uchile.cl',
+    imageUrl: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?w=1200&q=80',
+    activityType: 'charla abierta'
+  },
+
+  // ==========================================
+  // BRASIL (BR)
+  // ==========================================
+  {
+    sourceId: 'univ:usp-sp-hackathon-sustentabilidade',
+    title: '🌿 Maratona de Inovação em Bioeconomia & Energia Limpa: Poli USP',
+    description: 'Escola Politécnica da USP em São Paulo. Estudantes e desenvolvedores criam soluções em software e hardware para monitoramento ambiental da Amazônia e transição para energias renováveis.',
+    category: 'technology',
+    tags: ['usp', 'saopaulo', 'brasil', 'hackathon', 'energia', 'sustentabilidade'],
+    daysFromNow: 12,
+    time: '09:00',
+    durationHours: 8,
+    venue: 'Escola Politécnica da USP (Cidade Universitária)',
+    address: 'Av. Prof. Luciano Gualberto 380, Butantã',
+    city: 'São Paulo',
+    country: 'Brasil',
+    countryCode: 'BR',
+    coordinates: [-46.7317, -23.5558],
+    price: { amount: 0, currency: 'BRL' },
+    externalUrl: 'https://usp.br',
+    imageUrl: 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1200&q=80',
+    activityType: 'hackathon'
+  },
+
+  // ==========================================
+  // JAPÓN (JP)
+  // ==========================================
+  {
+    sourceId: 'univ:todai-yasuda-auditorium-robotics',
+    title: '🤖 University of Tokyo Robotics & Frontiers Symposium: Yasuda Auditorium',
+    description: 'En el emblemático Yasuda Auditorium en el Campus Hongo de Todai. Demostraciones de androides, inteligencia robótica y biomateriales presentadas por los principales laboratorios de Tokio.',
+    category: 'technology',
+    tags: ['todai', 'tokyo', 'robotics', 'japan', 'technology', 'symposium'],
+    daysFromNow: 14,
+    time: '13:30',
+    durationHours: 4.5,
+    venue: 'Yasuda Auditorium - Hongo Campus Todai',
+    address: '7-3-1 Hongo, Bunkyo-ku',
+    city: 'Tokio',
+    country: 'Japón',
+    countryCode: 'JP',
+    coordinates: [139.7619, 35.7128],
+    price: { amount: 0, currency: 'JPY' },
+    externalUrl: 'https://u-tokyo.ac.jp',
+    imageUrl: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=80',
+    activityType: 'laboratorio abierto'
   }
 ];
 
