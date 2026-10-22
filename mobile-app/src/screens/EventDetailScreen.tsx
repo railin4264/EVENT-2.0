@@ -28,6 +28,7 @@ import OrganizerTransfersModal from '@/components/events/OrganizerTransfersModal
 import OrganizerPromotersModal from '@/components/events/OrganizerPromotersModal';
 import { canRsvp, canScanAdmissions } from '@/utils/admission';
 import { eventParam } from '@/utils/eventAuthReturn';
+import { getMobileImageUrl } from '@/utils/imageFallbacks';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button, Card, Badge, Avatar } from '@/components/ui';
@@ -208,13 +209,14 @@ export default function EventDetailScreen() {
   }
 
   // ── Derived values ──────────────────────────
-  const coverImage =
+  const rawCover =
     (event as any).coverImage ||
     (Array.isArray(event.images) && event.images.length > 0
       ? (typeof event.images[0] === 'string' ? event.images[0] : (event.images[0] as any)?.url)
       : undefined) ||
     (event as any).image ||
     null;
+  const coverImage = getMobileImageUrl(rawCover, event.category, event.title, (event as any).activityType);
 
   const eventDate = new Date(event.date);
   const isEventPast = !canRsvp(event);

@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import Animated, { FadeInRight } from 'react-native-reanimated';
 import { homeStyles } from '@/styles/homeStyles';
+import { getMobileImageUrl } from '@/utils/imageFallbacks';
 
 // Types
 interface NearbyEventLocation {
@@ -59,7 +60,7 @@ const NearbyEventCard = memo<{
     >
       {/* Event Image */}
       <Image
-        source={{ uri: event.coverImage }}
+        source={{ uri: getMobileImageUrl(event.coverImage, (event as any).category, event.title) }}
         style={homeStyles.nearbyImage}
         resizeMode="cover"
       />

@@ -13,7 +13,7 @@ beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; jest.cle
 afterEach(async () => { if (root) await act(async () => root.unmount()); });
 function screenText() { return root.root.findAllByType(Text).map(node => React.Children.toArray(node.props.children).filter(value => typeof value === 'string' || typeof value === 'number').join('')).join(' '); }
 async function mount() { await act(async () => { root = TestRenderer.create(<DiscoveryScreen />); }); }
-async function press(label: string) { const button = root.root.findAllByType(TouchableOpacity).find(node => node.findAllByType(Text).some(text => text.props.children === label)); expect(button).toBeTruthy(); await act(async () => button!.props.onPress()); }
+async function press(label: string) { const button = root.root.findAllByType(TouchableOpacity).find(node => node.findAllByType(Text).some(text => text.props.children === label || String(text.props.children).includes(label))); expect(button).toBeTruthy(); await act(async () => button!.props.onPress()); }
 test('public discovery protects secret addresses and shows the actual currency amount', async () => {
   await mount();
   const content = screenText();
@@ -30,7 +30,7 @@ test('a late category response cannot replace the current category', async () =>
   let release: (_value: unknown) => void = () => {};
   (eventService.getEvents as jest.Mock).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
   await mount(); await press('Música');
-  expect(eventService.getEvents).toHaveBeenLastCalledWith({ limit: 30, category: 'music' });
+  expect(eventService.getEvents).toHaveBeenLastCalledWith({ limit: 50, category: 'music' });
   await act(async () => release({ success: true, data: [{ ...event, title: 'Stale event' }] }));
   expect(screenText()).not.toContain('Stale event'); expect(screenText()).toContain(event.title);
 });

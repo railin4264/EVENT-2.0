@@ -21,6 +21,7 @@ import * as Haptics from 'expo-haptics';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { homeStyles } from '@/styles/homeStyles';
+import { getMobileImageUrl } from '@/utils/imageFallbacks';
 
 // Types
 interface EventOrganizer {
@@ -170,7 +171,7 @@ export const FeaturedCard: React.FC<FeaturedCardProps> = ({
     >
       {/* Event Image with Gradient Overlay */}
       <ImageBackground
-        source={{ uri: event.coverImage }}
+        source={{ uri: getMobileImageUrl(event.coverImage, event.category, event.title) }}
         style={homeStyles.cardImage}
         imageStyle={homeStyles.cardImageStyle}
         resizeMode="cover"
