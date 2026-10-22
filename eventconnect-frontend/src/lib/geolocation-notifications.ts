@@ -22,6 +22,7 @@ interface NearbyEvent {
 
 class GeolocationNotificationService {
   private watchId: number | null = null
+  private generation = 0
   private lastNotificationCheck: Date | null = null
   private notifiedEvents: Set<string> = new Set()
   private config: LocationNotificationConfig = {
@@ -40,21 +41,20 @@ class GeolocationNotificationService {
       return false
     }
 
-    // Request notification permission
-    if ('Notification' in window && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') {
-        console.warn('Notification permission denied')
-        return false
-      }
-    }
+    const generation = this.generation
+    if (!('Notification' in window) || Notification.permission !== 'granted') return false
+    try {
+      if (!navigator.permissions || (await navigator.permissions.query({ name: 'geolocation' })).state !== 'granted') return false
+    } catch { return false }
+    if (generation !== this.generation) return false
 
     // Update config
     if (config) {
       this.config = { ...this.config, ...config }
     }
 
-    // Start watching position
+    if (!this.config.enabled) return false
+    // Both permissions already exist; this does not request a new one.
     this.startWatching()
 
     // Load previously notified events from localStorage
@@ -81,7 +81,7 @@ class GeolocationNotificationService {
         this.onLocationUpdate(position.coords.latitude, position.coords.longitude)
       },
       (error) => {
-        console.warn('Geolocation watch error:', error.message)
+        if (error.code === 1) this.stopWatching()
       },
       {
         enableHighAccuracy: false, // Don't drain battery
@@ -95,6 +95,8 @@ class GeolocationNotificationService {
    * Stop watching user position
    */
   stopWatching(): void {
+    this.generation++
+    this.config.enabled = false
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId)
       this.watchId = null
@@ -127,7 +129,7 @@ class GeolocationNotificationService {
         limit: 20
       })
 
-      if (!response.success || !response.data) return
+      if (!this.config.enabled || !response.success || !response.data) return
 
       const nearbyEvents = response.data
         .filter(event => {
@@ -248,7 +250,7 @@ class GeolocationNotificationService {
 
     if (config.enabled !== undefined) {
       if (config.enabled) {
-        this.startWatching()
+        void this.initialize(this.config)
       } else {
         this.stopWatching()
       }

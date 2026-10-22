@@ -16,215 +16,149 @@ interface ConsoleError {
 }
 
 interface NetworkError {
+  message: string
   url: string
   method: string
   status: number
   statusText: string
-  response?: any
   timestamp: number
 }
 
-// Throttling to prevent excessive requests
 const errorThrottle = new Map<string, number>()
-const THROTTLE_WINDOW = 30000 // 30 seconds
-const MAX_ERRORS_PER_WINDOW = 5
 
-// Función para enviar errores al backend con throttling
-const sendErrorToBackend = async (type: 'console' | 'network', data: any) => {
-  // Use centralized configuration to check if should report
-  if (!shouldReportError(data.message, data.url)) {
-    return
-  }
-
+const safeText = (value: unknown, fallback = 'Unknown error'): string => {
   try {
-    // Create a throttle key based on error type and message
-    const throttleKey = `${type}-${data.message?.substring(0, 50) || 'unknown'}`
-    const now = Date.now()
-    const lastSent = errorThrottle.get(throttleKey) || 0
-
-    // Use config values for throttling
-    if (now - lastSent < ERROR_REPORTING_CONFIG.throttleWindow) {
-      return // Skip this error
-    }
-
-    // Check total errors sent in the last window
-    const recentErrors = Array.from(errorThrottle.values()).filter(
-      timestamp => now - timestamp < ERROR_REPORTING_CONFIG.throttleWindow
-    )
-
-    if (recentErrors.length >= ERROR_REPORTING_CONFIG.maxErrorsPerWindow) {
-      return // Too many errors, skip
-    }
-
-    errorThrottle.set(throttleKey, now)
-
-    // Clean up old entries
-    const entriesToDelete: string[] = []
-    errorThrottle.forEach((timestamp, key) => {
-      if (now - timestamp > ERROR_REPORTING_CONFIG.throttleWindow * 2) {
-        entriesToDelete.push(key)
-      }
-    })
-    entriesToDelete.forEach(key => errorThrottle.delete(key))
-
-    await fetch(`${API_BASE_URL}/debug/${type === 'console' ? 'console-errors' : 'network-errors'}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
-    })
-  } catch (error) {
-    // Silently fail to prevent infinite loops
-  }
+    if (value == null) return fallback
+    if (value instanceof Error) return value.message || value.name || fallback
+    return String(value) || fallback
+  } catch { return fallback }
 }
 
-export const useConsoleErrorReporter = (enabled: boolean = true) => {
+const consoleArgument = (value: unknown): string => {
+  if (value instanceof Error) return safeText(value)
+  if (typeof value !== 'object' || value === null) return safeText(value, String(value == null ? value : 'Unknown value'))
+  try {
+    const seen = new WeakSet<object>()
+    return JSON.stringify(value, (_key, part) => {
+      if (typeof part === 'bigint') return String(part)
+      if (part && typeof part === 'object') {
+        if (seen.has(part)) return '[Circular]'
+        seen.add(part)
+      }
+      return part
+    }) || safeText(value)
+  } catch { return safeText(value, '[Unserializable]') }
+}
+
+// Reports need endpoint metadata, never query credentials, request bodies or response bodies.
+const reportUrl = (input: unknown): string => {
+  try {
+    let value = input
+    if (input && typeof input === 'object') {
+      const request = input as { url?: unknown; href?: unknown }
+      value = typeof request.url === 'string' ? request.url : typeof request.href === 'string' ? request.href : input
+    }
+    const url = new URL(safeText(value, ''), window.location.href)
+    url.search = ''; url.hash = ''; url.username = ''; url.password = ''
+    return url.href
+  } catch { return '' }
+}
+
+const requestMetadata = (args: Parameters<typeof fetch>) => {
+  const input = args[0]
+  const method = args[1]?.method || (input && typeof input === 'object' && 'method' in input ? input.method : 'GET')
+  return { url: reportUrl(input), method: safeText(method, 'GET').toUpperCase() }
+}
+
+const sendErrorToBackend = async (type: 'console' | 'network', data: ConsoleError | NetworkError, transport: typeof fetch) => {
+  try {
+    // Configuration, filtering, serialization and transport are all best-effort.
+    if (typeof transport !== 'function' || !shouldReportError(data.message, data.url)) return
+    const now = Date.now()
+    const key = `${type}-${data.message.substring(0, 50)}`
+    const last = errorThrottle.get(key)
+    if (last !== undefined && now - last < ERROR_REPORTING_CONFIG.throttleWindow) return
+    const recent = Array.from(errorThrottle.values()).filter(time => now - time < ERROR_REPORTING_CONFIG.throttleWindow)
+    if (recent.length >= ERROR_REPORTING_CONFIG.maxErrorsPerWindow) return
+    errorThrottle.set(key, now)
+    errorThrottle.forEach((time, oldKey) => {
+      if (now - time > ERROR_REPORTING_CONFIG.throttleWindow * 2) errorThrottle.delete(oldKey)
+    })
+    await transport.call(window, `${API_BASE_URL}/debug/${type === 'console' ? 'console-errors' : 'network-errors'}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    })
+  } catch { /* Telemetry must never change application behavior or recursively log itself. */ }
+}
+
+export const useConsoleErrorReporter = (enabled = true) => {
   useEffect(() => {
-    if (typeof window === 'undefined' || !enabled) return
-
-    // Capturar errores de JavaScript
-    const handleError = (event: ErrorEvent) => {
-      const errorData: ConsoleError = {
-        level: 'error',
-        message: event.message,
-        url: event.filename || window.location.href,
-        line: event.lineno,
-        column: event.colno,
-        error: event.error?.stack || event.error?.toString(),
-        timestamp: Date.now(),
-        userAgent: navigator.userAgent
-      }
-
-      sendErrorToBackend('console', errorData)
-    }
-
-    // Capturar rechazos de promesas no manejados
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const errorData: ConsoleError = {
-        level: 'error',
-        message: `Unhandled Promise Rejection: ${event.reason}`,
-        url: window.location.href,
-        error: event.reason?.stack || event.reason?.toString(),
-        timestamp: Date.now(),
-        userAgent: navigator.userAgent
-      }
-
-      sendErrorToBackend('console', errorData)
-    }
-
-    // Interceptar console.error para capturar errores de React y otros
-    const originalConsoleError = console.error
-    const originalConsoleWarn = console.warn
-
-    console.error = (...args: any[]) => {
-      const message = args.map(arg =>
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ')
-
-      const errorData: ConsoleError = {
-        level: 'error',
-        message,
-        url: window.location.href,
-        timestamp: Date.now(),
-        userAgent: navigator.userAgent
-      }
-
-      sendErrorToBackend('console', errorData)
-
-      originalConsoleError.apply(console, args)
-    }
-
-    console.warn = (...args: any[]) => {
-      const message = args.map(arg =>
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ')
-
-      const errorData: ConsoleError = {
-        level: 'warn',
-        message,
-        url: window.location.href,
-        timestamp: Date.now(),
-        userAgent: navigator.userAgent
-      }
-
-      sendErrorToBackend('console', errorData)
-
-      originalConsoleWarn.apply(console, args)
-    }
-
-    // Interceptar fetch para capturar errores de red
+    if (typeof window === 'undefined' || !enabled || !ERROR_REPORTING_CONFIG.enabled) return
     const originalFetch = window.fetch
-    window.fetch = async (...args: Parameters<typeof fetch>) => {
+    const originalError = console.error
+    const originalWarn = console.warn
+
+    const capture = (level: ConsoleError['level'], message: string, extra: Partial<ConsoleError> = {}) => {
       try {
-        const response = await originalFetch(...args)
-
-        // Reportar errores HTTP (4xx, 5xx) but filter debug endpoints
-        if (!response.ok) {
-          const url = args[0] as string
-
-          // Don't report errors from debug endpoints to prevent infinite loops
-          if (url.includes('/debug/') || url.includes('console-errors') || url.includes('network-errors')) {
-            return response
-          }
-
-          // Don't report common 404s or 401s that are expected
-          if (response.status === 404 || response.status === 401) {
-            return response
-          }
-
-          const networkError: NetworkError = {
-            url,
-            method: (args[1]?.method || 'GET').toUpperCase(),
-            status: response.status,
-            statusText: response.statusText,
-            timestamp: Date.now()
-          }
-
-          try {
-            const responseText = await response.clone().text()
-            networkError.response = responseText
-          } catch (e) {
-            // No problem if we can't read the response
-          }
-
-          sendErrorToBackend('network', networkError)
-        }
-
-        return response
-      } catch (error) {
-        // Error de red (sin conexión, etc.)
-        const url = args[0] as string
-
-        // Don't report errors from debug endpoints
-        if (!url.includes('/debug/') && !url.includes('console-errors') && !url.includes('network-errors')) {
-          const networkError: NetworkError = {
-            url,
-            method: (args[1]?.method || 'GET').toUpperCase(),
-            status: 0,
-            statusText: 'Network Error',
-            response: error?.toString(),
-            timestamp: Date.now()
-          }
-
-          sendErrorToBackend('network', networkError)
-        }
-
+        void sendErrorToBackend('console', {
+          level, message: message.slice(0, 4000), url: reportUrl(window.location.href),
+          timestamp: Date.now(), userAgent: navigator.userAgent, ...extra
+        }, originalFetch)
+      } catch { /* Keep native logging usable even for unusual browser values. */ }
+    }
+    const handleError = (event: ErrorEvent) => {
+      try {
+        capture('error', safeText(event.message, 'Uncaught error'), {
+          url: reportUrl(event.filename || window.location.href), line: event.lineno, column: event.colno,
+          error: event.error?.stack ? safeText(event.error.stack).slice(0, 4000) : undefined
+        })
+      } catch { /* A browser error event can contain arbitrary values. */ }
+    }
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      try { capture('error', `Unhandled Promise Rejection: ${consoleArgument(event.reason)}`) }
+      catch { /* Preserve the browser's original rejection handling. */ }
+    }
+    const wrappedError: typeof console.error = (...args) => {
+      const result = originalError.apply(console, args)
+      try { capture('error', args.map(consoleArgument).join(' ') || 'Console error') } catch { /* Preserve console. */ }
+      return result
+    }
+    const wrappedWarn: typeof console.warn = (...args) => {
+      const result = originalWarn.apply(console, args)
+      try { capture('warn', args.map(consoleArgument).join(' ') || 'Console warning') } catch { /* Preserve console. */ }
+      return result
+    }
+    const reportNetwork = (args: Parameters<typeof fetch>, status: number, statusText: string) => {
+      try {
+        if (status === 401 || status === 404) return
+        void sendErrorToBackend('network', {
+          ...requestMetadata(args), status, statusText,
+          message: status ? `HTTP ${status}${statusText ? ` ${statusText}` : ''}` : 'Fetch failed', timestamp: Date.now()
+        }, originalFetch)
+      } catch { /* Metadata extraction must not replace a response or rejection. */ }
+    }
+    const wrappedFetch: typeof fetch = async (...args: Parameters<typeof fetch>) => {
+      let response: Response
+      try { response = await originalFetch.apply(window, args) }
+      catch (error) {
+        reportNetwork(args, 0, 'Fetch failed')
         throw error
       }
+      try { if (!response.ok) reportNetwork(args, response.status, safeText(response.statusText, '')) }
+      catch { /* Always return the exact response from the original transport. */ }
+      return response
     }
 
-    // Agregar event listeners
+    console.error = wrappedError
+    console.warn = wrappedWarn
+    if (typeof originalFetch === 'function') window.fetch = wrappedFetch
     window.addEventListener('error', handleError)
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
-
-    // Cleanup function
     return () => {
       window.removeEventListener('error', handleError)
       window.removeEventListener('unhandledrejection', handleUnhandledRejection)
-      console.error = originalConsoleError
-      console.warn = originalConsoleWarn
-      window.fetch = originalFetch
+      if (console.error === wrappedError) console.error = originalError
+      if (console.warn === wrappedWarn) console.warn = originalWarn
+      if (window.fetch === wrappedFetch) window.fetch = originalFetch
     }
   }, [enabled])
 }

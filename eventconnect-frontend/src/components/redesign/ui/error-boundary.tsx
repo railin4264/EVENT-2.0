@@ -1,7 +1,7 @@
 'use client'
 
 import { Component, ErrorInfo, ReactNode } from 'react'
-import { AlertTriangle, RefreshCw, Home, MessageCircle } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Home, Copy } from 'lucide-react'
 
 interface Props {
   children: ReactNode
@@ -11,6 +11,7 @@ interface State {
   hasError: boolean
   error?: Error
   errorInfo?: ErrorInfo
+  copyStatus?: string
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -46,18 +47,17 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.href = '/'
   }
 
-  handleReport = () => {
-    // In a real app, you would send this to your error reporting service
-    const errorReport = {
-      error: this.state.error?.toString(),
-      stack: this.state.error?.stack,
-      componentStack: this.state.errorInfo?.componentStack,
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-      timestamp: new Date().toISOString()
+  handleReport = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify({
+        error: this.state.error?.name || 'Error',
+        path: window.location.pathname,
+        timestamp: new Date().toISOString()
+      }, null, 2))
+      this.setState({ copyStatus: 'Diagnóstico copiado. Puedes compartirlo con soporte.' })
+    } catch {
+      this.setState({ copyStatus: 'No se pudo copiar. Indica a soporte qué página y botón estabas usando.' })
     }
-    
-    console.log('Error Report:', errorReport)
-    alert('Error reportado. Nuestro equipo será notificado.')
   }
 
   render() {
@@ -74,7 +74,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </h1>
             
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Ocurrió un error inesperado. Nuestro equipo ha sido notificado y estamos trabajando para solucionarlo.
+              No pudimos mostrar esta página. Puedes recargarla o volver al inicio para continuar.
             </p>
 
             {process.env.NODE_ENV === 'development' && (
@@ -110,11 +110,12 @@ export class ErrorBoundary extends Component<Props, State> {
                   onClick={this.handleReport}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
-                  <MessageCircle className="w-4 h-4" />
-                  Reportar
+                  <Copy className="w-4 h-4" />
+                  Copiar diagnóstico
                 </button>
               </div>
             </div>
+            {this.state.copyStatus && <p role="status" className="mt-4 text-sm text-gray-600 dark:text-gray-400">{this.state.copyStatus}</p>}
           </div>
         </div>
       )

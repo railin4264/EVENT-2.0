@@ -41,9 +41,9 @@ class SettingsService {
   }
 
   async updateSettings(userId: string, settings: Partial<UserSettings>): Promise<ApiResponse<UserSettings>> {
-    // Use /me/settings (token-based) so it works without relying on a client-side userId
+    // Use /users/me/settings (token-based) so it works without relying on a client-side userId
     const response = await apiClient.put<ApiResponse<UserSettings>>(
-      `/me/settings`,
+      `/users/me/settings`,
       settings
     )
     return response.data

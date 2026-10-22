@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { User, Camera, Image as ImageIcon } from 'lucide-react'
 import { apiClient } from '@/lib/api/client'
 import toast from 'react-hot-toast'
-import { CldImage } from 'next-cloudinary'
+import { useAuthStore } from '@/stores/authStore'
 import { getImageUrl } from '@/lib/utils'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -15,7 +15,7 @@ const profileSchema = z.object({
   firstName: z.string()
     .min(2, 'El nombre debe tener al menos 2 caracteres'),
   lastName: z.string()
-    .min(2, 'El apellido debe tener al menos 2 caracteres'),
+    .min(2, 'El apellido debe tener al menos 2 caracteres').optional().or(z.literal('')),
   username: z.string()
     .min(3, 'El nombre de usuario debe tener al menos 3 caracteres')
     .regex(/^[a-zA-Z0-9_]+$/, 'Solo se permiten letras, números y guiones bajos'),
@@ -88,9 +88,13 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
   const updateProfileMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await apiClient.put('/users/me/profile', data)
+      if (!response.data?.success || !response.data?.user) throw new Error(response.data?.message || 'El servidor no confirmó el cambio de perfil')
       return response.data
     },
     onSuccess: (data) => {
+      const state = useAuthStore.getState()
+      if (String(state.user?.id || state.user?._id) !== String(user?.id || user?._id)) return
+      state.updateUser(data.user)
       toast.success('Perfil actualizado exitosamente')
       queryClient.invalidateQueries({ queryKey: ['user'] })
     },
@@ -106,9 +110,13 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
       const response = await apiClient.post('/users/avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+      if (!response.data?.success) throw new Error('El servidor no confirmó la imagen')
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const state = useAuthStore.getState()
+      if (String(state.user?.id || state.user?._id) !== String(user?.id || user?._id)) return
+      if (data.user) state.updateUser(data.user)
       toast.success('Avatar actualizado exitosamente')
       queryClient.invalidateQueries({ queryKey: ['user'] })
     },
@@ -124,9 +132,13 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
       const response = await apiClient.post('/users/cover', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
+      if (!response.data?.success) throw new Error('El servidor no confirmó la imagen')
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const state = useAuthStore.getState()
+      if (String(state.user?.id || state.user?._id) !== String(user?.id || user?._id)) return
+      if (data.user) state.updateUser(data.user)
       toast.success('Imagen de portada actualizada exitosamente')
       queryClient.invalidateQueries({ queryKey: ['user'] })
     },
@@ -139,6 +151,8 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
     // Clean up data: remove empty strings from socialLinks to avoid validation errors
     const cleanedData = {
       ...data,
+      lastName: data.lastName?.trim() || undefined,
+      phone: data.phone?.trim() || undefined,
       interests,
       socialLinks: {
         website: data.socialLinks?.website || undefined,
@@ -200,11 +214,10 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
         {/* Cover Image */}
         <div className="relative h-48 bg-gradient-to-r from-primary-400 to-primary-600 rounded-2xl overflow-hidden">
           {user?.coverImage && (
-            <CldImage
+            <img
               src={getImageUrl(user.coverImage)}
               alt="Cover"
-              fill
-              className="object-cover"
+              className="absolute inset-0 h-full w-full object-cover"
             />
           )}
           <button
@@ -227,7 +240,7 @@ export default function ProfileSettings({ user }: ProfileSettingsProps) {
           <div className="relative">
             <div className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-900 overflow-hidden bg-gray-200 dark:bg-gray-700">
               {user?.avatar ? (
-                <CldImage
+                <img
                   src={getImageUrl(user.avatar)}
                   alt={user.firstName}
                   width={128}

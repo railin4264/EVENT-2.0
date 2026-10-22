@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios from '@/lib/api/client';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -177,4 +177,5 @@ class CommentService {
   }
 }
 
-export default new CommentService();
+const commentService = new CommentService();
+export default commentService;

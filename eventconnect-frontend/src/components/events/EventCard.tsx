@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Calendar, MapPin, Users, Heart, Share } from 'lucide-react'
+import { Calendar, MapPin, Users, Heart, Share, ShieldCheck } from 'lucide-react'
 import { cn, getImageUrl } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import type { Event } from '@/types/models'
+import { formatEventDate, formatPrice as displayPrice } from '@/lib/event-display'
 
 interface EventCardProps {
   event: Event
@@ -24,20 +25,6 @@ export function EventCard({
   onShare
 }: EventCardProps) {
   const [imgError, setImgError] = useState(false)
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('es-ES', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-  }
-
-  const formatPrice = () => {
-    if (!event.price || event.price.amount === 0) return 'GRATIS'
-    return `$${event.price.amount}`
-  }
-
   const attendeeCount = event.attendees?.length || 0
 
   return (
@@ -77,6 +64,11 @@ export function EventCard({
             <span className="rounded-full bg-black/60 backdrop-blur-sm px-3 py-1 text-xs font-medium text-white border border-white/20">
               {event.category}
             </span>
+            {((event as any).isOrganizerVerified || (event.createdBy as any)?.isOrganizerVerified) && (
+              <span className="rounded-full bg-emerald-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-emerald-400/50 flex items-center gap-1 shadow-sm">
+                <ShieldCheck className="w-3 h-3" /> Verificado
+              </span>
+            )}
             {event.ageRestriction?.isAdultOnly && (
               <span className="rounded-full bg-red-600/90 backdrop-blur-sm px-3 py-1 text-xs font-bold text-white border border-red-500/50">
                 18+
@@ -87,6 +79,55 @@ export function EventCard({
                 {event.ageRestriction?.minAge}+
               </span>
             )}
+            {(event as any).isOfficial && (
+              <span className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-0.5 text-xs font-black text-white shadow-md flex items-center gap-1 border border-amber-300/40">
+                ⭐ Oficial
+              </span>
+            )}
+            {(event as any).isRecurring && (
+              <span className="rounded-full bg-blue-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-blue-400/50 flex items-center gap-1 shadow-sm">
+                🔄 Fijo Semanal
+              </span>
+            )}
+            {(event as any).isCommercialDeal && (
+              <span className="rounded-full bg-emerald-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-emerald-400/50 flex items-center gap-1 shadow-sm">
+                🏷️ Oferta Especial
+              </span>
+            )}
+            {(event as any).isTourOrTrip && (
+              <span className="rounded-full bg-cyan-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-cyan-400/50 flex items-center gap-1 shadow-sm">
+                🚌 Tour / Excursión
+              </span>
+            )}
+            {(event as any).isVirtual && (
+              <span className="rounded-full bg-gradient-to-r from-cyan-600/90 to-blue-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-cyan-400/50 flex items-center gap-1 shadow-sm">
+                🌐 En Línea / Stream
+              </span>
+            )}
+            {(event as any).familyDetails?.isFamilyEvent && (
+              <span className="rounded-full bg-pink-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-pink-400/50 flex items-center gap-1 shadow-sm">
+                👶 {(event as any).familyDetails?.targetAudience === 'babies' ? 'Bebés & Gateo' : 'Familiar'}
+              </span>
+            )}
+            {(event as any).holidayLabel && (
+              <span className="rounded-full bg-rose-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-rose-400/50 flex items-center gap-1 shadow-sm">
+                💐 {(event as any).holidayLabel}
+              </span>
+            )}
+            {(event as any).healthDetails?.isHealthInitiative && (
+              <span className="rounded-full bg-emerald-600/90 backdrop-blur-sm px-2.5 py-0.5 text-xs font-bold text-white border border-emerald-400/50 flex items-center gap-1 shadow-sm">
+                🏥 {(event as any).healthDetails?.healthType === 'clinical_trial_info' ? 'Investigación Clínica' : 'Salud Gratuita'}
+              </span>
+            )}
+            {(event as any).isUnofficial && (
+              <motion.span
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3 py-1 text-xs font-bold text-white border border-violet-400 shadow-[0_0_15px_rgba(139,92,246,0.5)] flex items-center gap-1"
+              >
+                <span>🤫</span> Extraoficial
+              </motion.span>
+            )}
           </div>
 
           {/* Price Badge */}
@@ -94,10 +135,10 @@ export function EventCard({
             <span className={cn(
               "rounded-full px-3 py-1 text-xs font-bold text-white backdrop-blur-sm",
               event.price?.amount === 0
-                ? "bg-emerald-500/90 border border-emerald-400/50"
+                ? "bg-violet-500/90 border border-violet-400/50"
                 : "bg-primary-500/90 border border-primary-400/50"
             )}>
-              {formatPrice()}
+              {displayPrice({ price: event.price })}
             </span>
           </div>
 
@@ -123,7 +164,7 @@ export function EventCard({
           <div className="flex items-center gap-3">
             <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
             <time dateTime={event.date.toString()}>
-              {formatDate(event.date.toString())}
+              {formatEventDate(event.date, event.timeZone)}
             </time>
           </div>
 

@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { Alert } from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import { notificationDestination } from '../utils/notificationDestination';
 import { useAuth } from './AuthContext';
 import { socketService, NotificationData, SocketEventHandlers } from '../services/socketService';
 import { notificationsService } from '../services/notificationsService';
@@ -24,6 +26,12 @@ interface NotificationsProviderProps {
 
 export function NotificationsProvider({ children }: NotificationsProviderProps) {
   const { user, token } = useAuth();
+  const router = useRouter();
+  const alive = useRef(true);
+  const active = useRef({ owner: user?._id, token });
+  if (active.current.owner !== user?._id || active.current.token !== token) active.current = { owner: user?._id, token };
+  const scope = active.current;
+  const isCurrent = () => alive.current && active.current === scope && Boolean(scope.owner && scope.token);
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -31,42 +39,43 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
 
   // Fetch notifications from API
   const fetchNotifications = useCallback(async () => {
-    if (!user || !token) return;
+    if (!isCurrent()) return;
 
     try {
       setLoading(true);
       const response = await notificationsService.getNotifications();
       
-      if (response.success) {
+      if (isCurrent() && response.success) {
         setNotifications(response.notifications);
       }
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [user, token]);
+  }, [scope]);
 
   // Fetch unread count
   const refreshUnreadCount = useCallback(async () => {
-    if (!user || !token) return;
+    if (!isCurrent()) return;
 
     try {
       const response = await notificationsService.getUnreadCount();
-      if (response.success) {
+      if (isCurrent() && response.success) {
         setUnreadCount(response.count);
       }
     } catch (error) {
       console.error('Error fetching unread count:', error);
     }
-  }, [user, token]);
+  }, [scope]);
 
   // Mark notification as read
   const markAsRead = useCallback(async (notificationId: string) => {
+    if (!isCurrent()) return;
     try {
       const response = await notificationsService.markAsRead(notificationId);
       
-      if (response.success) {
+      if (isCurrent() && response.success) {
         // Update local state
         setNotifications(prev => 
           prev.map(notification => 
@@ -77,23 +86,24 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
         );
         
         // Update unread count
-        setUnreadCount(prev => Math.max(0, prev - 1));
+        void refreshUnreadCount();
         
         // Emit socket event
         socketService.markNotificationAsRead(notificationId);
       }
     } catch (error) {
       console.error('Error marking notification as read:', error);
-      Alert.alert('Error', 'No se pudo marcar la notificación como leída');
+      if (isCurrent()) Alert.alert('Error', 'No se pudo marcar la notificación como leída');
     }
-  }, []);
+  }, [scope]);
 
   // Mark all notifications as read
   const markAllAsRead = useCallback(async () => {
+    if (!isCurrent()) return;
     try {
       const response = await notificationsService.markAllAsRead();
       
-      if (response.success) {
+      if (isCurrent() && response.success) {
         // Update local state
         setNotifications(prev => 
           prev.map(notification => ({ ...notification, read: true }))
@@ -107,41 +117,43 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
       }
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
-      Alert.alert('Error', 'No se pudieron marcar todas las notificaciones como leídas');
+      if (isCurrent()) Alert.alert('Error', 'No se pudieron marcar todas las notificaciones como leídas');
     }
-  }, []);
+  }, [scope]);
 
   // Delete notification
   const deleteNotification = useCallback(async (notificationId: string) => {
+    if (!isCurrent()) return;
     try {
       const response = await notificationsService.deleteNotification(notificationId);
       
-      if (response.success) {
+      if (isCurrent() && response.success) {
         // Update local state
         const deletedNotification = notifications.find(n => n._id === notificationId);
         setNotifications(prev => prev.filter(n => n._id !== notificationId));
         
         // Update unread count if the deleted notification was unread
         if (deletedNotification && !deletedNotification.read) {
-          setUnreadCount(prev => Math.max(0, prev - 1));
+          void refreshUnreadCount();
         }
       }
     } catch (error) {
       console.error('Error deleting notification:', error);
-      Alert.alert('Error', 'No se pudo eliminar la notificación');
+      if (isCurrent()) Alert.alert('Error', 'No se pudo eliminar la notificación');
     }
-  }, [notifications]);
+  }, [notifications, scope, refreshUnreadCount]);
 
   // Socket event handlers
   const socketHandlers: SocketEventHandlers = {
     onNewNotification: (notification: NotificationData) => {
+      if (!isCurrent()) return;
       
       // Add to notifications list
-      setNotifications(prev => [notification, ...prev]);
+      setNotifications(prev => [notification, ...prev.filter(item => item._id !== notification._id)].slice(0, 100));
       
       // Update unread count
       if (!notification.read) {
-        setUnreadCount(prev => prev + 1);
+        void refreshUnreadCount();
       }
       
       // Show in-app notification (optional)
@@ -153,8 +165,7 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
           { 
             text: 'Ver', 
             onPress: () => {
-              // Navigate to notification detail or relevant screen
-              // This would be implemented based on notification type and data
+              if (isCurrent()) router.push(notificationDestination(notification) as Href);
             }
           }
         ]
@@ -162,6 +173,7 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
     },
 
     onNotificationRead: (notificationId: string) => {
+      if (!isCurrent()) return;
       
       // Update local state
       setNotifications(prev => 
@@ -174,6 +186,7 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
     },
 
     onNotificationUpdate: (notification: NotificationData) => {
+      if (!isCurrent()) return;
       
       // Update existing notification
       setNotifications(prev => 
@@ -182,6 +195,7 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
     },
 
     onConnect: () => {
+      if (!isCurrent()) return;
       setConnected(true);
       
       // Join user-specific notification room
@@ -195,7 +209,7 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
     },
 
     onDisconnect: () => {
-      setConnected(false);
+      if (isCurrent()) setConnected(false);
     },
 
     onError: (error: any) => {
@@ -206,6 +220,9 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
 
   // Connect socket when user is authenticated
   useEffect(() => {
+    alive.current = true;
+    socketService.disconnect();
+    setConnected(false); setLoading(false); setNotifications([]); setUnreadCount(0);
     if (user && token) {
       socketService.connect(token, socketHandlers);
       
@@ -221,11 +238,13 @@ export function NotificationsProvider({ children }: NotificationsProviderProps) 
 
     // Cleanup on unmount
     return () => {
+      alive.current = false;
+      socketService.disconnect();
       if (user?._id) {
         socketService.leaveNotificationRoom(user._id);
       }
     };
-  }, [user, token]);
+  }, [scope]);
 
   // Update user presence when app state changes
   useEffect(() => {

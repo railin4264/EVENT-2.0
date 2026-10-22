@@ -86,6 +86,7 @@ android {
     namespace 'com.eventconnect.mobile'
     defaultConfig {
         applicationId 'com.eventconnect.mobile'
+        manifestPlaceholders["eventnowMapsApiKey"] = System.getenv("ANDROID_GOOGLE_MAPS_API_KEY") ?: ""
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

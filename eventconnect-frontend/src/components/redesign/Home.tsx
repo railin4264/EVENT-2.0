@@ -46,7 +46,7 @@ export function Home({ onEventClick, onCreateEvent, onExplore }: HomeProps) {
       price: 'Gratis',
       category: 'Música',
       image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800',
-      gradient: 'from-violet-500 to-pink-500',
+      gradient: 'from-violet-500 to-cyan-500',
       icon: '🎵',
       liked: false,
       distance: '2.5 km'
@@ -62,7 +62,7 @@ export function Home({ onEventClick, onCreateEvent, onExplore }: HomeProps) {
       price: '$2500',
       category: 'Tecnología',
       image: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800',
-      gradient: 'from-blue-500 to-cyan-500',
+      gradient: 'from-violet-500 to-cyan-500',
       icon: '🚀',
       liked: true,
       distance: '5.1 km'
@@ -97,7 +97,7 @@ export function Home({ onEventClick, onCreateEvent, onExplore }: HomeProps) {
       price: 'Gratis',
       category: 'Deporte',
       image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-      gradient: 'from-green-500 to-emerald-500',
+      gradient: 'from-green-500 to-violet-500',
       icon: '🧘',
       liked: false,
       distance: '0.8 km'
@@ -129,7 +129,7 @@ export function Home({ onEventClick, onCreateEvent, onExplore }: HomeProps) {
       price: 'Gratis',
       category: 'Arte',
       image: 'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=400',
-      gradient: 'from-indigo-500 to-purple-500',
+      gradient: 'from-violet-500 to-cyan-500',
       icon: '📷',
       liked: false,
       distance: '4.7 km'
@@ -196,7 +196,7 @@ export function Home({ onEventClick, onCreateEvent, onExplore }: HomeProps) {
               <Button
                 size="lg"
                 onClick={onExplore}
-                className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white px-8 py-4 rounded-xl neon-glow-violet hover:scale-105 transition-transform"
+                className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700 text-white px-8 py-4 rounded-xl neon-glow-violet hover:scale-105 transition-transform"
               >
                 Explorar eventos
                 <ArrowRight className="ml-2 w-5 h-5" />
@@ -348,7 +348,7 @@ export function Home({ onEventClick, onCreateEvent, onExplore }: HomeProps) {
             onClick={onCreateEvent}
             className="glass-card p-6 rounded-2xl flex items-center space-x-4 hover:bg-white/10 cursor-pointer transition-all hover:scale-105"
           >
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 flex items-center justify-center">
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
               <Zap className="w-8 h-8 text-white" />
             </div>
             <div>
@@ -361,7 +361,7 @@ export function Home({ onEventClick, onCreateEvent, onExplore }: HomeProps) {
             onClick={onExplore}
             className="glass-card p-6 rounded-2xl flex items-center space-x-4 hover:bg-white/10 cursor-pointer transition-all hover:scale-105"
           >
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
               <Search className="w-8 h-8 text-white" />
             </div>
             <div>

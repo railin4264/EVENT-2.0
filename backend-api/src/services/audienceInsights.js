@@ -94,7 +94,7 @@ async function getAudienceInsights(lat, lng, radiusKm = 25) {
     .slice(0, 3)
     .map(([cat, count]) => ({
       category: cat,
-      label: CATEGORY_LABELS[cat] || cat,
+      label: CATEGORY_LABELS[cat] || (require('../utils/categories').CATEGORIES.find(c => c.slug === cat) || {}).label || cat,
       count,
       share: Math.round((count / events.length) * 100),
     }));

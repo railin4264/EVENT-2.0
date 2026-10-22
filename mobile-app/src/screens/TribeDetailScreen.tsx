@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { TRIBE_CATEGORIES } from '@/services/tribesService';
 import { useAuth } from '@/contexts/AuthContext';
 import TribePosts from '@/components/TribePosts';
 import TribeStories from '@/components/TribeStories';
+import { tribeAccess } from '@/utils/tribeAccess';
 
 export default function TribeDetailScreen() {
   const router = useRouter();
@@ -28,9 +29,38 @@ export default function TribeDetailScreen() {
   const { theme } = useTheme();
   const { user } = useAuth();
 
-  const { tribe, loading, error, joinTribe, leaveTribe } = useTribe(tribeId);
+  const { tribe, loading, error, joinTribe, leaveTribe, cancelJoinRequest, approveRequest, rejectRequest, fetchTribe, actionLoading: hookActionLoading } = useTribe(tribeId);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'feed' | 'about'>('feed');
+
+  const userId = String(user?._id || (user as { id?: string } | null)?.id || '');
+  const access = tribeAccess(tribe, userId);
+  const { isPrivate } = access;
+  const scope = `${userId}:${tribeId}`;
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const mounted = useRef(true);
+  const actionLock = useRef<string | null>(null);
+  const dialogOpen = useRef(false);
+  const [showAllMembers, setShowAllMembers] = useState(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { setActiveTab('feed'); setShowAllMembers(false); setActionLoading(false); dialogOpen.current = false; }, [scope]);
+  const busy = actionLoading || hookActionLoading;
+
+  const runAction = useCallback(async (operation: () => Promise<{ success: boolean; message: string }>, title = 'Listo') => {
+    if (actionLock.current === scope || !mounted.current || scopeRef.current !== scope) return;
+    actionLock.current = scope;
+    setActionLoading(true);
+    try {
+      const result = await operation();
+      if (mounted.current && scopeRef.current === scope) Alert.alert(result.success ? title : 'No se completó la acción', result.message || 'Inténtalo de nuevo.');
+    } catch {
+      if (mounted.current && scopeRef.current === scope) Alert.alert('No se completó la acción', 'Comprueba tu conexión e inténtalo de nuevo.');
+    } finally {
+      if (actionLock.current === scope) actionLock.current = null;
+      if (mounted.current && scopeRef.current === scope) setActionLoading(false);
+    }
+  }, [scope]);
 
   const getCategoryInfo = () => {
     if (!tribe) return { label: '', icon: '📋' };
@@ -38,33 +68,23 @@ export default function TribeDetailScreen() {
            { label: tribe.category, icon: '📋' };
   };
 
-  const handleJoinLeave = useCallback(async () => {
-    if (!tribe || actionLoading) return;
-
-    try {
-      setActionLoading(true);
-      
-      if (tribe.isMember) {
-        const result = await leaveTribe(tribe._id);
-        if (result?.success) {
-          Alert.alert('¡Listo!', result.message);
-        } else {
-          Alert.alert('Error', result?.message || 'No se pudo salir de la tribu');
-        }
-      } else {
-        const result = await joinTribe(tribe._id);
-        if (result?.success) {
-          Alert.alert('¡Bienvenido!', result.message);
-        } else {
-          Alert.alert('Error', result?.message || 'No se pudo unir a la tribu');
-        }
-      }
-    } catch (error: any) {
-      Alert.alert('Error', 'Ocurrió un error inesperado');
-    } finally {
-      setActionLoading(false);
+  const handleJoinLeave = useCallback(() => {
+    if (!tribe || busy || dialogOpen.current || ['blocked', 'invitation', 'unavailable'].includes(access.action)) return;
+    if (access.action === 'join' || access.action === 'request') {
+      void runAction(() => joinTribe(tribe._id), access.action === 'request' ? 'Solicitud enviada' : 'Bienvenido');
+      return;
     }
-  }, [tribe, joinTribe, leaveTribe, actionLoading]);
+    dialogOpen.current = true;
+    const leaving = access.action === 'leave';
+    Alert.alert(leaving ? 'Salir de la tribu' : 'Cancelar solicitud',
+      leaving ? '¿Quieres salir de esta comunidad?' : '¿Quieres cancelar tu solicitud pendiente?', [
+        { text: 'Volver', style: 'cancel', onPress: () => { dialogOpen.current = false; } },
+        { text: leaving ? 'Salir' : 'Cancelar solicitud', style: 'destructive', onPress: () => {
+          dialogOpen.current = false;
+          void runAction(() => leaving ? leaveTribe(tribe._id) : cancelJoinRequest(tribe._id), leaving ? 'Saliste de la tribu' : 'Solicitud cancelada');
+        } },
+      ], { cancelable: true, onDismiss: () => { dialogOpen.current = false; } });
+  }, [tribe, busy, access.action, runAction, joinTribe, leaveTribe, cancelJoinRequest]);
 
   const handleShare = useCallback(async () => {
     if (!tribe) return;
@@ -127,14 +147,7 @@ export default function TribeDetailScreen() {
                 <Ionicons name="share-outline" size={24} color="white" />
               </TouchableOpacity>
               
-              {tribe.isAdmin && (
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
-                  onPress={() => router.push('/create-tribe')}
-                >
-                  <Ionicons name="settings-outline" size={24} color="white" />
-                </TouchableOpacity>
-              )}
+
             </View>
           </View>
         </View>
@@ -155,15 +168,15 @@ export default function TribeDetailScreen() {
                   </Text>
                 </View>
                 
-                {tribe.settings.privacy !== 'public' && (
+                {(tribe.privacy === 'private' || tribe.settings?.privacy === 'private' || isPrivate) && (
                   <View style={[styles.privacyBadge, { backgroundColor: theme.colors.errorContainer }]}>
                     <Ionicons
-                      name={tribe.settings.privacy === 'private' ? 'lock-closed' : 'eye-off'}
+                      name="lock-closed"
                       size={14}
                       color={theme.colors.onErrorContainer}
                     />
                     <Text style={[styles.privacyText, { color: theme.colors.onErrorContainer }]}>
-                      {tribe.settings.privacy === 'private' ? 'Privada' : 'Secreta'}
+                      Privada
                     </Text>
                   </View>
                 )}
@@ -175,38 +188,64 @@ export default function TribeDetailScreen() {
               style={[
                 styles.joinButton,
                 {
-                  backgroundColor: tribe.isMember 
+                  backgroundColor: access.isMember
                     ? theme.colors.errorContainer 
+                    : access.pending
+                    ? 'rgba(245, 158, 11, 0.2)'
+                    : isPrivate
+                    ? 'rgba(139, 92, 246, 0.25)'
                     : theme.colors.primary,
+                  borderColor: access.pending ? '#f59e0b' : isPrivate && !access.isMember ? '#8b5cf6' : 'transparent',
+                  borderWidth: access.pending || (isPrivate && !access.isMember) ? 1 : 0,
                 },
-                actionLoading && styles.joinButtonDisabled,
+                (busy || ['blocked', 'invitation', 'unavailable'].includes(access.action)) && styles.joinButtonDisabled,
               ]}
               onPress={handleJoinLeave}
-              disabled={actionLoading}
+              disabled={busy || ['blocked', 'invitation', 'unavailable'].includes(access.action)}
             >
-              {actionLoading ? (
+              {busy ? (
                 <ActivityIndicator 
                   size="small" 
-                  color={tribe.isMember ? theme.colors.onErrorContainer : theme.colors.onPrimary} 
-                />
+                  color={access.isMember ? theme.colors.onErrorContainer : '#fff'}
+                  />
               ) : (
                 <>
                   <Ionicons
-                    name={tribe.isMember ? 'exit-outline' : 'add'}
+                    name={
+                      access.isMember
+                        ? 'exit-outline'
+                        : access.pending
+                        ? 'time-outline'
+                        : isPrivate
+                        ? 'lock-closed-outline'
+                        : 'add'
+                    }
                     size={20}
-                    color={tribe.isMember ? theme.colors.onErrorContainer : theme.colors.onPrimary}
+                    color={
+                      access.isMember
+                        ? theme.colors.onErrorContainer
+                        : access.pending
+                        ? '#f59e0b'
+                        : isPrivate
+                        ? '#a78bfa'
+                        : theme.colors.onPrimary
+                    }
                   />
                   <Text
                     style={[
                       styles.joinButtonText,
                       {
-                        color: tribe.isMember 
+                        color: access.isMember
                           ? theme.colors.onErrorContainer 
+                          : access.pending
+                          ? '#f59e0b'
+                          : isPrivate
+                          ? '#a78bfa'
                           : theme.colors.onPrimary,
                       },
                     ]}
                   >
-                    {tribe.isMember ? 'Salir' : 'Unirse'}
+                    {access.actionLabel}
                   </Text>
                 </>
               )}
@@ -217,7 +256,7 @@ export default function TribeDetailScreen() {
           <View style={styles.stats}>
             <View style={styles.stat}>
               <Text style={[styles.statNumber, { color: theme.colors.primary }]}>
-                {tribe.stats.totalMembers}
+                {tribe.stats?.totalMembers ?? tribe.stats?.memberCount ?? tribe.membersCount ?? tribe.members?.length ?? 0}
               </Text>
               <Text style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>
                 Miembros
@@ -226,18 +265,18 @@ export default function TribeDetailScreen() {
             
             <View style={styles.stat}>
               <Text style={[styles.statNumber, { color: theme.colors.primary }]}>
-                {tribe.stats.totalEvents}
+                {tribe.stats?.totalEvents ?? tribe.stats?.eventCount ?? 0}
               </Text>
               <Text style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>
                 Eventos
               </Text>
             </View>
             
-            {tribe.stats.averageRating > 0 && (
+            {Number(tribe.stats?.averageRating || 0) > 0 && (
               <View style={styles.stat}>
                 <View style={styles.ratingContainer}>
                   <Text style={[styles.statNumber, { color: theme.colors.primary }]}>
-                    {tribe.stats.averageRating.toFixed(1)}
+                    {Number(tribe.stats?.averageRating || 0).toFixed(1)}
                   </Text>
                   <Ionicons name="star" size={16} color={theme.colors.primary} />
                 </View>
@@ -321,56 +360,67 @@ export default function TribeDetailScreen() {
   };
 
   const renderMembers = () => {
-    if (!tribe?.members || tribe.members.length === 0) return null;
+    if (!access.isMember || !access.canViewContent || !tribe?.members) return null;
+    const activeMembers = tribe.members.filter(member => member.status === 'active');
+    if (!activeMembers.length) return null;
 
-    const renderMember = ({ item }: { item: any }) => (
-      <TouchableOpacity
-        style={styles.memberItem}
-        onPress={() => handleMemberPress(item.user)}
-      >
-        <View style={styles.memberInfo}>
-          <View style={[styles.memberAvatar, { backgroundColor: theme.colors.primary }]}>
-            <Text style={[styles.memberInitial, { color: theme.colors.onPrimary }]}>
-              {item.user?.charAt(0)?.toUpperCase() || 'U'}
-            </Text>
+    const renderMember = ({ item }: { item: any }) => {
+      const u = item.user && typeof item.user === 'object' ? item.user : {};
+      const userId = String(u._id || item.user || item._id || '');
+      const displayName = u.firstName
+        ? `${u.firstName} ${u.lastName || ''}`.trim()
+        : u.username || item.username || `Usuario #${userId.slice(-4) || 'RD'}`;
+      const initial = (displayName.charAt(0) || 'U').toUpperCase();
+
+      return (
+        <TouchableOpacity
+          style={styles.memberItem}
+          onPress={() => handleMemberPress(userId)}
+        >
+          <View style={styles.memberInfo}>
+            <View style={[styles.memberAvatar, { backgroundColor: theme.colors.primary }]}>
+              <Text style={[styles.memberInitial, { color: theme.colors.onPrimary }]}>
+                {initial}
+              </Text>
+            </View>
+            <View style={styles.memberDetails}>
+              <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
+                {displayName}
+              </Text>
+              <Text style={[styles.memberRole, { color: theme.colors.onSurfaceVariant }]}>
+                {item.role === 'admin' ? 'Administrador' :
+                 item.role === 'moderator' ? 'Moderador' : 'Miembro'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.memberDetails}>
-            <Text style={[styles.memberName, { color: theme.colors.onSurface }]}>
-              Usuario #{item.user?.slice(-4)}
-            </Text>
-            <Text style={[styles.memberRole, { color: theme.colors.onSurfaceVariant }]}>
-              {item.role === 'admin' ? 'Administrador' : 
-               item.role === 'moderator' ? 'Moderador' : 'Miembro'}
-            </Text>
-          </View>
-        </View>
-        
-        {item.role === 'admin' && (
-          <Ionicons name="star" size={16} color={theme.colors.primary} />
-        )}
-        {item.role === 'moderator' && (
-          <Ionicons name="shield-checkmark" size={16} color={theme.colors.secondary} />
-        )}
-      </TouchableOpacity>
-    );
+
+          {item.role === 'admin' && (
+            <Ionicons name="star" size={16} color={theme.colors.primary} />
+          )}
+          {item.role === 'moderator' && (
+            <Ionicons name="shield-checkmark" size={16} color={theme.colors.secondary} />
+          )}
+        </TouchableOpacity>
+      );
+    };
 
     return (
       <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-            Miembros ({tribe.members.length})
+            Miembros ({activeMembers.length})
           </Text>
-          {tribe.members.length > 5 && (
-            <TouchableOpacity>
+          {activeMembers.length > 5 && (
+            <TouchableOpacity onPress={() => setShowAllMembers(previous => !previous)}>
               <Text style={[styles.seeAllText, { color: theme.colors.primary }]}>
-                Ver todos
+                {showAllMembers ? 'Ver menos' : 'Ver todos'}
               </Text>
             </TouchableOpacity>
           )}
         </View>
         
         <FlatList
-          data={tribe.members.slice(0, 5)}
+          data={activeMembers.slice(0, showAllMembers ? undefined : 5)}
           renderItem={renderMember}
           keyExtractor={(item, index) => `${item.user}-${index}`}
           scrollEnabled={false}
@@ -418,44 +468,17 @@ export default function TribeDetailScreen() {
   );
 
   const renderActions = () => {
-    if (!tribe?.isMember) return null;
-
-    return (
-      <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
-          Acciones
-        </Text>
-
-        <View style={styles.actionsList}>
-          <TouchableOpacity style={styles.actionItem}>
-            <Ionicons name="chatbubbles-outline" size={24} color={theme.colors.primary} />
-            <Text style={[styles.actionText, { color: theme.colors.onSurface }]}>
-              Chat de la Tribu
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionItem}>
-            <Ionicons name="calendar-outline" size={24} color={theme.colors.primary} />
-            <Text style={[styles.actionText, { color: theme.colors.onSurface }]}>
-              Eventos de la Tribu
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionItem}>
-            <Ionicons name="notifications-outline" size={24} color={theme.colors.primary} />
-            <Text style={[styles.actionText, { color: theme.colors.onSurface }]}>
-              Configurar Notificaciones
-            </Text>
-            <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
+    if (!access.isMember) return null;
+    return <View style={[styles.section, { backgroundColor: theme.colors.surface }]}>
+      <TouchableOpacity style={styles.actionItem} onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Abrir ajustes de tu cuenta">
+        <Ionicons name="settings-outline" size={24} color={theme.colors.primary} />
+        <Text style={[styles.actionText, { color: theme.colors.onSurface }]}>Ajustes de tu cuenta</Text>
+        <Ionicons name="chevron-forward" size={16} color={theme.colors.outline} />
+      </TouchableOpacity>
+    </View>;
   };
 
-  if (loading) {
+  if (loading && !tribe) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={styles.loadingContainer}>
@@ -468,7 +491,7 @@ export default function TribeDetailScreen() {
     );
   }
 
-  if (error || !tribe) {
+  if (!tribe) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <View style={styles.errorContainer}>
@@ -481,39 +504,123 @@ export default function TribeDetailScreen() {
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
-            onPress={() => router.back()}
+            onPress={() => void fetchTribe(tribeId)}
           >
             <Text style={[styles.retryButtonText, { color: theme.colors.onPrimary }]}>
-              Volver
+              Reintentar
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button"><Text style={{ color: theme.colors.primary }}>Volver</Text></TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
+
+  const renderAdminRequests = () => {
+    const pendingList = (tribe?.joinRequests || []).filter((r: any) => r.status === 'pending');
+    if (!access.canManageRequests) return null;
+
+    return (
+      <View style={[styles.section, { backgroundColor: theme.colors.surface, marginHorizontal: 16, marginTop: 16, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(245,158,11,0.3)' }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Ionicons name="people" size={18} color="#f59e0b" />
+          <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.onSurface, flex: 1 }}>
+            Solicitudes pendientes ({pendingList.length})
+          </Text>
+        </View>
+
+        {!pendingList.length && <Text style={{ color: theme.colors.onSurfaceVariant }}>No hay solicitudes pendientes.</Text>}
+        {pendingList.map((req: any) => {
+          const u = req.user || {};
+          const displayName = u.firstName ? `${u.firstName} ${u.lastName || ''}`.trim() : u.username || 'Usuario';
+          const userId = typeof req.user === 'string' ? req.user : u._id || u.id || '';
+
+          return (
+            <View key={String(req._id || userId)} style={{ paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.onSurface }}>{displayName}</Text>
+                <Text style={{ fontSize: 11, color: theme.colors.onSurfaceVariant }}>@{u.username || 'usuario'}</Text>
+              </View>
+              {Boolean(req.message) && (
+                <Text style={{ fontSize: 12, color: theme.colors.onSurfaceVariant, fontStyle: 'italic', marginBottom: 8 }}>
+                  "{req.message}"
+                </Text>
+              )}
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  disabled={busy || !userId}
+                  style={{ flex: 1, opacity: busy ? 0.5 : 1, backgroundColor: '#10b981', paddingVertical: 8, borderRadius: 10, alignItems: 'center' }}
+                  onPress={() => void runAction(() => approveRequest(String(userId)), 'Solicitud aprobada')}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Aprobar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={busy || !userId}
+                  style={{ flex: 1, opacity: busy ? 0.5 : 1, backgroundColor: 'rgba(239,68,68,0.2)', paddingVertical: 8, borderRadius: 10, alignItems: 'center' }}
+                  onPress={() => void runAction(() => rejectRequest(String(userId)), 'Solicitud rechazada')}
+                >
+                  <Text style={{ color: '#ef4444', fontWeight: '700', fontSize: 12 }}>Rechazar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[2]}
+
       >
         {renderHeader()}
 
         {/* Stories Bar */}
-        <TribeStories tribeId={tribeId} isMember={tribe?.isMember || false} />
+        {access.canViewContent && <TribeStories key={scope} tribeId={tribeId} isMember={access.isMember} />}
 
+        {error && <View style={[styles.section, { backgroundColor: theme.colors.errorContainer }]}>
+          <Text style={{ color: theme.colors.onErrorContainer }}>{error}</Text>
+          <TouchableOpacity onPress={() => void fetchTribe(tribeId)} accessibilityRole="button"><Text style={{ color: theme.colors.primary, marginTop: 8 }}>Reintentar actualización</Text></TouchableOpacity>
+        </View>}
         {/* Tabs */}
         {renderTabs()}
+        {renderAdminRequests()}
 
         {/* Content based on active tab */}
         {activeTab === 'feed' ? (
-          <TribePosts
-            tribeId={tribeId}
-            isMember={tribe?.isMember || false}
-            isAdmin={tribe?.isAdmin || false}
-          />
+          !access.canViewContent ? (
+            <View style={{ padding: 28, alignItems: 'center', margin: 16, borderRadius: 20, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', gap: 12 }}>
+              <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(245,158,11,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="lock-closed" size={32} color="#f59e0b" />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: theme.colors.onSurface, textAlign: 'center' }}>
+                {access.isBanned ? 'Acceso restringido' : 'Contenido de la comunidad'}
+              </Text>
+              <Text style={{ fontSize: 13, color: theme.colors.onSurfaceVariant, textAlign: 'center', lineHeight: 20, paddingHorizontal: 12 }}>
+                {access.isBanned ? 'Tu acceso está bloqueado. No puedes consultar el contenido ni volver a unirte.' : access.action === 'invitation' ? 'Esta tribu solo admite incorporaciones mediante invitación. Contacta con sus responsables.' : 'Las publicaciones, historias y miembros están disponibles para integrantes activos. Puedes solicitar acceso cuando esté habilitado.'}
+              </Text>
+              <TouchableOpacity
+                style={{ marginTop: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 14, backgroundColor: access.pending ? 'rgba(245,158,11,0.2)' : theme.colors.primary, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                onPress={handleJoinLeave}
+                disabled={busy || ['blocked', 'invitation', 'unavailable'].includes(access.action)}
+              >
+                <Ionicons name={access.pending ? "time-outline" : "send-outline"} size={16} color={access.pending ? "#f59e0b" : "#fff"} />
+                <Text style={{ color: access.pending ? "#f59e0b" : theme.colors.onPrimary, fontWeight: '700', fontSize: 14 }}>
+                  {access.actionLabel}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TribePosts
+              key={scope}
+              tribeId={tribeId}
+              isMember={access.isMember}
+              isAdmin={access.isAdmin}
+            />
+          )
         ) : (
           <>
             {renderDescription()}

@@ -1,446 +1,80 @@
 'use client'
 
-import { useState, useEffect, useMemo, Suspense } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Filter, Calendar, MapPin, Users, Clock, Star, TrendingUp, History, X, User, Heart, MessageCircle, DollarSign } from 'lucide-react'
-
-// Alias para icono no disponible en lucide-react 0.408.0
+import { Search, X, Filter, ArrowRight, Calendar, Users, User } from 'lucide-react'
+import { CATEGORY_LIST } from '@/lib/categories'
 import { apiClient } from '@/lib/api/client'
 import { useDebounce } from '@/hooks/useDebounce'
-import { formatDate } from '@/lib/utils'
-
-interface SearchResult {
-  id: string
-  type: 'event' | 'user' | 'tribe'
-  title: string
-  description: string
-  image?: string
-  metadata?: any
-  relevance: number
-}
-
-interface SearchFilters {
-  type: 'all' | 'events' | 'users' | 'tribes'
-  category?: string
-  location?: string
-  dateRange?: {
-    start?: string
-    end?: string
-  }
-  priceRange?: {
-    min: number
-    max: number
-  }
-}
+import { useAuthStore } from '@/stores/authStore'
+import { readSearchPage, searchResultPath, SEARCH_FILTERS, type SearchType, type GlobalSearchResult } from '@/lib/global-search'
 
 function SearchContent() {
+  const params = useSearchParams()
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const initialQuery = searchParams.get('q') || ''
-
-  const [query, setQuery] = useState(initialQuery)
-  const [filters, setFilters] = useState<SearchFilters>({ type: 'all' })
+  const user = useAuthStore(state => state.user)
+  const owner = String(user?.id || user?._id || 'guest')
+  const initial = params.get('q') || ''
+  const [query, setQuery] = useState(initial.slice(0, 100))
+  const [type, setType] = useState<SearchType>('all')
+  const [page, setPage] = useState(1)
   const [showFilters, setShowFilters] = useState(false)
-  const [recentSearches, setRecentSearches] = useState<string[]>([])
-
-  const debouncedQuery = useDebounce(query, 300)
-
-  // Load recent searches from localStorage
+  const [filters, setFilters] = useState({ category: '', location: '', startDate: '', endDate: '', minPrice: '', maxPrice: '' })
+  const [recent, setRecent] = useState<{ owner: string; values: string[] }>({ owner, values: [] })
+  const debounced = useDebounce(query.trim(), 300)
+  const settledFilters = useDebounce(filters, 300)
+  useEffect(() => { setQuery(initial.slice(0, 100)); setPage(1) }, [initial])
   useEffect(() => {
-    const stored = localStorage.getItem('recent-searches')
-    if (stored) {
-      setRecentSearches(JSON.parse(stored))
-    }
-  }, [])
-
-  // Save search to recent searches
-  const saveSearch = (searchTerm: string) => {
-    if (!searchTerm.trim()) return
-    
-    const updated = [
-      searchTerm,
-      ...recentSearches.filter(s => s !== searchTerm)
-    ].slice(0, 10)
-    
-    setRecentSearches(updated)
-    localStorage.setItem('recent-searches', JSON.stringify(updated))
+    try {
+      const saved = JSON.parse(localStorage.getItem(`global-search-recent:${owner}`) || '[]')
+      setRecent({ owner, values: Array.isArray(saved) ? saved.filter(value => typeof value === 'string' && value.length <= 100).slice(0, 6) : [] })
+    } catch { setRecent({ owner, values: [] }) }
+  }, [owner])
+  const remember = () => {
+    if (query.trim().length < 2) return
+    const values = [query.trim(), ...(recent.owner === owner ? recent.values : []).filter(value => value !== query.trim())].slice(0, 6)
+    setRecent({ owner, values })
+    try { localStorage.setItem(`global-search-recent:${owner}`, JSON.stringify(values)) } catch { /* Storage can be unavailable. */ }
+    router.replace(`/search?q=${encodeURIComponent(query.trim())}`, { scroll: false })
   }
-
-  // Search results
-  const { data: searchResults, isLoading } = useQuery({
-    queryKey: ['search', debouncedQuery, filters],
-    queryFn: async () => {
-      if (!debouncedQuery.trim()) return []
-
-      const params = new URLSearchParams({
-        q: debouncedQuery,
-        type: filters.type,
-        ...(filters.category && { category: filters.category }),
-        ...(filters.location && { location: filters.location }),
-        ...(filters.dateRange?.start && { startDate: filters.dateRange.start }),
-        ...(filters.dateRange?.end && { endDate: filters.dateRange.end }),
-        ...(filters.priceRange && { 
-          minPrice: filters.priceRange.min.toString(),
-          maxPrice: filters.priceRange.max.toString()
-        })
-      })
-
-      const response = await apiClient.get(`/search?${params}`)
-      return response.data.results as SearchResult[]
+  const results = useQuery({
+    queryKey: ['global-search', owner, debounced, type, settledFilters, page],
+    enabled: debounced.length >= 2,
+    queryFn: async ({ signal }) => {
+      const response = await apiClient.get('/search', { params: { q: debounced, type, page, limit: 12, ...Object.fromEntries(Object.entries(settledFilters).filter(([, value]) => value !== '')) }, signal })
+      return readSearchPage(response.data)
     },
-    enabled: !!debouncedQuery.trim()
+    retry: false,
   })
-
-  // Trending searches
-  const { data: trendingSearches } = useQuery({
-    queryKey: ['trending-searches'],
-    queryFn: async () => {
-      const response = await apiClient.get('/search/trending')
-      return response.data.trending as string[]
-    }
-  })
-
-  const handleSearch = (searchTerm: string = query) => {
-    if (searchTerm.trim()) {
-      saveSearch(searchTerm)
-      router.push(`/search?q=${encodeURIComponent(searchTerm)}`)
-    }
-  }
-
-  const clearRecentSearch = (searchTerm: string) => {
-    const updated = recentSearches.filter(s => s !== searchTerm)
-    setRecentSearches(updated)
-    localStorage.setItem('recent-searches', JSON.stringify(updated))
-  }
-
-  const clearAllRecentSearches = () => {
-    setRecentSearches([])
-    localStorage.removeItem('recent-searches')
-  }
-
-  const resultsByType = useMemo(() => {
-    if (!searchResults) return { events: [], users: [], tribes: [] }
-    
-    return {
-      events: searchResults.filter(r => r.type === 'event'),
-      users: searchResults.filter(r => r.type === 'user'),
-      tribes: searchResults.filter(r => r.type === 'tribe')
-    }
-  }, [searchResults])
-
-  const totalResults = searchResults?.length || 0
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Search Header */}
-        <div className="mb-8">
-          <div className="relative mb-4">
-            <div className="flex items-center bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-              <div className="flex-shrink-0 p-4">
-                <Search className="w-5 h-5 text-gray-400" />
-              </div>
-              
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSearch()
-                  }
-                }}
-                placeholder="Buscar eventos, personas, tribus..."
-                className="flex-1 py-4 bg-transparent text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none"
-              />
-              
-              {query && (
-                <button
-                  onClick={() => setQuery('')}
-                  className="flex-shrink-0 p-2 mr-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <X className="w-4 h-4 text-gray-400" />
-                </button>
-              )}
-              
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex-shrink-0 p-2 mr-2 rounded-full transition-colors ${
-                  showFilters ? 'bg-primary-100 dark:bg-primary-900/20 text-primary-600' : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Filters */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {['all', 'events', 'users', 'tribes'].map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilters(prev => ({ ...prev, type: type as any }))}
-                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                  filters.type === type
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                {type === 'all' ? 'Todos' : type.charAt(0).toUpperCase() + type.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Search Results */}
-        {debouncedQuery.trim() ? (
-          <div>
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Resultados para "{debouncedQuery}"
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400">
-                {totalResults} resultado{totalResults !== 1 ? 's' : ''} encontrado{totalResults !== 1 ? 's' : ''}
-              </p>
-            </div>
-
-            {isLoading ? (
-              <div className="space-y-4">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="animate-pulse bg-white dark:bg-gray-800 rounded-xl p-4">
-                    <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2" />
-                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : totalResults === 0 ? (
-              <div className="text-center py-12">
-                <Search className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  No se encontraron resultados
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Intenta con otros términos o ajusta los filtros
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Events Results */}
-                {resultsByType.events.length > 0 && (
-                  <div>
-                    <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                      <Calendar className="w-5 h-5" />
-                      Eventos ({resultsByType.events.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {resultsByType.events.map((result) => (
-                        <motion.div
-                          key={result.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => router.push(`/events/${result.id}`)}
-                        >
-                          {result.image && (
-                            <img 
-                              src={result.image} 
-                              alt={result.title}
-                              className="w-full h-32 object-cover"
-                            />
-                          )}
-                          <div className="p-4">
-                            <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                              {result.title}
-                            </h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
-                              {result.description}
-                            </p>
-                            {result.metadata && (
-                              <div className="flex items-center gap-4 text-xs text-gray-500">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {formatDate(result.metadata.date)}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <MapPin className="w-3 h-3" />
-                                  {result.metadata.location}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Users Results */}
-                {resultsByType.users.length > 0 && (
-                  <div>
-                    <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                      <User className="w-5 h-5" />
-                      Personas ({resultsByType.users.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {resultsByType.users.map((result) => (
-                        <motion.div
-                          key={result.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => router.push(`/profile?id=${result.id}`)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center text-white font-semibold">
-                              {result.image ? (
-                                <img 
-                                  src={result.image} 
-                                  alt={result.title}
-                                  className="w-full h-full rounded-full object-cover"
-                                />
-                              ) : (
-                                result.title[0]
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-gray-900 dark:text-white">
-                                {result.title}
-                              </h4>
-                              <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">
-                                {result.description}
-                              </p>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Tribes Results */}
-                {resultsByType.tribes.length > 0 && (
-                  <div>
-                    <h3 className="text-md font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                      <Users className="w-5 h-5" />
-                      Tribus ({resultsByType.tribes.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {resultsByType.tribes.map((result) => (
-                        <motion.div
-                          key={result.id}
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => router.push(`/tribes/${result.id}`)}
-                        >
-                          {result.image && (
-                            <img 
-                              src={result.image} 
-                              alt={result.title}
-                              className="w-full h-24 object-cover"
-                            />
-                          )}
-                          <div className="p-4">
-                            <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                              {result.title}
-                            </h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                              {result.description}
-                            </p>
-                            {result.metadata && (
-                              <div className="flex items-center gap-2 mt-2">
-                                <span className="text-xs text-gray-500 flex items-center gap-1">
-                                  <Users className="w-3 h-3" />
-                                  {result.metadata.members} miembros
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Search Suggestions */
-          <div className="space-y-8">
-            {/* Recent Searches */}
-            {recentSearches.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <History className="w-5 h-5" />
-                    Búsquedas recientes
-                  </h3>
-                  <button
-                    onClick={clearAllRecentSearches}
-                    className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                  >
-                    Limpiar todo
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {recentSearches.map((search, index) => (
-                    <div key={index} className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700">
-                      <button
-                        onClick={() => {
-                          setQuery(search)
-                          handleSearch(search)
-                        }}
-                        className="text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                      >
-                        {search}
-                      </button>
-                      <button
-                        onClick={() => clearRecentSearch(search)}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Trending Searches */}
-            {trendingSearches && trendingSearches.length > 0 && (
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  Tendencias
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {trendingSearches.map((search, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        setQuery(search)
-                        handleSearch(search)
-                      }}
-                      className="bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-lg px-3 py-2 text-sm hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
-                    >
-                      {search}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+  const waiting = query.trim() !== debounced || filters !== settledFilters
+  const label = (item: GlobalSearchResult) => item.type === 'event' ? 'Evento' : item.type === 'tribe' ? 'Tribu' : item.metadata?.isHost ? item.metadata.role === 'creator' ? 'Creador' : 'Anfitrión' : 'Persona'
+  const changeFilter = (name: keyof typeof filters, value: string) => { setFilters(current => ({ ...current, [name]: value })); setPage(1) }
+  return <main className="min-h-dvh bg-background text-foreground">
+    <div className="mx-auto max-w-5xl px-5 py-8 sm:py-12">
+      <p className="text-sm font-semibold text-primary">Un plan y la gente que lo hace posible</p><h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Busca en EventNow</h1>
+      <form className="mt-7 flex items-center gap-2 rounded-2xl border border-border bg-card p-2" onSubmit={event => { event.preventDefault(); remember() }}>
+        <Search aria-hidden="true" className="ml-3 h-5 w-5 shrink-0 text-muted-foreground" />
+        <input aria-label="Búsqueda global" maxLength={100} value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} placeholder="Eventos, ciudades, lugares, tribus, anfitriones…" className="min-w-0 flex-1 bg-transparent px-2 py-3 outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+        {query && <button type="button" aria-label="Limpiar búsqueda" className="flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:bg-muted" onClick={() => { setQuery(''); setPage(1) }}><X className="h-5 w-5" /></button>}
+        <button type="submit" className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground">Buscar</button>
+      </form>
+      <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="Tipo de resultado">{SEARCH_FILTERS.map(filter => <button key={filter.value} type="button" aria-pressed={type === filter.value} onClick={() => { setType(filter.value); setPage(1) }} className={`min-h-11 rounded-xl px-4 text-sm font-medium transition-colors ${type === filter.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}>{filter.label}</button>)}<button type="button" aria-expanded={showFilters} onClick={() => setShowFilters(value => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm"><Filter className="h-4 w-4" />Filtros de eventos</button></div>
+      {showFilters && <fieldset className="mt-5 grid gap-4 rounded-2xl border border-border p-5 sm:grid-cols-2 lg:grid-cols-3"><legend className="px-2 text-sm font-semibold">Filtrar eventos</legend>{([
+        ['category', 'Categoría', 'text'], ['location', 'Ciudad o lugar', 'text'], ['startDate', 'Desde', 'date'], ['endDate', 'Hasta', 'date'], ['minPrice', 'Precio mínimo', 'number'], ['maxPrice', 'Precio máximo', 'number'],
+      ] as const).map(([name, title, inputType]) => <label key={name} className="text-sm font-medium">{title}{name === 'category' ? <select value={filters.category} onChange={event => changeFilter('category', event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-background px-3"><option value="">Todas las categorías</option>{CATEGORY_LIST.map(category => <option key={category.slug} value={category.slug}>{category.label}</option>)}</select> : <input type={inputType} min={inputType === 'number' ? 0 : undefined} maxLength={inputType === 'text' ? 100 : undefined} value={filters[name]} onChange={event => changeFilter(name, event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-background px-3" />}</label>)}<p className="text-xs leading-relaxed text-muted-foreground sm:col-span-2 lg:col-span-3">Estos filtros se aplican a eventos. Los precios se comparan en la moneda indicada por cada evento.</p><button type="button" className="min-h-11 text-left text-sm font-semibold text-primary" onClick={() => { setFilters({ category: '', location: '', startDate: '', endDate: '', minPrice: '', maxPrice: '' }); setPage(1) }}>Restablecer filtros</button></fieldset>}
+      {query.trim().length < 2 ? <section className="mt-10 rounded-2xl bg-muted/40 p-6"><h2 className="text-xl font-semibold">¿Qué te gustaría encontrar?</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Escribe al menos dos caracteres. Busca por evento, ciudad, país o lugar. También encontrarás tribus públicas, personas, creadores y anfitriones.</p>{recent.owner === owner && recent.values.length > 0 && <div className="mt-6"><div className="flex items-center justify-between gap-4"><h3 className="text-sm font-semibold">Búsquedas recientes</h3><button type="button" className="min-h-11 text-sm text-primary" onClick={() => { setRecent({ owner, values: [] }); try { localStorage.removeItem(`global-search-recent:${owner}`) } catch { /* Storage can be unavailable. */ } }}>Borrar historial</button></div><div className="mt-2 flex flex-wrap gap-2">{recent.values.map(value => <button key={value} type="button" className="min-h-11 rounded-xl bg-card px-4 text-sm" onClick={() => { setQuery(value); setPage(1) }}>{value}</button>)}</div></div>}</section>
+        : waiting || results.isPending ? <p role="status" className="py-12 text-muted-foreground">Buscando…</p>
+        : results.isError ? <section role="alert" className="mt-8 rounded-2xl border border-border p-6"><p>No pudimos completar la búsqueda. Comprueba los filtros o inténtalo de nuevo.</p><button type="button" className="mt-3 min-h-11 font-semibold text-primary" onClick={() => void results.refetch()}>Reintentar</button></section>
+        : <section className="mt-8">{type === 'locations' && <p className="mb-4 text-sm text-muted-foreground">Eventos publicados que coinciden con una ciudad, país o lugar. Las direcciones reservadas no se incluyen.</p>}<p aria-live="polite" className="mb-5 text-sm text-muted-foreground">{results.data?.pagination.total || 0} resultados para «{debounced}»</p>{!results.data?.results.length ? <div className="rounded-2xl bg-muted/40 p-8"><h2 className="text-xl font-semibold">Sin resultados por ahora</h2><p className="mt-3 text-muted-foreground">Prueba otro nombre, cambia el tipo de búsqueda o ajusta los filtros.</p></div> : <div className="grid gap-4 sm:grid-cols-2">{results.data.results.map(item => {
+          const Icon = item.type === 'event' ? Calendar : item.type === 'tribe' ? Users : User
+          return <Link key={`${item.type}:${item.id}`} href={searchResultPath(item)!} className="group flex items-start gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            {item.image ? <img src={item.image} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" /> : <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-muted"><Icon className="h-6 w-6 text-primary" /></div>}
+            <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-primary">{label(item)}</p><h2 className="mt-1 break-words text-lg font-semibold">{item.title}</h2>{item.metadata?.username && <p className="mt-1 text-sm text-muted-foreground">@{item.metadata.username}</p>}<p className="mt-2 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{item.type === 'event' ? item.metadata?.location || item.description : item.description}</p></div><ArrowRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+          </Link>
+        })}</div>}<nav aria-label="Páginas de resultados" className="mt-6 flex items-center justify-between gap-4">{page > 1 ? <button type="button" className="min-h-11 rounded-xl border border-border px-4 text-sm" onClick={() => setPage(value => value - 1)}>Anterior</button> : <span />}<span className="text-sm text-muted-foreground">Página {page}</span>{results.data?.pagination.hasMore && <button type="button" className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground" onClick={() => setPage(value => value + 1)}>Más resultados</button>}</nav></section>}
     </div>
-  )
+  </main>
 }
-export default function SearchPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>}>
-      <SearchContent />
-    </Suspense>
-  )
-}
+export default function SearchPage() { return <Suspense fallback={<p role="status" className="p-8">Cargando búsqueda…</p>}><SearchContent /></Suspense> }

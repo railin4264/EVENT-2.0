@@ -9,7 +9,7 @@ const tribeSchema = new mongoose.Schema({
     maxlength: [100, 'El nombre no puede exceder 100 caracteres'],
     validate: {
       validator: function (v) {
-        return /^[a-zA-Z0-9\s\u00C0-\u017F\u0400-\u04FF.,!?'-]+$/.test(v);
+        return /^[^\n\r<>]{3,100}$/.test(v);
       },
       message: 'El nombre contiene caracteres inválidos'
     }
@@ -31,11 +31,12 @@ const tribeSchema = new mongoose.Schema({
     type: String,
     required: [true, 'La categoría de la tribu es requerida'],
     enum: [
-      'music', 'sports', 'technology', 'tech', 'art', 'design', 'food', 'travel',
-      'education', 'business', 'health', 'fitness', 'gaming',
+      'music', 'sports', 'technology', 'tech', 'art', 'design', 'food', 'food_drink', 'travel',
+      'education', 'business', 'health', 'fitness', 'wellness', 'gaming',
       'reading', 'photography', 'cooking', 'dancing', 'writing',
-      'volunteering', 'outdoors', 'fashion', 'networking',
-      'professional', 'hobby', 'cultural', 'spiritual', 'other'
+      'volunteering', 'outdoors', 'outdoor', 'fashion', 'networking',
+      'professional', 'hobby', 'cultural', 'culture', 'spiritual',
+      'religion', 'politics', 'party', 'social', 'entertainment', 'community', 'social_cause', 'other'
     ]
   },
   creator: {
@@ -63,6 +64,14 @@ const tribeSchema = new mongoose.Schema({
       default: 'active'
     }
   }],
+  joinRequests: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    message: { type: String, trim: true, maxlength: 500, default: '' },
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    requestedAt: { type: Date, default: Date.now },
+    reviewedAt: Date,
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }],
   location: {
     type: {
       type: String,
@@ -82,6 +91,24 @@ const tribeSchema = new mongoose.Schema({
   avatar: {
     url: String,
     alt: String
+  },
+  coverImage: {
+    url: String,
+    alt: String
+  },
+  rules: [{
+    type: mongoose.Schema.Types.Mixed
+  }],
+  welcomeMessage: {
+    type: String,
+    maxlength: 500,
+    default: ''
+  },
+  socialLinks: {
+    website: String,
+    discord: String,
+    telegram: String,
+    whatsapp: String
   },
   tags: [{
     type: String,

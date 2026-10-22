@@ -9,8 +9,31 @@ const { protect } = require('../middleware/auth');
 const twoFactorService = require('../services/twoFactorService');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const jwtService = require('../services/jwtService');
 
 const router = express.Router();
+
+// A second factor only completes a password-authenticated login challenge.
+const requireLoginChallenge = (req, res, next) => {
+  try {
+    if (typeof req.body.tempToken !== 'string') throw new Error('Missing challenge');
+    const decoded = jwtService.verifyTempToken(req.body.tempToken);
+    if (req.body.userId && String(req.body.userId) !== String(decoded.id)) throw new Error('Challenge mismatch');
+    req.twoFactorUserId = decoded.id;
+    req.twoFactorSessionVersion = decoded.sessionVersion || 0;
+    next();
+  } catch (error) {
+    res.status(401).json({ success: false, message: 'Valid login challenge required', code: 'TWO_FACTOR_CHALLENGE_REQUIRED' });
+  }
+};
+
+async function issueLoginTokens(user) {
+  const tokens = jwtService.generateTokenPair(user);
+  user.refreshTokens = [...(user.refreshTokens || []), tokens.refreshToken].slice(-5);
+  user.tokens = [...(user.tokens || []), { token: tokens.accessToken }].slice(-5);
+  await user.save();
+  return tokens;
+}
 
 // Rate limiting for 2FA routes
 const twoFactorLimiter = rateLimit({
@@ -170,7 +193,7 @@ router.post('/verify-setup', protect, twoFactorLimiter, validateTOTPToken, async
 // @desc    Verify 2FA token during login
 // @route   POST /api/2fa/verify
 // @access  Public (but requires valid user context)
-router.post('/verify', twoFactorLimiter, validateTOTPToken, async (req, res) => {
+router.post('/verify', twoFactorLimiter, requireLoginChallenge, validateTOTPToken, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -181,7 +204,8 @@ router.post('/verify', twoFactorLimiter, validateTOTPToken, async (req, res) => 
       });
     }
 
-    const { token, userId } = req.body;
+    const { token } = req.body;
+    const userId = req.twoFactorUserId;
 
     if (!userId) {
       return res.status(400).json({
@@ -191,8 +215,8 @@ router.post('/verify', twoFactorLimiter, validateTOTPToken, async (req, res) => 
     }
 
     // Find user
-    const user = await User.findById(userId);
-    if (!user || !user.twoFactor?.isEnabled) {
+    const user = await User.findById(userId).select('+twoFactor.secret');
+    if (!user || !user.isActive || !user.twoFactor?.isEnabled || (user.sessionVersion || 0) !== req.twoFactorSessionVersion) {
       return res.status(400).json({
         success: false,
         message: 'Invalid request'
@@ -224,14 +248,16 @@ router.post('/verify', twoFactorLimiter, validateTOTPToken, async (req, res) => 
     await twoFactorService.clearRateLimit(userId);
 
     // Generate JWT token
-    const jwtToken = user.getSignedJwtToken();
+    const tokens = await issueLoginTokens(user);
 
     logger.info(`2FA verification successful for user: ${user.username}`);
 
     res.json({
       success: true,
       message: '2FA verification successful',
-      token: jwtToken,
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       user: {
         id: user._id,
         username: user.username,
@@ -252,7 +278,7 @@ router.post('/verify', twoFactorLimiter, validateTOTPToken, async (req, res) => 
 // @desc    Verify backup code
 // @route   POST /api/2fa/verify-backup
 // @access  Public (but requires valid user context)
-router.post('/verify-backup', twoFactorLimiter, validateBackupCode, async (req, res) => {
+router.post('/verify-backup', twoFactorLimiter, requireLoginChallenge, validateBackupCode, async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -263,7 +289,8 @@ router.post('/verify-backup', twoFactorLimiter, validateBackupCode, async (req, 
       });
     }
 
-    const { code, userId } = req.body;
+    const { code } = req.body;
+    const userId = req.twoFactorUserId;
 
     if (!userId) {
       return res.status(400).json({
@@ -273,8 +300,8 @@ router.post('/verify-backup', twoFactorLimiter, validateBackupCode, async (req, 
     }
 
     // Find user
-    const user = await User.findById(userId);
-    if (!user || !user.twoFactor?.isEnabled) {
+    const user = await User.findById(userId).select('+twoFactor.secret');
+    if (!user || !user.isActive || !user.twoFactor?.isEnabled || (user.sessionVersion || 0) !== req.twoFactorSessionVersion) {
       return res.status(400).json({
         success: false,
         message: 'Invalid request'
@@ -302,25 +329,30 @@ router.post('/verify-backup', twoFactorLimiter, validateBackupCode, async (req, 
       });
     }
 
-    // Update user's backup codes
-    user.twoFactor.backupCodes = verification.remainingCodes;
-    await user.save();
+    // Consume the code atomically so concurrent requests cannot reuse it.
+    const claimedUser = await User.findOneAndUpdate({
+      _id: userId,
+      'twoFactor.backupCodes': { $elemMatch: { code: code.toUpperCase(), used: false } }
+    }, { $set: { 'twoFactor.backupCodes.$.used': true, 'twoFactor.backupCodes.$.usedAt': new Date() } }, { new: true });
+    if (!claimedUser) return res.status(400).json({ success: false, message: 'Invalid backup code' });
 
     // Clear rate limiting on successful verification
     await twoFactorService.clearRateLimit(userId);
 
     // Generate JWT token
-    const jwtToken = user.getSignedJwtToken();
+    const tokens = await issueLoginTokens(claimedUser);
 
     // Count remaining unused backup codes
-    const remainingCodes = verification.remainingCodes.filter(c => !c.used).length;
+    const remainingCodes = claimedUser.twoFactor.backupCodes.filter(c => !c.used).length;
 
     logger.info(`Backup code verification successful for user: ${user.username}`);
 
     res.json({
       success: true,
       message: 'Backup code verification successful',
-      token: jwtToken,
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       remainingBackupCodes: remainingCodes,
       user: {
         id: user._id,
@@ -353,7 +385,7 @@ router.post('/disable', protect, twoFactorLimiter, validateTOTPToken, async (req
       });
     }
 
-    const user = req.user;
+    const user = await User.findById(req.user._id).select('+twoFactor.secret');
     const { token } = req.body;
 
     if (!user.twoFactor?.isEnabled) {
@@ -412,7 +444,7 @@ router.post('/regenerate-backup-codes', protect, twoFactorLimiter, validateTOTPT
       });
     }
 
-    const user = req.user;
+    const user = await User.findById(req.user._id).select('+twoFactor.secret');
     const { token } = req.body;
 
     if (!user.twoFactor?.isEnabled) {

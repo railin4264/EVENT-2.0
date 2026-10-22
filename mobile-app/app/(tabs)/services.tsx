@@ -1,5 +1,1 @@
-import ServicesScreen from '../../src/screens/ServicesScreen';
-
-export default function TabServicesScreen() {
-  return <ServicesScreen />;
-}
+export { default } from '../../src/screens/SocialHubScreen';

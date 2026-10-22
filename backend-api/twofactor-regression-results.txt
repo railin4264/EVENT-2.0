@@ -1,0 +1,99 @@
+
+> eventconnect-backend-api@2.0.0 test
+> jest --runInBand --coverage=false --silent tests/twoFactor.test.js
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+2026-10-12T05:31:29.614Z [[33mwarn[39m]: JWT_REFRESH_SECRET not set — generating ephemeral secret. All refresh tokens will be invalidated on restart.
+2026-10-12T05:31:29.616Z [[32minfo[39m]: JWT Service initialized with rotation:
+2026-10-12T05:31:48.279Z [[32minfo[39m]: Cloudinary service initialized
+2026-10-12T05:31:50.447Z [[33mwarn[39m]: Firebase service account file not found at C:\Users\Raili\OneDrive\Nueva carpeta\Imágenes\EVENT NOW 2.0\backend-api\config\firebase-service-account.json. Push notifications will be disabled.
+2026-10-12T05:31:50.448Z [[33mwarn[39m]: Firebase service account not configured. Push notifications will be disabled.
+2026-10-12T05:31:50.480Z [[32minfo[39m]: 2FA secret generated for user: test@example.com
+2026-10-12T05:31:51.011Z [[32minfo[39m]: Generated 8 backup codes
+2026-10-12T05:31:51.046Z [[32minfo[39m]: Generated 5 backup codes
+2026-10-12T05:31:51.074Z [[32minfo[39m]: Generated 10 backup codes
+2026-10-12T05:31:51.103Z [[32minfo[39m]: Backup code used successfully
+2026-10-12T05:31:51.577Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:51.580Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-12T05:31:51.580Z [[32minfo[39m]: 2FA setup token generated for user: 6acc70c7ab09a9d9d0ab9323
+2026-10-12T05:31:51.589Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-12T05:31:51.594Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:51 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-12T05:31:51.840Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:51.841Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:51 +0000] "POST /api/2fa/setup HTTP/1.1" 400 69 "-" "-"
+2026-10-12T05:31:52.010Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/setup HTTP/1.1" 401 79 "-" "-"
+2026-10-12T05:31:52.224Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.224Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-12T05:31:52.224Z [[32minfo[39m]: 2FA setup token generated for user: 6acc70c8ab09a9d9d0ab936f
+2026-10-12T05:31:52.227Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-12T05:31:52.227Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-12T05:31:52.272Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.285Z [[32minfo[39m]: Generated 8 backup codes
+2026-10-12T05:31:52.293Z [[32minfo[39m]: 2FA setup completed and temporary data cleaned
+2026-10-12T05:31:52.293Z [[32minfo[39m]: 2FA enabled successfully for user: 2fatest
+2026-10-12T05:31:52.294Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 200 166 "-" "-"
+2026-10-12T05:31:52.452Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.452Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-12T05:31:52.452Z [[32minfo[39m]: 2FA setup token generated for user: 6acc70c8ab09a9d9d0ab939d
+2026-10-12T05:31:52.456Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-12T05:31:52.456Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-12T05:31:52.476Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.483Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 400 48 "-" "-"
+2026-10-12T05:31:52.689Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.689Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-12T05:31:52.689Z [[32minfo[39m]: 2FA setup token generated for user: 6acc70c8ab09a9d9d0ab93b9
+2026-10-12T05:31:52.692Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-12T05:31:52.693Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-12T05:31:52.715Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.720Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 400 60 "-" "-"
+2026-10-12T05:31:52.888Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.888Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-12T05:31:52.888Z [[32minfo[39m]: 2FA setup token generated for user: 6acc70c8ab09a9d9d0ab93d5
+2026-10-12T05:31:52.891Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-12T05:31:52.891Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-12T05:31:52.909Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:52.910Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:52 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 400 146 "-" "-"
+2026-10-12T05:31:53.111Z [[32minfo[39m]: 2FA rate limit cleared for user: 6acc70c8ab09a9d9d0ab93f0
+2026-10-12T05:31:53.119Z [[32minfo[39m]: 2FA verification successful for user: 2fatest
+2026-10-12T05:31:53.123Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:53 +0000] "POST /api/2fa/verify HTTP/1.1" 200 - "-" "-"
+2026-10-12T05:31:53.273Z [[33mwarn[39m]: Failed 2FA attempt recorded for user 6acc70c9ab09a9d9d0ab940e, type: totp
+2026-10-12T05:31:53.274Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:53 +0000] "POST /api/2fa/verify HTTP/1.1" 400 70 "-" "-"
+2026-10-12T05:31:53.427Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:53 +0000] "POST /api/2fa/verify HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:53.708Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:53 +0000] "POST /api/2fa/verify HTTP/1.1" 400 45 "-" "-"
+2026-10-12T05:31:53.930Z [[32minfo[39m]: Backup code used successfully
+2026-10-12T05:31:53.935Z [[32minfo[39m]: 2FA rate limit cleared for user: 6acc70c9ab09a9d9d0ab9461
+2026-10-12T05:31:53.939Z [[32minfo[39m]: Backup code verification successful for user: 2fatest
+2026-10-12T05:31:53.940Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:53 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 200 - "-" "-"
+2026-10-12T05:31:54.154Z [[33mwarn[39m]: Failed 2FA attempt recorded for user 6acc70caab09a9d9d0ab9486, type: backup
+2026-10-12T05:31:54.155Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:54 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 400 71 "-" "-"
+2026-10-12T05:31:54.373Z [[33mwarn[39m]: Failed 2FA attempt recorded for user 6acc70caab09a9d9d0ab94a4, type: backup
+2026-10-12T05:31:54.374Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:54 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 400 71 "-" "-"
+2026-10-12T05:31:54.620Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:54 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 400 144 "-" "-"
+2026-10-12T05:31:55.067Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:55 +0000] "POST /api/2fa/verify HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:55.544Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:55 +0000] "POST /api/2fa/verify HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:55.560Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:55 +0000] "POST /api/2fa/verify HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:55.868Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:55 +0000] "POST /api/2fa/verify HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:56.069Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:56 +0000] "POST /api/2fa/verify HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:56.271Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:56 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:56.550Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:56 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:56.565Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:56 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:56.805Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:56 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:56.993Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:56 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 401 99 "-" "-"
+2026-10-12T05:31:57.277Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:57.278Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:57 +0000] "GET /api/2fa/status HTTP/1.1" 200 141 "-" "-"
+2026-10-12T05:31:57.451Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:57.452Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:57 +0000] "GET /api/2fa/status HTTP/1.1" 200 161 "-" "-"
+2026-10-12T05:31:57.628Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:57 +0000] "GET /api/2fa/status HTTP/1.1" 401 79 "-" "-"
+2026-10-12T05:31:58.028Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:58.038Z [[32minfo[39m]: 2FA rate limit cleared for user: 6acc70cdab09a9d9d0ab95ee
+2026-10-12T05:31:58.038Z [[32minfo[39m]: 2FA disabled for user: 2fatest
+2026-10-12T05:31:58.039Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:58 +0000] "POST /api/2fa/disable HTTP/1.1" 200 54 "-" "-"
+2026-10-12T05:31:58.469Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-12T05:31:58.482Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:58 +0000] "POST /api/2fa/disable HTTP/1.1" 400 48 "-" "-"
+2026-10-12T05:31:59.052Z [[32minfo[39m]: User authenticated: testuser_1791783118804
+2026-10-12T05:31:59.070Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [12/Oct/2026:05:31:59 +0000] "POST /api/2fa/disable HTTP/1.1" 400 65 "-" "-"
+PASS tests/twoFactor.test.js (48.76 s)
+
+Test Suites: 1 passed, 1 total
+Tests:       41 passed, 41 total
+Snapshots:   0 total
+Time:        49.274 s

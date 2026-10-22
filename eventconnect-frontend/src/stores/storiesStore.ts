@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { useAuthStore } from './authStore'
 import * as storiesAPI from '@/lib/api/stories'
 import type { Story, StoryFeedItem, CreateStoryData, CreateTextStoryData } from '@/lib/api/stories'
 
@@ -142,10 +143,15 @@ export const useStoriesStore = create<StoriesState>()(
       },
 
       fetchMyStories: async () => {
+        const session = useAuthStore.getState()
+        const identity = session.isAuthenticated ? session.user?.id || session.user?._id : undefined
+        if (!identity) { set({ myStories: [] }); return }
         try {
           set({ isLoading: true, error: null })
           
           const response = await storiesAPI.getMyStories()
+          const currentSession = useAuthStore.getState()
+          if (!currentSession.isAuthenticated || (currentSession.user?.id || currentSession.user?._id) !== identity) return
           
           const storiesWithTimeRemaining = (response.stories || []).map((story: any) => ({
             ...story,
@@ -234,6 +240,8 @@ export const useStoriesStore = create<StoriesState>()(
       },
 
       viewStory: async (storyId: string) => {
+        // Reading public event stories must not call the protected view-tracking endpoint.
+        if (!useAuthStore.getState().isAuthenticated) return
         try {
           await storiesAPI.viewStory(storyId)
           

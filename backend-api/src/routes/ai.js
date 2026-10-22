@@ -57,55 +57,16 @@ router.post('/enhance-event', protect, async (req, res) => {
       });
     }
 
-    // Attempt to use Claude API when key is configured
-    if (process.env.ANTHROPIC_API_KEY) {
-      try {
-        const aiResult = await AIRecommendationService.enhanceEventDescriptionWithAI(title, description);
-        if (aiResult && (aiResult.title || aiResult.description)) {
-          return res.json({
-            success: true,
-            data: {
-              title: aiResult.title || title,
-              description: aiResult.description || description
-            },
-            source: 'claude'
-          });
-        }
-      } catch (aiError) {
-        logger.warn('Claude API failed for enhance-event, falling back to heuristic:', aiError.message);
-      }
-    }
-
-    // Heuristic fallback when ANTHROPIC_API_KEY is not set or Claude call fails
-    let enhancedTitle = title;
-    let enhancedDescription = description;
-
-    if (title) {
-      const adjectives = ['Exclusivo', 'Increíble', 'Inolvidable', 'Premium', 'Épico'];
-      const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
-      if (!title.toLowerCase().includes('exclusivo') && !title.toLowerCase().includes('épico')) {
-        enhancedTitle = `🔥 ${randomAdj}: ${title}`;
-      }
-    }
-
-    if (description) {
-      enhancedDescription = `✨ **Únete a nosotros para una experiencia que no querrás perderte.** ✨\n\n${description}\n\n👉 *Reserva tu lugar ahora antes de que se agoten los cupos. ¡Crea memorias con tu Tribu!* 🥂`;
-    }
-
-    res.json({
-      success: true,
-      data: {
-        title: enhancedTitle,
-        description: enhancedDescription
-      },
-      source: 'heuristic'
-    });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ success: false, code: 'AI_NOT_CONFIGURED', message: 'La mejora con IA aún no está configurada. Puedes editar y publicar tu texto manualmente.' });
+    const aiResult = await AIRecommendationService.enhanceEventDescriptionWithAI(title, description);
+    if (!aiResult || !(aiResult.title || aiResult.description)) return res.status(502).json({ success: false, code: 'AI_UNAVAILABLE', message: 'El proveedor no devolvió una mejora válida. Tu texto se conserva.' });
+    return res.json({ success: true, data: { title: aiResult.title || title, description: aiResult.description || description }, source: 'claude' });
 
   } catch (error) {
     logger.error('Error enhancing event with AI:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error applying AI enhancements'
+    res.status(502).json({
+      success: false, code: 'AI_UNAVAILABLE',
+      message: 'La mejora con IA no está disponible. Tu texto se conserva.'
     });
   }
 });

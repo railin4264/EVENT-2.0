@@ -1,0 +1,24 @@
+import {TextEncoder} from 'util'
+import {planningInputInstant,planningWindow,planningPreset,planningEvents,sortPlanningEvents,planningCalendar,planningItinerary,planningSchedule,validPlanningZone} from '../global-planning'
+const a={_id:'aaaaaaaaaaaaaaaaaaaaaaaa',title:'Música y café',date:'2026-11-21T22:00:00Z',endDate:'2026-11-22T00:00:00Z',city:'Santo Domingo',timeZone:'America/Santo_Domingo'}
+const b={...a,_id:'bbbbbbbbbbbbbbbbbbbbbbbb',title:'Taller breve',date:'2026-11-21T23:00:00Z',endDate:'2026-11-21T23:30:00Z'}
+describe('horarios internacionales',()=>{
+ it.each([['America/Santo_Domingo','2026-11-21T18:00','2026-11-21T22:00:00.000Z'],['Asia/Kathmandu','2026-11-21T18:00','2026-11-21T12:15:00.000Z'],['Pacific/Auckland','2026-11-21T18:00','2026-11-21T05:00:00.000Z']])('convierte %s sin inferir zona',(zone,input,expected)=>expect(planningInputInstant(input,zone)).toBe(expected))
+ it.each(['2026-03-08T02:30','2026-11-01T01:30'])('rechaza hora inexistente o repetida DST %s',value=>expect(()=>planningInputInstant(value,'America/New_York')).toThrow())
+ it.each(['2026-02-30T18:00','2026-11-21T24:00','2026-11-21T18:00Z'])('rechaza calendario o formato inválido %s',value=>expect(()=>planningInputInstant(value,'UTC')).toThrow())
+ it('cuenta tiempo real atravesando un cambio DST',()=>{const window=planningWindow('2026-03-08T01:30','2026-03-08T04:30','America/New_York',Date.parse('2026-03-01'));expect(Date.parse(window.until)-Date.parse(window.from)).toBe(2*3600000)})
+ it('bloquea intervalos pasados, invertidos o superiores a siete días',()=>{for(const [from,until]of [['2026-11-20T12:00','2026-11-20T18:00'],['2026-11-22T12:00','2026-11-21T18:00'],['2026-11-22T12:00','2026-12-05T18:00']])expect(()=>planningWindow(from,until,'UTC',Date.parse('2026-11-21'))).toThrow()})
+ it('presets de dos y cuatro horas mantienen duración y son futuros',()=>{const now=new Date('2026-11-20T17:34:11Z');for(const [kind,hours]of [['2h',2],['4h',4]]as const){const p=planningPreset(kind,'Europe/Madrid',now),w=planningWindow(p.from,p.until,'Europe/Madrid',now.getTime());expect(Date.parse(w.from)).toBeGreaterThan(now.getTime());expect(Date.parse(w.until)-Date.parse(w.from)).toBe(hours*3600000)}})
+ it('define el fin de semana explícitamente sin asumir todos los países iguales',()=>{const p=planningPreset('weekend','America/Santo_Domingo',new Date('2026-10-20T12:00Z'));expect(p.from).toBe('2026-10-23T18:00');expect(p.until).toBe('2026-10-25T23:59');expect(p.explanation).toContain('viernes')})
+ it('un domingo al cierre propone el siguiente fin de semana válido',()=>{
+   const p=planningPreset('weekend','UTC',new Date('2026-10-25T23:58:30Z'))
+   expect(Date.parse(planningInputInstant(p.until,'UTC'))).toBeGreaterThan(Date.parse(planningInputInstant(p.from,'UTC')))
+ })
+ it('valida IANA sin inferirla del nombre de ciudad',()=>{expect(validPlanningZone('Europe/Madrid')).toBe(true);expect(validPlanningZone('Madrid')).toBe(false);expect(validPlanningZone('<script>')).toBe(false)})
+})
+it('filtra tildes y ordena sin mutar la respuesta original',()=>{const original=[a,b];expect(sortPlanningEvents(original,'musica','date')).toEqual([a]);expect(sortPlanningEvents(original,'','duration')).toEqual([b,a]);expect(original).toEqual([a,b])})
+it('excluye horarios incompletos, IDs extraños y duplicados',()=>{expect(planningEvents([a,a,{...a,_id:'../x'},{...b,endDate:undefined},{...b,endDate:b.date}])).toEqual([a])})
+it('compara fecha local del visitante con destino incluyendo cambio de día',()=>{expect(planningSchedule(a,'Asia/Tokyo')).toContain('22');expect(planningSchedule(a,'America/Santo_Domingo')).toContain('21')})
+it('ICS conserva UTC y fin real, escapa inyección y pliega líneas UTF8',()=>{const calendar=planningCalendar({...a,title:'漢'.repeat(40)+'\nBEGIN:VEVENT;no,\\',city:'Ciudad\r\nATTENDEE:evil'},'https://example.test');expect(calendar).toContain('DTSTART:20261121T220000Z');expect(calendar).toContain('DTEND:20261122T000000Z');expect(calendar.match(/(?:^|\r\n)BEGIN:VEVENT/g)).toHaveLength(1);expect(calendar).toContain('\\n');for(const line of calendar.split('\r\n'))expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75);expect(calendar).not.toContain('\r\nATTENDEE:')})
+it('ICS rechaza origen ejecutable y horario sin fin',()=>{expect(()=>planningCalendar(a,'javascript:alert(1)')).toThrow();expect(()=>planningCalendar({...a,endDate:''},'https://example.test')).toThrow()})
+it('resumen incluye sólo campos públicos seleccionados y no confirma asistencia',()=>{const lines=planningItinerary([{...a,attendees:[{email:'private@test'}],owner:'secret'}as any],'Europe/Madrid','UTC').join('\n');expect(lines).toContain('Zona declarada del evento');expect(lines).not.toContain('private@test');expect(lines).not.toContain('secret');expect(lines).toContain('no confirma asistencia');expect(()=>planningItinerary([],'UTC','UTC')).toThrow()})

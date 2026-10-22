@@ -1,16 +1,39 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, Search, Plus, Filter, Star, MapPin, Calendar, MessageCircle, Crown, Shield, Heart, TrendingUp, Globe, Lock } from 'lucide-react'
+import {
+  Users,
+  Search,
+  Plus,
+  MapPin,
+  Calendar,
+  MessageCircle,
+  Crown,
+  Shield,
+  Globe,
+  Lock,
+  Compass,
+  Navigation,
+  CheckCircle,
+  X,
+  Clock,
+  ArrowRight,
+  Sparkles
+} from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { apiClient } from '@/lib/api/client'
 import toast from 'react-hot-toast'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { useLiveLocation } from '@/hooks/useLiveLocation'
+import { readTribeAccess, type TribeAccess } from '@/components/tribes/tribe-access'
+import { TribeAccessPanel } from '@/components/tribes/TribeAccessPanel'
+import { useTribeAccessActions } from '@/components/tribes/useTribeAccessActions'
 
-interface Tribe {
+interface Tribe extends TribeAccess {
   _id: string
   name: string
   description: string
@@ -19,6 +42,7 @@ interface Tribe {
   cover?: string
   isPrivate: boolean
   tags?: string[]
+  rules?: string[]
   createdBy: {
     _id?: string
     username: string
@@ -26,7 +50,7 @@ interface Tribe {
     lastName: string
     avatar?: string
   }
-  members: string[]
+  members: any[]
   stats: {
     memberCount: number
     eventCount: number
@@ -34,14 +58,13 @@ interface Tribe {
   }
   location?: {
     address?: string
+    city?: string
+    country?: string
+    coordinates?: number[]
     isVirtual?: boolean
   }
   createdAt: string
-  // Runtime properties added by frontend
-  isMember?: boolean
-  isAdmin?: boolean
-  hasPendingRequest?: boolean
-  // Computed properties for convenience
+  pendingRequestsCount?: number
   isPublic?: boolean
   memberCount?: number
 }
@@ -51,264 +74,269 @@ interface CreateTribeForm {
   description: string
   category: string
   isPublic: boolean
+  requiresApproval: boolean
   tags: string[]
+  rules: string[]
+  welcomeMessage: string
   location: {
     address: string
+    coordinates?: [number, number]
+    isVirtual?: boolean
   }
 }
 
-const CATEGORY_TRANSLATIONS: Record<string, string> = {
-  music: 'Música',
-  sports: 'Deportes',
-  technology: 'Tecnología',
-  art: 'Arte',
-  food: 'Comida',
-  travel: 'Viajes',
-  education: 'Educación',
-  business: 'Negocios',
-  health: 'Salud',
-  fitness: 'Fitness',
-  gaming: 'Videojuegos',
-  reading: 'Lectura',
-  photography: 'Fotografía',
-  cooking: 'Cocina',
-  dancing: 'Danza',
-  writing: 'Escritura',
-  volunteering: 'Voluntariado',
-  outdoors: 'Aire Libre',
-  fashion: 'Moda',
-  networking: 'Networking',
-  professional: 'Profesional',
-  hobby: 'Hobbies',
-  cultural: 'Cultura',
-  spiritual: 'Espiritualidad',
-  other: 'Otros'
-}
+import { CATEGORY_TRANSLATIONS } from '@/lib/tribe-constants'
 
-const categories = Object.keys(CATEGORY_TRANSLATIONS)
+const categories = [
+  'music',
+  'technology',
+  'sports',
+  'art',
+  'food',
+  'business',
+  'outdoors',
+  'networking',
+  'gaming',
+  'cultural',
+  'health',
+  'travel',
+  'education',
+  'other'
+]
 
 export default function TribesPage() {
-  const [selectedTab, setSelectedTab] = useState<'discover' | 'my-tribes'>('discover')
+  const [page, setPage] = useState(1)
+  const [selectedTab, setSelectedTab] = useState<'discover' | 'my-tribes' | 'requests'>('discover')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [privacyFilter, setPrivacyFilter] = useState<'all' | 'public' | 'private'>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [joinRequestTarget, setJoinRequestTarget] = useState<Tribe | null>(null)
   const [newTag, setNewTag] = useState('')
+  const [newRule, setNewRule] = useState('')
+
+  const { location: liveLocation, refreshNow, presets } = useLiveLocation(true)
+  const { user, isAuthenticated } = useAuthStore()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const currentUserId = String(user?._id || user?.id || '')
+  const accessActions = useTribeAccessActions(currentUserId)
+
   const [createForm, setCreateForm] = useState<CreateTribeForm>({
     name: '',
     description: '',
-    category: '',
+    category: 'music',
     isPublic: true,
+    requiresApproval: false,
     tags: [],
+    rules: ['Respeto mutuo entre todos los miembros', 'Compartir contenido relevante para la comunidad'],
+    welcomeMessage: '¡Bienvenido/a a nuestra comunidad en EventNow!',
     location: {
-      address: ''
+      address: liveLocation.address || 'Santo Domingo, República Dominicana',
+      coordinates: [liveLocation.lng, liveLocation.lat],
+      isVirtual: false
     }
   })
 
-  const { user } = useAuthStore()
-  const router = useRouter()
-  const queryClient = useQueryClient()
+  // Keep default create location synced with live location if user hasn't edited it
+  useEffect(() => {
+    if (liveLocation?.address && (!createForm.location.address || createForm.location.address.includes('Santo Domingo'))) {
+      setCreateForm((prev) => ({
+        ...prev,
+        location: {
+          ...prev.location,
+          address: liveLocation.address,
+          coordinates: [liveLocation.lng, liveLocation.lat]
+        }
+      }))
+    }
+  }, [liveLocation.address, liveLocation.lat, liveLocation.lng])
 
-  // Helper function to process tribe data
+  useEffect(() => {
+    setJoinRequestTarget(null); setShowCreateModal(false); setNewTag(''); setNewRule('')
+    setCreateForm(prev => ({ ...prev, name: '', description: '', tags: [], welcomeMessage: '' }))
+    setSelectedTab('discover')
+  }, [currentUserId])
+
+  useEffect(() => { setPage(1) }, [selectedTab, searchQuery, selectedCategory, privacyFilter, currentUserId])
+
+  const tribesKey = ['tribes', selectedTab, searchQuery, selectedCategory, privacyFilter, currentUserId, page]
+
   const processTribeData = (tribeData: any[]): Tribe[] => {
-    if (!tribeData) return []
+    if (!Array.isArray(tribeData)) return []
 
-    return tribeData.map((tribe: any) => ({
-      ...tribe,
-      // Add computed properties for convenience
-      isPublic: !tribe.isPrivate,
-      memberCount: tribe.stats?.memberCount || 0,
-      // Add runtime properties (will be updated by mutations)
-      isMember: tribe.isMember || false,
-      isAdmin: tribe.isAdmin || false,
-      hasPendingRequest: tribe.hasPendingRequest || false
-    }))
+    const currentUserId = String(user?._id || user?.id || '')
+
+    return tribeData.map((tribe: any) => {
+      const access = readTribeAccess(tribe, currentUserId)
+      const creatorObj = tribe.createdBy || tribe.creator || {
+        _id: '',
+        username: 'organizador',
+        firstName: 'Comunidad',
+        lastName: 'EventNow'
+      }
+      const isPrivate = access.privacy !== 'public'
+      const count =
+        tribe.memberCount ??
+        tribe.membersCount ??
+        tribe.stats?.memberCount ??
+        tribe.stats?.totalMembers ??
+        (Array.isArray(tribe.members) ? tribe.members.length : 1)
+
+      const avatarUrl =
+        typeof tribe.avatar === 'string'
+          ? tribe.avatar
+          : tribe.avatar?.url || tribe.logoUrl || ''
+
+      const coverUrl =
+        typeof tribe.cover === 'string'
+          ? tribe.cover
+          : tribe.coverImage?.url || tribe.cover?.url || tribe.bannerUrl || ''
+
+      const pendingRequestsCount =
+        typeof tribe.pendingRequestsCount === 'number'
+          ? tribe.pendingRequestsCount
+          : Array.isArray(tribe.joinRequests)
+            ? tribe.joinRequests.filter((r: any) => r.status === 'pending').length
+            : 0
+
+      return {
+        ...tribe,
+        members: access.isMember || access.isAdmin ? (Array.isArray(tribe.members) ? tribe.members : []) : [],
+        createdBy: creatorObj,
+        avatar: avatarUrl,
+        cover: coverUrl,
+        isPrivate,
+        isPublic: !isPrivate,
+        memberCount: count,
+        stats: {
+          memberCount: count,
+          eventCount: tribe.stats?.eventCount ?? tribe.stats?.totalEvents ?? 0,
+          activityLevel: tribe.stats?.activityLevel || (count >= 10 ? 'high' : count >= 3 ? 'medium' : 'low')
+        },
+        ...access,
+        pendingRequestsCount
+      }
+    })
   }
 
-  // Fetch tribes
-  const { data: tribes, isLoading } = useQuery({
-    queryKey: ['tribes', selectedTab, searchQuery, selectedCategory],
-    queryFn: async () => {
+  const { data: tribeResult, isLoading, isError, refetch, isFetching } = useQuery({
+    queryKey: tribesKey,
+    enabled: selectedTab === 'discover' || isAuthenticated,
+    queryFn: async ({ signal }) => {
       if (selectedTab === 'my-tribes') {
-        const response = await apiClient.get('/tribes/user/me')
-        return processTribeData(response.data.tribes)
-      } else {
-        const params = new URLSearchParams({
-          ...(searchQuery && { search: searchQuery }),
-          ...(selectedCategory !== 'all' && { category: selectedCategory })
-        })
-
-        const response = await apiClient.get(`/tribes?${params}`)
-        return processTribeData(response.data.tribes)
+        const response = await apiClient.get('/tribes/user/me', { signal })
+        const raw = response.data?.tribes || response.data?.data || []
+        return { items: processTribeData(raw), pagination: response.data?.pagination || { page: 1, pages: 1, total: raw.length } }
       }
-    }
-  })
 
-  // Join tribe mutation
-  const joinTribeMutation = useMutation({
-    mutationFn: async (tribeId: string) => {
-      const response = await apiClient.post(`/tribes/${tribeId}/join`)
-      return { tribeId, ...response.data }
-    },
-    onMutate: async (tribeId: string) => {
-      // Cancel any outgoing refetches so they don't overwrite our optimistic update
-      await queryClient.cancelQueries({ queryKey: ['tribes'] })
-
-      // Snapshot the previous value
-      const previousTribes = queryClient.getQueryData(['tribes', selectedTab, searchQuery, selectedCategory])
-
-      // Optimistically update to the new value
-      queryClient.setQueryData(['tribes', selectedTab, searchQuery, selectedCategory], (old: any) => {
-        if (!old) return old
-        return old.map((tribe: Tribe) => {
-          if (tribe._id === tribeId) {
-            // For public tribes: immediately become member
-            // For private tribes: just set pending request
-            const isPublic = !tribe.isPrivate
-            if (isPublic) {
-              return {
-                ...tribe,
-                isMember: true,
-                memberCount: (tribe.memberCount || 0) + 1,
-                stats: {
-                  ...tribe.stats,
-                  memberCount: (tribe.stats?.memberCount || 0) + 1
-                }
-              }
-            } else {
-              return {
-                ...tribe,
-                hasPendingRequest: true
-              }
-            }
-          }
-          return tribe
-        })
+      const params = new URLSearchParams({
+        ...(searchQuery && { search: searchQuery }),
+        ...(selectedCategory !== 'all' && { category: selectedCategory }),
+        ...(privacyFilter !== 'all' && { privacy: privacyFilter }),
+        limit: '24',
+        page: String(page),
+        ...(selectedTab === 'requests' && { scope: 'requests' })
       })
 
-      // Return a context object with the snapshotted value
-      return { previousTribes }
-    },
-    onSuccess: (data, tribeId) => {
-      // Invalidate to get fresh data from server
-      queryClient.invalidateQueries({ queryKey: ['tribes'] })
+      const response = await apiClient.get(`/tribes?${params.toString()}`, { signal })
+      const raw = response.data?.tribes || response.data?.data || []
+      const processed = processTribeData(raw)
 
-      // Check if user was already a member
-      if (data.alreadyMember) {
-        toast('Ya eres miembro de esta tribu', { icon: 'ℹ️' })
-        return
-      }
-
-      // Get the tribe to check if it's public or private
-      const currentTribes = queryClient.getQueryData(['tribes', selectedTab, searchQuery, selectedCategory]) as Tribe[]
-      const tribe = currentTribes?.find(t => t._id === tribeId)
-
-      if (!tribe?.isPrivate) {
-        toast.success('Te has unido a la tribu exitosamente')
-      } else {
-        toast.success('Solicitud enviada correctamente')
-      }
-    },
-    onError: (err, tribeId, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousTribes) {
-        queryClient.setQueryData(['tribes', selectedTab, searchQuery, selectedCategory], context.previousTribes)
-      }
-      toast.error('Error al unirse a la tribu')
-    },
-    onSettled: () => {
-      // Always refetch after error or success to ensure we have the correct state
-      queryClient.invalidateQueries({ queryKey: ['tribes'] })
+      return { items: processed, pagination: response.data?.pagination || { page: 1, pages: 1, total: processed.length } }
     }
   })
+  const tribes = tribeResult?.items
+  const pagination = tribeResult?.pagination
 
-  // Leave tribe mutation
-  const leaveTribeMutation = useMutation({
-    mutationFn: async (tribeId: string) => {
-      const response = await apiClient.post(`/tribes/${tribeId}/leave`)
-      return { tribeId, ...response.data }
-    },
-    onMutate: async (tribeId: string) => {
-      // Cancel any outgoing refetches so they don't overwrite our optimistic update
-      await queryClient.cancelQueries({ queryKey: ['tribes'] })
-
-      // Snapshot the previous value
-      const previousTribes = queryClient.getQueryData(['tribes', selectedTab, searchQuery, selectedCategory])
-
-      // Optimistically update to the new value
-      queryClient.setQueryData(['tribes', selectedTab, searchQuery, selectedCategory], (old: any) => {
-        if (!old) return old
-        return old.map((tribe: Tribe) =>
-          tribe._id === tribeId
-            ? {
-              ...tribe,
-              isMember: false,
-              hasPendingRequest: false,
-              memberCount: Math.max(0, (tribe.memberCount || 0) - 1),
-              stats: {
-                ...tribe.stats,
-                memberCount: Math.max(0, (tribe.stats?.memberCount || 0) - 1)
-              }
-            }
-            : tribe
-        )
-      })
-
-      // Return a context object with the snapshotted value
-      return { previousTribes }
-    },
-    onSuccess: (data) => {
-      // Invalidate to get fresh data from server
-      queryClient.invalidateQueries({ queryKey: ['tribes'] })
-      toast.success('Has salido de la tribu')
-    },
-    onError: (err, tribeId, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousTribes) {
-        queryClient.setQueryData(['tribes', selectedTab, searchQuery, selectedCategory], context.previousTribes)
-      }
-      toast.error('Error al salir de la tribu')
-    },
-    onSettled: () => {
-      // Always refetch after error or success to ensure we have the correct state
-      queryClient.invalidateQueries({ queryKey: ['tribes'] })
-    }
-  })
 
   // Create tribe mutation
   const createTribeMutation = useMutation({
     mutationFn: async (data: CreateTribeForm) => {
-      const response = await apiClient.post('/tribes', data)
+      const payload = {
+        ...data,
+        privacy: data.isPublic ? 'public' : 'private',
+        isPrivate: !data.isPublic,
+        requiresApproval: !data.isPublic || data.requiresApproval
+      }
+      const response = await apiClient.post('/tribes', payload)
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tribes'] })
       setShowCreateModal(false)
-      setCreateForm({
-        name: '',
-        description: '',
-        category: '',
-        isPublic: true,
-        tags: [],
-        location: { address: '' }
-      })
-      toast.success('Tribu creada exitosamente')
+      toast.success('¡Comunidad creada exitosamente!')
+      const createdId = data?.tribe?._id || data?.data?._id
+      if (createdId) {
+        router.push(`/tribes/${createdId}`)
+      }
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Error al crear la tribu')
+      toast.error(error?.response?.data?.message || 'Error al crear la comunidad')
     }
   })
 
-  const handleJoinTribe = (tribeId: string) => {
-    joinTribeMutation.mutate(tribeId)
+  const handleJoinClick = (tribe: Tribe, message?: string) => {
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=${encodeURIComponent(`/tribes/${tribe._id}`)}`)
+      return
+    }
+    if (!tribe.canJoin && !tribe.canRequestJoin) return
+    if (tribe.canRequestJoin && !joinRequestTarget) {
+      setJoinRequestTarget(tribe)
+      accessActions.clearFailure()
+      return
+    }
+    void accessActions.run({ tribeId: tribe._id, kind: 'join', message }).then(success => {
+      if (success) setJoinRequestTarget(null)
+    })
   }
 
-  const handleLeaveTribe = (tribeId: string) => {
-    leaveTribeMutation.mutate(tribeId)
+  useEffect(() => {
+    if (!joinRequestTarget) return
+    const previous = document.activeElement
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus() }
+  }, [joinRequestTarget])
+
+  const handleJoinDialogKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape' && !accessActions.pending) { setJoinRequestTarget(null); return }
+    if (event.key !== 'Tab') return
+    const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), textarea:not([disabled]), a[href]'))
+    const first = controls[0]
+    const last = controls[controls.length - 1]
+    if (!first) { event.preventDefault(); return }
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+  }
+
+  const handleUseMyLiveLocation = async () => {
+    const loc = await refreshNow()
+    setCreateForm((prev) => ({
+      ...prev,
+      location: {
+        address: loc.address || `${loc.city}, ${loc.country}`,
+        coordinates: [loc.lng, loc.lat],
+        isVirtual: false
+      }
+    }))
+    toast.success(`Ubicación actualizada: ${loc.city}`)
   }
 
   const handleCreateTribe = () => {
-    if (!createForm.name || !createForm.description || !createForm.category) {
-      toast.error('Por favor completa todos los campos obligatorios')
+    if (!isAuthenticated) {
+      router.push('/login?redirect=%2Ftribes')
+      return
+    }
+    if (!createForm.name.trim() || createForm.name.trim().length < 3) {
+      toast.error('El nombre de la comunidad debe tener al menos 3 caracteres')
+      return
+    }
+    if (!createForm.description.trim() || createForm.description.trim().length < 10) {
+      toast.error('La descripción debe tener al menos 10 caracteres')
+      return
+    }
+    if (!createForm.category) {
+      toast.error('Selecciona una categoría para tu comunidad')
       return
     }
     createTribeMutation.mutate(createForm)
@@ -324,300 +352,431 @@ export default function TribesPage() {
     }
   }
 
-  const handleRemoveTag = (index: number) => {
-    setCreateForm({
-      ...createForm,
-      tags: createForm.tags.filter((_, i) => i !== index)
-    })
+  const handleAddRule = () => {
+    if (newRule.trim() && !createForm.rules.includes(newRule.trim())) {
+      setCreateForm({
+        ...createForm,
+        rules: [...createForm.rules, newRule.trim()]
+      })
+      setNewRule('')
+    }
   }
 
   const formatMemberCount = (count: number) => {
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`
-    }
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}k`
     return count.toString()
   }
 
   return (
-    <div className="min-h-screen bg-transparent py-8 pb-24">
+    <div className="min-h-screen bg-background text-foreground py-6 pb-24">
       <div className="container mx-auto px-4 max-w-7xl">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-4xl font-extrabold text-foreground mb-2">
-                Tribus
-              </h1>
-              <p className="text-lg text-muted-foreground font-medium">
-                Conecta con comunidades afines a tus intereses
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-foreground text-background hover:scale-105 rounded-2xl font-bold shadow-xl transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              Crear Tribu
-            </button>
+        {/* Top Navigation Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6 pb-4 border-b border-border/60">
+          <div className="flex items-center gap-4 text-sm font-medium text-muted-foreground">
+            <Link href="/" className="flex items-center gap-2 text-foreground font-bold hover:text-primary transition-colors">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary text-white">
+                <Compass className="h-4 w-4" />
+              </span>
+              EventNow
+            </Link>
+            <span>/</span>
+            <Link href="/discovery" className="hover:text-foreground transition-colors">Mapa en Vivo</Link>
+            <Link href="/events" className="hover:text-foreground transition-colors">Eventos</Link>
+            <Link href="/feed" className="hover:text-foreground transition-colors">Feed Social</Link>
+            <span className="text-primary font-semibold">Comunidades</span>
           </div>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-2 glass p-2 rounded-2xl border border-white/10 backdrop-blur-md">
+          <div className="flex items-center gap-2 text-xs bg-primary/10 border border-primary/20 text-primary px-3 py-1.5 rounded-full">
+            <Navigation className="w-3.5 h-3.5 animate-pulse" />
+            <span>Tu zona activa: <strong>{liveLocation.city}, {liveLocation.countryCode}</strong></span>
             <button
-              onClick={() => setSelectedTab('discover')}
-              className={`flex-1 px-4 py-2 rounded-xl font-medium transition-all ${selectedTab === 'discover'
-                ? 'bg-primary text-primary-foreground shadow-lg'
-                : 'text-muted-foreground hover:bg-white/10 hover:text-foreground'
-                }`}
+              onClick={() => void refreshNow()}
+              className="underline font-semibold ml-1 hover:opacity-80"
+              title="Actualizar ubicación GPS en tiempo real"
             >
-              Descubrir
-            </button>
-            <button
-              onClick={() => setSelectedTab('my-tribes')}
-              className={`flex-1 px-4 py-2 rounded-xl font-medium transition-all ${selectedTab === 'my-tribes'
-                ? 'bg-primary text-primary-foreground shadow-lg'
-                : 'text-muted-foreground hover:bg-white/10 hover:text-foreground'
-                }`}
-            >
-              Mis Tribus
+              Actualizar GPS
             </button>
           </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Hero Header */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider mb-2">
+                <Sparkles className="w-3.5 h-3.5" /> Tribus y Comunidades EventNow
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-foreground mb-2">
+                Encuentra tu Tribu en {liveLocation.city} y toda RD
+              </h1>
+              <p className="text-base sm:text-lg text-muted-foreground">
+                Únete a comunidades abiertas o solicita acceso a grupos privados exclusivos para organizar planes y eventos.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => (isAuthenticated ? setShowCreateModal(true) : router.push('/login?redirect=%2Ftribes'))}
+                className="flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-2xl font-bold shadow-lg shadow-primary/20 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Crear Comunidad Rápida
+              </button>
+              <Link
+                href={isAuthenticated ? '/tribes/create' : '/login?redirect=%2Ftribes%2Fcreate'}
+                className="flex items-center gap-2 px-4 py-3 border border-border bg-card hover:bg-muted text-foreground rounded-2xl font-semibold text-sm transition-all"
+              >
+                Asistente Avanzado
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
+
+          {/* Main Tabs */}
+          <div className="flex flex-wrap items-center gap-2 bg-card p-1.5 rounded-2xl border border-border">
+            <button
+              onClick={() => setSelectedTab('discover')}
+              className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${
+                selectedTab === 'discover'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Explorar Comunidades
+            </button>
+            <button
+              onClick={() => (isAuthenticated ? setSelectedTab('my-tribes') : router.push('/login?redirect=%2Ftribes'))}
+              className={`flex-1 min-w-[140px] px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${
+                selectedTab === 'my-tribes'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              Mis Comunidades
+            </button>
+            <button
+              onClick={() => (isAuthenticated ? setSelectedTab('requests') : router.push('/login?redirect=%2Ftribes'))}
+              className={`flex-1 min-w-[160px] px-4 py-2.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 ${
+                selectedTab === 'requests'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <Lock className="w-4 h-4" />
+              Solicitudes y Accesos
+            </button>
+          </div>
+        </div>
+
+        {/* Search, Category & Privacy Filters */}
         <div className="mb-8 space-y-4">
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
               <input
                 type="text"
-                placeholder="Buscar tribus..."
+                placeholder="Buscar comunidades por nombre, ciudad o interés..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 glass border border-white/10 bg-white/5 rounded-2xl focus:ring-2 focus:ring-primary focus:bg-white/10 text-foreground transition-all backdrop-blur-sm"
+                className="w-full pl-12 pr-10 py-3 bg-card border border-border rounded-2xl focus:ring-2 focus:ring-primary text-foreground transition-all"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-4 py-3 glass border border-white/10 bg-white/5 rounded-2xl focus:ring-2 focus:ring-primary text-foreground backdrop-blur-sm"
+              className="px-4 py-3 bg-card border border-border rounded-2xl focus:ring-2 focus:ring-primary text-foreground font-medium"
             >
-              <option className="bg-background text-foreground" value="all">Todas las categorías</option>
-              {categories.map(category => (
-                <option className="bg-background text-foreground" key={category} value={category}>
-                  {category.charAt(0).toUpperCase() + category.slice(1)}
+              <option value="all">Todas las categorías</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {CATEGORY_TRANSLATIONS[cat] || cat}
                 </option>
               ))}
             </select>
+
+            <div className="flex rounded-2xl border border-border bg-card p-1">
+              {[
+                { id: 'all', label: 'Todas' },
+                { id: 'public', label: 'Públicas' },
+                { id: 'private', label: 'Privadas 🔒' }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setPrivacyFilter(item.id as any)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                    privacyFilter === item.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
+        {selectedTab === 'requests' && <div className="mb-5 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed text-muted-foreground">
+          Aquí aparecen tus solicitudes pendientes y las comunidades con solicitudes que puedes revisar. Ser moderador activo permite gestionar ingresos; una invitación no es una solicitud abierta.
+        </div>}
         {/* Tribes Grid */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="glass skeleton rounded-3xl p-6 border-white/5 h-64">
-              </div>
+              <div key={i} className="rounded-3xl p-6 border border-border bg-card animate-pulse h-80" />
             ))}
           </div>
-        ) : tribes?.length === 0 ? (
-          <EmptyState 
+        ) : isError ? (
+          <div role="alert" className="my-10 rounded-2xl border border-border bg-card p-8 text-center">
+            <p className="text-lg font-semibold mb-2">No pudimos cargar las comunidades</p>
+            <p className="text-sm text-muted-foreground mb-4">Verifica tu conexión e inténtalo nuevamente.</p>
+            <button
+              onClick={() => void refetch()}
+              className="px-5 py-2.5 bg-primary text-primary-foreground rounded-xl font-semibold"
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : !tribes || tribes.length === 0 ? (
+          <EmptyState
             icon={Users}
-            title={selectedTab === 'my-tribes' ? 'No te has unido a ninguna tribu' : 'No hay tribus disponibles'}
-            description={selectedTab === 'my-tribes'
-              ? 'Explora y únete a comunidades que te interesen'
-              : 'Sé el primero en crear una tribu'
+            title={
+              selectedTab === 'my-tribes'
+                ? 'Aún no perteneces a ninguna comunidad'
+                : selectedTab === 'requests'
+                  ? 'No tienes solicitudes pendientes'
+                  : 'No encontramos comunidades con estos filtros'
             }
-            actionLabel={selectedTab === 'my-tribes' ? 'Explorar Tribus' : undefined}
-            actionOnClick={selectedTab === 'my-tribes' ? () => setSelectedTab('discover') : undefined}
+            description={
+              selectedTab === 'my-tribes'
+                ? 'Explora comunidades públicas o solicita unirte a una comunidad privada.'
+                : selectedTab === 'requests'
+                  ? 'Cuando solicites unirte a una comunidad privada o recibas solicitudes en tus comunidades, aparecerán aquí.'
+                  : 'Prueba limpiando los filtros o sé el primero en fundar una comunidad para este interés.'
+            }
+            actionLabel={selectedTab !== 'discover' ? 'Explorar Comunidades' : 'Crear Comunidad'}
+            actionOnClick={
+              selectedTab !== 'discover'
+                ? () => setSelectedTab('discover')
+                : () => (isAuthenticated ? setShowCreateModal(true) : router.push('/login?redirect=%2Ftribes'))
+            }
             className="my-12 py-16"
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tribes?.map((tribe, index) => (
+            {(tribes || []).map((tribe, index) => (
               <motion.div
                 key={tribe._id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-                className="glass border-white/10 bg-white/5 rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-primary/20 hover:-translate-y-2 transition-all group"
+                transition={{ duration: 0.25, delay: index * 0.04 }}
+                className="border border-border bg-card rounded-3xl overflow-hidden shadow-md hover:shadow-xl hover:border-primary/40 transition-all flex flex-col group"
               >
                 {/* Cover Image */}
-                <div className="h-36 bg-gradient-to-br from-primary/30 to-secondary/30 relative">
+                <div
+                  onClick={() => router.push(`/tribes/${tribe._id}`)}
+                  className="h-36 bg-gradient-to-br from-violet-600/40 via-primary/30 to-cyan-500/30 relative cursor-pointer"
+                >
                   {tribe.cover && (
                     <img
                       src={tribe.cover}
-                      alt="Cover"
-                      className="w-full h-full object-cover"
+                      alt={tribe.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
+                        const target = e.target as HTMLImageElement
+                        target.style.display = 'none'
                       }}
                     />
                   )}
-                  <div className="absolute inset-0 bg-black/20"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
-                  <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2">
                     {tribe.isPrivate ? (
-                      <span className="px-3 py-1 bg-black/60 backdrop-blur-sm border border-white/10 text-white font-medium text-xs rounded-full flex items-center gap-1.5 shadow-lg">
+                      <span className="px-3 py-1 bg-amber-500/90 backdrop-blur-sm text-white font-bold text-xs rounded-full flex items-center gap-1.5 shadow-md">
                         <Lock className="w-3 h-3" />
                         Privada
                       </span>
                     ) : (
-                      <span className="px-3 py-1 bg-black/60 backdrop-blur-sm border border-white/10 text-white font-medium text-xs rounded-full flex items-center gap-1.5 shadow-lg">
+                      <span className="px-3 py-1 bg-emerald-600/90 backdrop-blur-sm text-white font-bold text-xs rounded-full flex items-center gap-1.5 shadow-md">
                         <Globe className="w-3 h-3" />
                         Pública
                       </span>
                     )}
+
+                    {tribe.canManageRequests && (tribe.pendingRequestsCount || 0) > 0 && (
+                      <span className="px-2.5 py-1 bg-red-600 text-white font-bold text-xs rounded-full shadow-md animate-pulse">
+                        {tribe.pendingRequestsCount} solicitud(es)
+                      </span>
+                    )}
                   </div>
 
-                  <div className="absolute top-4 right-4">
-                    <span className="px-3 py-1 bg-primary/80 backdrop-blur-md border border-primary/50 text-white font-bold text-xs rounded-full shadow-lg shadow-primary/20">
-                      {tribe.category}
+                  <div className="absolute top-3 right-3">
+                    <span className="px-3 py-1 bg-black/65 backdrop-blur-md border border-white/15 text-white font-semibold text-xs rounded-full">
+                      {CATEGORY_TRANSLATIONS[tribe.category] || tribe.category}
                     </span>
                   </div>
 
                   {/* Avatar */}
-                  <div className="absolute -bottom-8 left-5">
-                    <div className="w-16 h-16 bg-background rounded-full border-4 border-background flex items-center justify-center text-primary font-bold shadow-xl overflow-hidden">
-                      {tribe.avatar && typeof tribe.avatar === 'string' ? (
+                  <div className="absolute -bottom-7 left-5">
+                    <div className="w-16 h-16 bg-card rounded-2xl border-4 border-card flex items-center justify-center text-primary font-extrabold text-xl shadow-lg overflow-hidden">
+                      {tribe.avatar ? (
                         <img
                           src={tribe.avatar}
-                          alt="Avatar"
-                          className="w-full h-full rounded-full object-cover"
+                          alt={tribe.name}
+                          className="w-full h-full object-cover"
                           onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
+                            const target = e.target as HTMLImageElement
+                            target.style.display = 'none'
                           }}
                         />
                       ) : (
-                        tribe.name[0]
+                        tribe.name?.[0]?.toUpperCase() || 'T'
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Content */}
-                <div className="p-5 pt-10">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="font-bold text-foreground text-xl mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+                {/* Body */}
+                <div className="p-5 pt-10 flex-1 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <Link
+                        href={`/tribes/${tribe._id}`}
+                        className="font-bold text-foreground text-xl hover:text-primary transition-colors line-clamp-1"
+                      >
                         {tribe.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-                        {tribe.description}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-3 gap-2 mb-5 p-3 glass border-white/5 rounded-2xl text-center">
-                    <div className="flex flex-col items-center">
-                      <div className="text-lg font-bold text-primary">
-                        {formatMemberCount(tribe.memberCount || 0)}
-                      </div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">Miembros</div>
-                    </div>
-                    <div className="flex flex-col items-center border-x border-white/5">
-                      <div className="text-lg font-bold text-foreground">
-                        {tribe.stats?.eventCount || 0}
-                      </div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">Eventos</div>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <div className="text-lg font-bold text-accent">
-                        {tribe.stats?.activityLevel === 'high' ? 'Alta' : tribe.stats?.activityLevel === 'medium' ? 'Media' : 'Baja'}
-                      </div>
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">Actividad</div>
-                    </div>
-                  </div>
-
-                  {/* Tags */}
-                  {tribe.tags && tribe.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-5">
-                      {tribe.tags.slice(0, 3).map((tag, tagIndex) => (
-                        <span
-                          key={`${tribe._id}-tag-${tagIndex}`}
-                          className="px-2.5 py-1 bg-white/5 border border-white/5 text-foreground rounded-lg text-xs font-medium"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                      {tribe.tags.length > 3 && (
-                        <span className="px-2.5 py-1 bg-white/5 border border-white/5 text-foreground rounded-lg text-xs font-medium">
-                          +{tribe.tags.length - 3}
+                      </Link>
+                      {tribe.isAdmin && (
+                        <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 text-xs font-bold">
+                          <Crown className="w-3 h-3" /> Admin
                         </span>
                       )}
                     </div>
-                  )}
 
-                  {/* Creator - Safe access */}
-                  <div className="flex items-center justify-between mb-4 pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 bg-secondary-500 rounded-full flex items-center justify-center text-white text-xs font-semibold">
-                        {(tribe.createdBy && tribe.createdBy.firstName) ? tribe.createdBy.firstName[0] : '?'}
+                    <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+                      {tribe.description}
+                    </p>
+
+                    {/* Stats */}
+                    <div className="grid grid-cols-3 gap-2 mb-4 p-3 bg-muted/40 border border-border/60 rounded-2xl text-center">
+                      <div>
+                        <div className="text-base font-extrabold text-primary">
+                          {formatMemberCount(tribe.memberCount || 0)}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
+                          Miembros
+                        </div>
                       </div>
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
-                        {(tribe.createdBy && tribe.createdBy.firstName) ? tribe.createdBy.firstName : 'Unknown'} {(tribe.createdBy && tribe.createdBy.lastName) ? tribe.createdBy.lastName : ''}
-                      </span>
-                      <Crown className="w-3 h-3 text-yellow-500" />
+                      <div className="border-x border-border/60">
+                        <div className="text-base font-extrabold text-foreground">
+                          {tribe.stats?.eventCount || 0}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
+                          Eventos
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-base font-extrabold text-emerald-500">
+                          {tribe.stats?.activityLevel === 'high'
+                            ? 'Alta'
+                            : tribe.stats?.activityLevel === 'medium'
+                              ? 'Media'
+                              : 'Activa'}
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
+                          Actividad
+                        </div>
+                      </div>
                     </div>
 
-                    {tribe.location && (tribe.location.address || tribe.location.isVirtual) && (
-                      <div className="flex items-center gap-1.5 px-3 py-1 bg-white/5 border border-white/10 rounded-full">
-                        {tribe.location.isVirtual ? (
-                          <>
-                            <Globe className="w-3.5 h-3.5 text-purple-400" />
-                            <span className="text-xs text-muted-foreground font-medium">Virtual</span>
-                          </>
-                        ) : (
-                          <>
-                            <MapPin className="w-3.5 h-3.5 text-primary-400" />
-                            <span className="text-xs text-muted-foreground font-medium max-w-[120px] truncate">
-                              {tribe.location.address}
-                            </span>
-                          </>
-                        )}
+                    {/* Tags */}
+                    {tribe.tags && tribe.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-4">
+                        {(tribe.tags || []).slice(0, 3).map((tag, idx) => (
+                          <span
+                            key={`${tribe._id}-tag-${idx}`}
+                            className="px-2.5 py-0.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
 
-                  {/* Action Button */}
-                  <div className="flex gap-2">
-                    {tribe.isMember ? (
-                      <>
-                        <button
-                          onClick={() => router.push(`/tribes/${tribe._id}`)}
-                          className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                        >
-                          Ver Tribu
-                        </button>
-                        <button
-                          onClick={() => handleLeaveTribe(tribe._id)}
-                          disabled={leaveTribeMutation.isPending}
-                          className="px-4 py-2 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-                        >
-                          Salir
-                        </button>
-                      </>
-                    ) : tribe.hasPendingRequest ? (
-                      <button
-                        disabled
-                        className="w-full px-4 py-2 bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 rounded-xl font-medium cursor-not-allowed"
-                      >
-                        Solicitud Enviada
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleJoinTribe(tribe._id)}
-                        disabled={joinTribeMutation.isPending}
-                        className="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
-                      >
-                        {tribe.isPrivate ? 'Solicitar Unirse' : 'Unirse'}
-                      </button>
-                    )}
+                  <div>
+                    {/* Creator & Location */}
+                    <div className="flex items-center justify-between gap-2 mb-4 pt-3 border-t border-border/60 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        <span className="truncate">
+                          {tribe.createdBy?.firstName || tribe.createdBy?.username || 'Comunidad'}{' '}
+                          {tribe.createdBy?.lastName || ''}
+                        </span>
+                      </div>
+
+                      {tribe.location && (tribe.location.address || tribe.location.isVirtual) && (
+                        <div className="flex items-center gap-1 shrink-0 max-w-[150px] truncate">
+                          {tribe.location.isVirtual ? (
+                            <>
+                              <Globe className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span>Virtual</span>
+                            </>
+                          ) : (
+                            <>
+                              <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
+                              <span className="truncate">{tribe.location.address}</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      {tribe.isMember || tribe.canManageRequests ? (
+                        <>
+                          <button
+                            onClick={() =>
+                              router.push(
+                                tribe.canManageRequests && (tribe.pendingRequestsCount || 0) > 0
+                                  ? `/tribes/${tribe._id}?tab=requests`
+                                  : `/tribes/${tribe._id}`
+                              )
+                            }
+                            className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl font-semibold text-sm hover:bg-primary/90 transition-colors"
+                          >
+                            {tribe.canManageRequests && (tribe.pendingRequestsCount || 0) > 0
+                              ? `Gestionar (${tribe.pendingRequestsCount})`
+                              : 'Entrar a la Tribu'}
+                          </button>
+                          {!tribe.isAdmin && (
+                            <button
+                              onClick={() => { void accessActions.run({ tribeId: tribe._id, kind: 'leave' }) }}
+                              disabled={Boolean(accessActions.pending)}
+                              className="px-3.5 py-2.5 border border-red-500/30 text-red-500 rounded-xl font-semibold text-sm hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                            >
+                              Salir
+                            </button>
+                          )}
+                        </>
+                      ) : <TribeAccessPanel key={`${tribe._id}-${currentUserId}`} compact access={tribe} name={tribe.name} tribeId={tribe._id}
+                        authenticated={isAuthenticated} busy={Boolean(accessActions.pending)}
+                        onJoin={message => handleJoinClick(tribe, message)} onCancel={() => { void accessActions.run({ tribeId: tribe._id, kind: 'cancel' }) }}
+                        error={accessActions.failure?.action.tribeId === tribe._id && !joinRequestTarget ? accessActions.failure.message : undefined}
+                        onRetry={() => { void accessActions.retry() }} />}
+                      {!tribe.isMember && <Link href={`/tribes/${tribe._id}`} className="inline-flex min-h-11 items-center rounded-xl border border-border px-3 text-sm font-semibold hover:bg-muted">Ver</Link>}
+
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -625,14 +784,31 @@ export default function TribesPage() {
           </div>
         )}
 
-        {/* Create Tribe Modal */}
+        {pagination && !isError && !isLoading && pagination.pages > 1 && <nav aria-label="Páginas de comunidades" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+          <p className="text-sm tabular-nums text-muted-foreground">Página {pagination.page} de {pagination.pages} · {pagination.total} comunidades</p>
+          <div className="flex gap-2"><button type="button" disabled={isFetching || page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))} className="min-h-11 rounded-xl border border-border px-4 text-sm font-semibold hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40">Anterior</button>
+            <button type="button" disabled={isFetching || page >= pagination.pages} onClick={() => setPage(value => value + 1)} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40">Siguiente</button></div>
+        </nav>}
+
+        {joinRequestTarget && <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/60 p-4 pb-24 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-label={`Solicitar acceso a ${joinRequestTarget.name}`} onKeyDown={handleJoinDialogKeys} className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-3xl bg-card p-2 shadow-xl">
+            <div className="flex justify-end px-3 pt-3"><button type="button" autoFocus disabled={Boolean(accessActions.pending)} aria-label="Cerrar solicitud" onClick={() => setJoinRequestTarget(null)} className="min-h-11 rounded-xl border border-border px-4 text-sm focus-visible:ring-2 focus-visible:ring-primary">Cerrar</button></div>
+            <TribeAccessPanel key={`${joinRequestTarget._id}-${currentUserId}`} access={joinRequestTarget} name={joinRequestTarget.name} tribeId={joinRequestTarget._id}
+              authenticated={isAuthenticated} busy={Boolean(accessActions.pending)} onJoin={message => handleJoinClick(joinRequestTarget, message)}
+              onCancel={() => { void accessActions.run({ tribeId: joinRequestTarget._id, kind: 'cancel' }) }}
+              error={accessActions.failure?.action.tribeId === joinRequestTarget._id ? accessActions.failure.message : undefined}
+              onRetry={() => { void accessActions.retry().then(success => { if (success) setJoinRequestTarget(null) }) }} />
+          </div>
+        </div>}
+
+        {/* Quick Create Tribe Modal */}
         <AnimatePresence>
           {showCreateModal && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
               onClick={() => setShowCreateModal(false)}
             >
               <motion.div
@@ -640,123 +816,241 @@ export default function TribesPage() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
-                className="glass-strong border border-white/20 rounded-3xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar shadow-2xl"
+                className="bg-card border border-border rounded-3xl p-6 sm:p-8 w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl"
               >
-                <h2 className="text-3xl font-extrabold text-foreground mb-6">
-                  Crear Nueva Tribu
-                </h2>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-extrabold text-foreground">Crear Nueva Comunidad</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Configura tu tribu pública o privada en segundos
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateModal(false)}
+                    className="p-2 rounded-full hover:bg-muted text-muted-foreground"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-bold text-foreground mb-2">
-                      Nombre *
+                    <label className="block text-sm font-bold text-foreground mb-1.5">
+                      Nombre de la Comunidad *
                     </label>
                     <input
                       type="text"
                       value={createForm.name}
                       onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                      placeholder="Nombre de la tribu"
-                      className="w-full p-4 border border-white/10 glass bg-black/20 rounded-2xl focus:ring-2 focus:ring-primary focus:border-transparent text-foreground"
+                      placeholder="Ej. Runners Mirador Sur SDQ"
+                      className="w-full p-3.5 border border-border bg-background rounded-2xl focus:ring-2 focus:ring-primary text-foreground"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-foreground mb-2">
-                      Descripción *
+                    <label className="block text-sm font-bold text-foreground mb-1.5">
+                      Descripción y Propósito *
                     </label>
                     <textarea
                       value={createForm.description}
                       onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                      placeholder="Describe tu tribu..."
-                      className="w-full p-4 border border-white/10 glass bg-black/20 rounded-2xl focus:ring-2 focus:ring-primary focus:border-transparent resize-none text-foreground"
+                      placeholder="Describe qué actividades comparten, a quién va dirigida y qué planes organizan..."
+                      className="w-full p-3.5 border border-border bg-background rounded-2xl focus:ring-2 focus:ring-primary resize-none text-foreground"
                       rows={3}
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-bold text-foreground mb-2">
-                      Ubicación (Opcional)
-                    </label>
-                    <div className="relative">
-                      <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
-                      <input
-                        type="text"
-                        value={createForm.location.address}
-                        onChange={(e) => setCreateForm({ ...createForm, location: { address: e.target.value } })}
-                        placeholder="Ciudad o país de encuentro..."
-                        className="w-full pl-12 pr-4 py-4 border border-white/10 glass bg-black/20 rounded-2xl focus:ring-2 focus:ring-primary focus:border-transparent text-foreground"
-                      />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-foreground mb-1.5">
+                        Categoría *
+                      </label>
+                      <select
+                        value={createForm.category}
+                        onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
+                        className="w-full p-3.5 border border-border bg-background rounded-2xl focus:ring-2 focus:ring-primary text-foreground"
+                      >
+                        {categories.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {CATEGORY_TRANSLATIONS[cat] || cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-foreground mb-1.5">
+                        Tipo de Acceso
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCreateForm({ ...createForm, isPublic: true, requiresApproval: false })}
+                          className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 ${
+                            createForm.isPublic
+                              ? 'border-emerald-500 bg-emerald-500/15 text-emerald-500'
+                              : 'border-border text-muted-foreground'
+                          }`}
+                        >
+                          <Globe className="w-4 h-4" />
+                          Pública
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCreateForm({ ...createForm, isPublic: false, requiresApproval: true })}
+                          className={`p-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 ${
+                            !createForm.isPublic
+                              ? 'border-amber-500 bg-amber-500/15 text-amber-500'
+                              : 'border-border text-muted-foreground'
+                          }`}
+                        >
+                          <Lock className="w-4 h-4" />
+                          Privada
+                        </button>
+                      </div>
                     </div>
                   </div>
 
+                  {/* Live Location Auto-Fill */}
                   <div>
-                    <label className="block text-sm font-bold text-foreground mb-2">
-                      Categoría *
-                    </label>
-                    <select
-                      value={createForm.category}
-                      onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
-                      className="w-full p-4 border border-gray-700 bg-gray-800 rounded-2xl focus:ring-2 focus:ring-primary focus:border-transparent text-white"
-                    >
-                      <option className="bg-gray-800" value="">Selecciona una categoría</option>
-                      {categories.map(category => (
-                        <option className="bg-gray-800" key={category} value={category}>
-                          {CATEGORY_TRANSLATIONS[category] || category}
-                        </option>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-sm font-bold text-foreground">
+                        Ubicación Base
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleUseMyLiveLocation}
+                        className="text-xs font-bold text-primary flex items-center gap-1 hover:underline"
+                      >
+                        <Navigation className="w-3.5 h-3.5" />
+                        Usar mi ubicación GPS actual
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                      <input
+                        type="text"
+                        value={createForm.location.address}
+                        onChange={(e) =>
+                          setCreateForm({
+                            ...createForm,
+                            location: { ...createForm.location, address: e.target.value }
+                          })
+                        }
+                        placeholder="Ciudad o punto de encuentro..."
+                        className="w-full pl-10 pr-4 py-3 border border-border bg-background rounded-2xl text-sm text-foreground"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {presets.slice(0, 4).map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() =>
+                            setCreateForm({
+                              ...createForm,
+                              location: {
+                                address: `${preset.venue}, ${preset.city}`,
+                                coordinates: [preset.lng, preset.lat],
+                                isVirtual: false
+                              }
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-muted hover:bg-primary/15 hover:text-primary text-xs font-medium transition-colors"
+                        >
+                          📍 {preset.city}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
 
-
-                  <div className="flex items-center gap-3 p-4 glass bg-black/10 rounded-2xl border border-white/10">
-                    <input
-                      type="checkbox"
-                      id="isPublicCreate"
-                      checked={!createForm.isPublic}
-                      onChange={(e) => setCreateForm({ ...createForm, isPublic: !e.target.checked })}
-                      className="w-5 h-5 text-primary bg-black/20 border-white/20 rounded focus:ring-primary"
-                    />
-                    <label htmlFor="isPublicCreate" className="flex items-center gap-2 text-foreground font-semibold cursor-pointer">
-                      {!createForm.isPublic ? <Lock className="w-4 h-4 text-orange-500" /> : <Globe className="w-4 h-4 text-green-500" />}
-                      Tribu Privada
-                    </label>
-                  </div>
-
+                  {/* Rules */}
                   <div>
-                    <label className="block text-sm font-bold text-foreground mb-2">
+                    <label className="block text-sm font-bold text-foreground mb-1.5">
+                      Reglas de Convivencia
+                    </label>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={newRule}
+                        onChange={(e) => setNewRule(e.target.value)}
+                        placeholder="Agregar una regla..."
+                        className="flex-1 p-2.5 border border-border bg-background rounded-xl text-sm text-foreground"
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddRule())}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddRule}
+                        className="px-3.5 py-2.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-1">
+                      {createForm.rules.map((rule, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between text-xs bg-muted/60 px-3 py-1.5 rounded-lg"
+                        >
+                          <span>
+                            {idx + 1}. {rule}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCreateForm({
+                                ...createForm,
+                                rules: createForm.rules.filter((_, i) => i !== idx)
+                              })
+                            }
+                            className="text-muted-foreground hover:text-red-500"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tags */}
+                  <div>
+                    <label className="block text-sm font-bold text-foreground mb-1.5">
                       Etiquetas
                     </label>
-                    <div className="flex gap-2 mb-3">
+                    <div className="flex gap-2 mb-2">
                       <input
                         type="text"
                         value={newTag}
                         onChange={(e) => setNewTag(e.target.value)}
-                        placeholder="Agregar etiqueta"
-                        className="flex-1 p-3 border border-white/10 glass bg-black/20 rounded-xl focus:ring-2 focus:ring-primary text-foreground"
-                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                        placeholder="Ej. running, networking, musica..."
+                        className="flex-1 p-2.5 border border-border bg-background rounded-xl text-sm text-foreground"
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
                       />
                       <button
                         type="button"
                         onClick={handleAddTag}
-                        className="px-4 py-3 bg-primary hover:bg-primary/80 text-white rounded-xl transition-colors font-bold"
+                        className="px-3.5 py-2.5 bg-primary text-primary-foreground rounded-xl font-bold text-sm"
                       >
-                        <Plus className="w-5 h-5" />
+                        <Plus className="w-4 h-4" />
                       </button>
                     </div>
-
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {createForm.tags.map((tag, index) => (
                         <span
                           key={index}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-primary/20 border border-primary/30 text-primary-foreground rounded-lg text-sm font-medium"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/15 text-primary rounded-lg text-xs font-semibold"
                         >
-                          {tag}
+                          #{tag}
                           <button
                             type="button"
-                            onClick={() => handleRemoveTag(index)}
-                            className="hover:bg-red-500 hover:text-white rounded p-1 transition-colors"
+                            onClick={() =>
+                              setCreateForm({
+                                ...createForm,
+                                tags: createForm.tags.filter((_, i) => i !== index)
+                              })
+                            }
                           >
-                            <Plus className="w-3 h-3 rotate-45" />
+                            <X className="w-3 h-3" />
                           </button>
                         </span>
                       ))}
@@ -764,19 +1058,19 @@ export default function TribesPage() {
                   </div>
                 </div>
 
-                <div className="flex gap-4 mt-8">
+                <div className="flex gap-3 mt-6">
                   <button
                     onClick={() => setShowCreateModal(false)}
-                    className="flex-1 px-4 py-4 glass hover:bg-white/10 text-foreground font-bold rounded-2xl transition-colors"
+                    className="flex-1 py-3.5 border border-border rounded-2xl font-bold text-sm hover:bg-muted transition-colors"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={handleCreateTribe}
                     disabled={createTribeMutation.isPending}
-                    className="flex-1 px-4 py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-2xl transition-all shadow-lg hover:shadow-primary/30 disabled:opacity-50"
+                    className="flex-1 py-3.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-2xl shadow-lg disabled:opacity-50"
                   >
-                    {createTribeMutation.isPending ? 'Creando...' : 'Crear Tribu'}
+                    {createTribeMutation.isPending ? 'Creando...' : 'Crear Comunidad'}
                   </button>
                 </div>
               </motion.div>

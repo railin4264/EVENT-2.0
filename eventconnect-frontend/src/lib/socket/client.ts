@@ -8,28 +8,15 @@ class SocketClient {
   private token: string | null = null
 
   connect(authToken: string) {
-    if (this.socket?.connected) {
-      return this.socket
-    }
-
+    if (this.socket && this.token === authToken) return this.socket
+    this.disconnect()
     this.token = authToken
     this.socket = io(SOCKET_URL, {
-      auth: {
-        token: authToken
-      },
-      transports: ['websocket', 'polling']
-    })
-
-    this.socket.on('connect', () => {
-      console.log('🔌 Connected to Socket.IO server')
-    })
-
-    this.socket.on('disconnect', (reason) => {
-      console.log('🔌 Disconnected from Socket.IO server:', reason)
-    })
-
-    this.socket.on('connect_error', (error) => {
-      console.error('🔌 Socket.IO connection error:', error)
+      auth: { token: authToken },
+      transports: ['polling', 'websocket'],
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 15000,
+      timeout: 10000,
     })
 
     return this.socket
@@ -67,19 +54,19 @@ class SocketClient {
   // Chat methods
   joinChatRoom(roomId: string) {
     if (this.socket) {
-      this.socket.emit('join_room', { roomId })
+      this.socket.emit('joinChat', { chatId: roomId })
     }
   }
 
   leaveChatRoom(roomId: string) {
     if (this.socket) {
-      this.socket.emit('leave_room', { roomId })
+      this.socket.emit('leaveChat', { chatId: roomId })
     }
   }
 
   sendMessage(roomId: string, message: string) {
     if (this.socket) {
-      this.socket.emit('send_message', { roomId, message })
+      this.socket.emit('sendMessage', { chatId: roomId, content: message, messageType: 'text' })
     }
   }
 

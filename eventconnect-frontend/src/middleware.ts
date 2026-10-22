@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { safeRedirect } from '@/lib/auth/redirect'
 
 // Routes that require authentication
 const protectedRoutes = [
+  '/onboarding',
   '/dashboard',
   '/profile',
   '/events/create',
   '/messages',
   '/settings',
-  '/tribes',
+  '/tribes/create',
+  '/admin',
   '/notifications',
   '/checkout',
   '/tickets',
-  '/feed',
-  '/discovery',
 ]
 
 // Routes that redirect authenticated users (login, register)
@@ -88,7 +89,8 @@ export function middleware(request: NextRequest) {
   response.headers.set('X-Frame-Options', 'DENY')
   response.headers.set('X-XSS-Protection', '1; mode=block')
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)')
+  // QR check-in requests the camera only after an explicit user action.
+  response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)')
   
   // CSP header for enhanced security - more permissive in development
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
@@ -102,7 +104,7 @@ export function middleware(request: NextRequest) {
     "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
     isDev
       ? `connect-src 'self' https: http: ws: wss: data: blob:` // More permissive in dev
-      : `connect-src 'self' https://api.mapbox.com https://maps.googleapis.com https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com https://*.tile.openstreetmap.org https://tile.openstreetmap.org ws://localhost:* wss://localhost:* http://localhost:* ${apiUrl}`,
+      : `connect-src 'self' https://api.open-meteo.com https://api.mapbox.com https://maps.googleapis.com https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com https://nominatim.openstreetmap.org https://*.tile.openstreetmap.org https://tile.openstreetmap.org ws://localhost:* wss://localhost:* http://localhost:* ${apiUrl}`,
     "media-src 'self' https: http://localhost:5000 http://localhost:3000",
     "object-src 'none'",
     "base-uri 'self'",
@@ -119,17 +121,15 @@ export function middleware(request: NextRequest) {
     const redirectParam = request.nextUrl.searchParams.get('redirect')
 
     // If there's a valid redirect parameter, use it; otherwise go to /events
-    const redirectUrl = redirectParam && redirectParam.startsWith('/')
-      ? redirectParam
-      : '/events'
+    const redirectUrl = safeRedirect(redirectParam)
 
     return NextResponse.redirect(new URL(redirectUrl, request.url))
   }
 
   // Redirect unauthenticated users to login for protected routes
-  if (protectedRoutes.some(route => pathname.startsWith(route)) && !isAuthenticated) {
+  if ((protectedRoutes.some(route => pathname === route || pathname.startsWith(`${route}/`)) || /^\/events\/[^/]+\/(edit|check-in)$/.test(pathname)) && !isAuthenticated) {
     const url = new URL('/login', request.url)
-    url.searchParams.set('redirect', pathname)
+    url.searchParams.set('redirect', pathname + request.nextUrl.search)
     return NextResponse.redirect(url)
   }
 

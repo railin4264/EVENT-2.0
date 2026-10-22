@@ -14,17 +14,28 @@ import { EventCardSkeleton } from '@/components/ui/LoadingStates'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Calendar, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ContentFilterModal, { loadStoredPreferences, type ContentFilterPreferences } from '@/components/discovery/ContentFilterModal'
+import { LocationPicker } from '@/components/discovery/LocationPicker'
+import { areaParams } from '@/lib/discovery-area'
+import { useDiscoveryArea } from '@/stores/discoveryAreaStore'
 
 // ─── Data ──────────────────────────────────────────────────────────────────────
 
 const categories = [
   { id: 'all', label: 'Todos', emoji: '✨' },
-  { id: 'music', label: 'Música', emoji: '🎵' },
-  { id: 'food', label: 'Comida', emoji: '🍴' },
-  { id: 'sports', label: 'Deportes', emoji: '⚽' },
-  { id: 'technology', label: 'Tecnología', emoji: '💻' },
-  { id: 'art', label: 'Arte', emoji: '🎨' },
-  { id: 'education', label: 'Educación', emoji: '📚' },
+  { id: 'sports', label: 'Deportes & LIDOM', emoji: '⚾' },
+  { id: 'education', label: 'Cursos & Masterclasses', emoji: '🎓' },
+  { id: 'art', label: 'Arte & Museos', emoji: '🏛️' },
+  { id: 'music', label: 'Música & Conciertos', emoji: '🎵' },
+  { id: 'travel', label: 'Tours & Ecoturismo', emoji: '🚌' },
+  { id: 'food', label: 'Gastronomía & Café', emoji: '🍽️' },
+  { id: 'technology', label: 'Tecnología & IA', emoji: '💻' },
+  { id: 'networking', label: 'Networking & Finanzas', emoji: '🤝' },
+  { id: 'wellness', label: 'Bienestar & Salud', emoji: '🧘' },
+  { id: 'community', label: 'Comunidad & Coros', emoji: '👥' },
+  { id: 'charity', label: 'Causas & Voluntariado', emoji: '🎗️' },
+  { id: 'religion', label: 'Religión & Espiritualidad', emoji: '🙏' },
+  { id: 'politics', label: 'Política & Civismo', emoji: '⚖️' },
 ]
 
 const timeFilters = [
@@ -36,25 +47,48 @@ const timeFilters = [
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EventsPage() {
+  const { area, initialized } = useDiscoveryArea()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedTimeFilter, setSelectedTimeFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming')
+  const [isUnofficial, setIsUnofficial] = useState(false)
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [isVirtualOnly, setIsVirtualOnly] = useState(false)
   const [page, setPage] = useState(1)
 
+  const [contentPrefs, setContentPrefs] = useState<ContentFilterPreferences>(loadStoredPreferences)
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false)
+
   const { events, pagination, isLoading, error, fetchEvents } = useEventsStore()
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user } = useAuthStore()
+
+  const hasActiveRestrictions = Boolean(
+    contentPrefs.hidePolitical ||
+    contentPrefs.hideReligious ||
+    contentPrefs.hiddenCategories?.length ||
+    contentPrefs.contentFilterMode === 'whitelist'
+  )
 
   const loadEvents = useCallback(() => {
-    fetchEvents({
+    void fetchEvents({
       page,
       limit: 12,
+      ...areaParams(area),
       ...(searchQuery && { search: searchQuery }),
       ...(selectedCategory !== 'all' && { category: selectedCategory }),
       ...(selectedTimeFilter !== 'all' && { timeFilter: selectedTimeFilter }),
-    })
-  }, [page, searchQuery, selectedCategory, selectedTimeFilter, fetchEvents])
+      ...(isUnofficial && { isUnofficial: 'true' }),
+      ...(isRecurring && { isRecurring: 'true' }),
+      ...(isVirtualOnly && { isOnline: 'true' }),
+      ...(contentPrefs.hidePolitical && { hidePolitical: 'true' }),
+      ...(contentPrefs.hideReligious && { hideReligious: 'true' }),
+      ...(contentPrefs.hiddenCategories?.length && { excludeCategories: contentPrefs.hiddenCategories.join(',') }),
+      ...(contentPrefs.contentFilterMode === 'whitelist' && contentPrefs.preferredCategories?.length && { categories: contentPrefs.preferredCategories.join(',') })
+    }).catch(() => { /* The store exposes an inline error with a retry. */ })
+  }, [area, page, searchQuery, selectedCategory, selectedTimeFilter, isUnofficial, isRecurring, isVirtualOnly, contentPrefs, fetchEvents])
 
-  useEffect(() => { loadEvents() }, [loadEvents])
+  useEffect(() => { if (initialized) loadEvents() }, [initialized, loadEvents])
+  useEffect(() => { setPage(1) }, [area])
 
   const handleFavorite = async (eventId: string) => {
     if (!isAuthenticated) { toast.error('Debes iniciar sesión'); return }
@@ -96,7 +130,7 @@ export default function EventsPage() {
               <p className="mt-1 text-gray-500 dark:text-gray-400 text-base">
                 {pagination?.total
                   ? `${pagination.total.toLocaleString()} eventos disponibles`
-                  : 'Los mejores eventos en tu ciudad'}
+                  : `Descubre planes · ${area.label}`}
               </p>
             </div>
             {isAuthenticated && (
@@ -104,7 +138,7 @@ export default function EventsPage() {
                 <motion.span
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-emerald-500/20 cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-violet-500/20 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" aria-hidden="true" />
                   Crear Evento
@@ -116,6 +150,7 @@ export default function EventsPage() {
       </div>
 
       {/* ── Filters bar ──────────────────────────────────────────────── */}
+      <div className="mx-auto max-w-6xl px-4 pb-5 sm:px-6"><LocationPicker /></div>
       <div className="sticky top-16 z-40 bg-white/95 dark:bg-gray-950/95 backdrop-blur-xl border-b border-gray-100 dark:border-white/5 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 space-y-3">
           {/* Top row: search + time tabs */}
@@ -130,7 +165,7 @@ export default function EventsPage() {
                   onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
                   placeholder="Buscar eventos…"
                   aria-label="Buscar eventos"
-                  className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60 transition-all"
+                  className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
                 />
               </div>
             </form>
@@ -158,6 +193,101 @@ export default function EventsPage() {
                 </button>
               ))}
             </div>
+
+            {/* Unofficial toggle */}
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { setIsUnofficial(!isUnofficial); setPage(1) }}
+              className={cn(
+                'relative px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-300 border flex items-center gap-2 shrink-0 overflow-hidden',
+                isUnofficial
+                  ? 'bg-gradient-to-r from-violet-600/20 to-fuchsia-600/20 border-violet-500/60 text-violet-700 dark:text-violet-300 shadow-[0_0_20px_rgba(139,92,246,0.35)]'
+                  : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 hover:border-violet-500/30'
+              )}
+            >
+              {isUnofficial && (
+                <span className="absolute inset-0 bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 animate-pulse pointer-events-none" />
+              )}
+              <span className="text-base">🤫</span>
+              <span>Extraoficiales</span>
+              {isUnofficial && (
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+                </span>
+              )}
+            </motion.button>
+
+            {/* Recurring Activities toggle */}
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { setIsRecurring(!isRecurring); setPage(1) }}
+              className={cn(
+                'relative px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-300 border flex items-center gap-2 shrink-0 overflow-hidden',
+                isRecurring
+                  ? 'bg-gradient-to-r from-blue-600/25 to-cyan-600/25 border-blue-500/70 text-blue-700 dark:text-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.35)]'
+                  : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 hover:border-blue-500/30'
+              )}
+            >
+              {isRecurring && (
+                <span className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 animate-pulse pointer-events-none" />
+              )}
+              <span className="text-base">🔁</span>
+              <span>Fijos Semanales</span>
+              {isRecurring && (
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                </span>
+              )}
+            </motion.button>
+
+            {/* Virtual & Streams toggle */}
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { setIsVirtualOnly(!isVirtualOnly); setPage(1) }}
+              className={cn(
+                'relative px-4 py-2 text-sm font-semibold rounded-xl transition-all duration-300 border flex items-center gap-2 shrink-0 overflow-hidden',
+                isVirtualOnly
+                  ? 'bg-gradient-to-r from-cyan-600/25 to-emerald-600/25 border-cyan-500/70 text-cyan-700 dark:text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.35)]'
+                  : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 hover:border-cyan-500/30'
+              )}
+            >
+              {isVirtualOnly && (
+                <span className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 animate-pulse pointer-events-none" />
+              )}
+              <span className="text-base">🌐</span>
+              <span>En Línea & Streams</span>
+              {isVirtualOnly && (
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                </span>
+              )}
+            </motion.button>
+
+            {/* Content filter button */}
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setIsFilterModalOpen(true)}
+              className={cn(
+                'px-3.5 py-2 text-sm font-semibold rounded-xl transition-all border flex items-center gap-1.5 shrink-0',
+                hasActiveRestrictions
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300 shadow-sm'
+                  : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'
+              )}
+              title="Restricciones de contenido (Política, Religión, Whitelist)"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Filtro de Contenido</span>
+              {hasActiveRestrictions && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              )}
+            </motion.button>
           </div>
 
           {/* Category pills */}
@@ -174,7 +304,7 @@ export default function EventsPage() {
                 className={cn(
                   'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all',
                   selectedCategory === cat.id
-                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
+                    ? 'bg-violet-500 text-white shadow-sm shadow-violet-500/20'
                     : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10'
                 )}
               >
@@ -267,7 +397,7 @@ export default function EventsPage() {
                         className={cn(
                           'w-8 h-8 text-sm font-medium rounded-lg transition-all',
                           page === p
-                            ? 'bg-emerald-500 text-white'
+                            ? 'bg-violet-500 text-white'
                             : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'
                         )}
                       >
@@ -293,6 +423,13 @@ export default function EventsPage() {
           </>
         )}
       </main>
+
+      <ContentFilterModal
+        isOpen={isFilterModalOpen}
+        onClose={() => setIsFilterModalOpen(false)}
+        currentUser={user}
+        onApply={(newPrefs) => setContentPrefs(newPrefs)}
+      />
     </div>
   )
 }

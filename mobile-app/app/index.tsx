@@ -3,24 +3,22 @@ import { View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import { SplashScreen } from '../src/components/SplashScreen';
+import { useTheme } from '../src/contexts/ThemeContext';
 
 export default function IndexScreen() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isLoading } = useAuth();
+  const { theme } = useTheme();
 
   useEffect(() => {
     if (!isLoading) {
-      // Navigate based on authentication status
-      if (isAuthenticated) {
-        router.replace('/(tabs)');
-      } else {
-        router.replace('/(auth)/welcome');
-      }
+      // Browsing is public; protected actions request sign-in when needed.
+      router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isLoading, router]);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.bg }]}>
       <SplashScreen />
     </View>
   );
@@ -29,6 +27,5 @@ export default function IndexScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1e40af',
   },
 });

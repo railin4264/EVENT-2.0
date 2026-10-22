@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center p-4">
         {/* Glow Effects */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] h-[500px] bg-emerald-500/20 dark:bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[600px] h-[500px] bg-violet-500/20 dark:bg-violet-500/10 blur-[120px] rounded-full pointer-events-none" />
 
         <div className="w-full max-w-md relative z-10">
           <motion.div
@@ -62,8 +62,8 @@ export default function ForgotPasswordPage() {
           >
             <div className="glass bg-white/60 dark:bg-gray-900/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-2xl rounded-3xl p-8">
               <div className="text-center mb-6">
-                <div className="mx-auto mb-6 w-20 h-20 bg-emerald-100 dark:bg-emerald-500/20 rounded-full flex items-center justify-center">
-                  <CheckCircle className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+                <div className="mx-auto mb-6 w-20 h-20 bg-violet-100 dark:bg-violet-500/20 rounded-full flex items-center justify-center">
+                  <CheckCircle className="h-10 w-10 text-violet-600 dark:text-violet-400" />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                   ¡Correo Enviado!
@@ -89,7 +89,7 @@ export default function ForgotPasswordPage() {
                 <div className="text-center">
                   <Link 
                     href="/login" 
-                    className="inline-flex items-center text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium transition-colors"
+                    className="inline-flex items-center text-sm text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 font-medium transition-colors"
                   >
                     <ChevronLeft className="mr-1 h-4 w-4" />
                     Volver al inicio de sesión
@@ -150,7 +150,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex items-center justify-center py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
+                className="w-full flex items-center justify-center py-3 px-4 bg-gradient-to-r from-violet-500 to-cyan-500 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all transform hover:scale-[1.02] disabled:opacity-50 disabled:scale-100"
               >
                 {isLoading ? (
                   <>

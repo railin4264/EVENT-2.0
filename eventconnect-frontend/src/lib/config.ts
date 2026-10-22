@@ -75,7 +75,7 @@ export const API_ENDPOINTS = {
   // Users
   USERS: {
     PROFILE: '/users/profile',
-    GET: (id: string) => `/users/${id}`,
+    GET: (id: string) => `/users/profile/${id}`,
     UPDATE_PROFILE: '/users/profile',
     EVENTS: (id: string) => `/users/${id}/events`,
     AVATAR: '/users/avatar',

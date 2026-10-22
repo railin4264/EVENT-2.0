@@ -1,0 +1,152 @@
+
+> eventconnect-backend-api@2.0.0 test
+> jest --runInBand --coverage=false --silent tests/checkout-regression.test.js tests/twoFactor.test.js
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+2026-10-10T02:48:01.347Z [[33mwarn[39m]: JWT_REFRESH_SECRET not set — generating ephemeral secret. All refresh tokens will be invalidated on restart.
+2026-10-10T02:48:01.350Z [[32minfo[39m]: JWT Service initialized with rotation:
+2026-10-10T02:48:14.748Z [[32minfo[39m]: Cloudinary service initialized
+2026-10-10T02:48:19.873Z [[33mwarn[39m]: Firebase service account file not found at C:\Users\Raili\OneDrive\Nueva carpeta\Imágenes\EVENT NOW 2.0\backend-api\config\firebase-service-account.json. Push notifications will be disabled.
+2026-10-10T02:48:19.873Z [[33mwarn[39m]: Firebase service account not configured. Push notifications will be disabled.
+2026-10-10T02:48:19.980Z [[32minfo[39m]: 2FA secret generated for user: test@example.com
+2026-10-10T02:48:23.231Z [[32minfo[39m]: Generated 8 backup codes
+2026-10-10T02:48:23.401Z [[32minfo[39m]: Generated 5 backup codes
+2026-10-10T02:48:23.485Z [[32minfo[39m]: Generated 10 backup codes
+2026-10-10T02:48:23.689Z [[32minfo[39m]: Backup code used successfully
+2026-10-10T02:48:25.987Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:25.990Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-10T02:48:25.991Z [[32minfo[39m]: 2FA setup token generated for user: 6ac9a7792d09f8823a0ca88c
+2026-10-10T02:48:26.004Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-10T02:48:26.010Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:26 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-10T02:48:26.354Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:26.356Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:26 +0000] "POST /api/2fa/setup HTTP/1.1" 400 69 "-" "-"
+2026-10-10T02:48:26.671Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:26 +0000] "POST /api/2fa/setup HTTP/1.1" 401 79 "-" "-"
+2026-10-10T02:48:27.039Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:27.040Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-10T02:48:27.040Z [[32minfo[39m]: 2FA setup token generated for user: 6ac9a77a2d09f8823a0ca8d8
+2026-10-10T02:48:27.064Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-10T02:48:27.065Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:27 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-10T02:48:27.122Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:27.139Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:27 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 400 60 "-" "-"
+2026-10-10T02:48:27.973Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:27.974Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-10T02:48:27.974Z [[32minfo[39m]: 2FA setup token generated for user: 6ac9a77b2d09f8823a0ca8f4
+2026-10-10T02:48:27.994Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-10T02:48:27.995Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:27 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-10T02:48:28.021Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:28.032Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:28 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 400 60 "-" "-"
+2026-10-10T02:48:28.562Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:28.562Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-10T02:48:28.562Z [[32minfo[39m]: 2FA setup token generated for user: 6ac9a77c2d09f8823a0ca910
+2026-10-10T02:48:28.575Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-10T02:48:28.576Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:28 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-10T02:48:28.600Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:28.606Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:28 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 400 60 "-" "-"
+2026-10-10T02:48:28.922Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:28.922Z [[32minfo[39m]: 2FA secret generated for user: 2fa-test@example.com
+2026-10-10T02:48:28.922Z [[32minfo[39m]: 2FA setup token generated for user: 6ac9a77c2d09f8823a0ca92c
+2026-10-10T02:48:28.934Z [[32minfo[39m]: 2FA setup initiated for user: 2fatest
+2026-10-10T02:48:28.935Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:28 +0000] "POST /api/2fa/setup HTTP/1.1" 200 239 "-" "-"
+2026-10-10T02:48:28.966Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:28.967Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:28 +0000] "POST /api/2fa/verify-setup HTTP/1.1" 400 146 "-" "-"
+2026-10-10T02:48:29.332Z [[33mwarn[39m]: Failed 2FA attempt recorded for user 6ac9a77d2d09f8823a0ca947, type: totp
+2026-10-10T02:48:29.333Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:29 +0000] "POST /api/2fa/verify HTTP/1.1" 400 70 "-" "-"
+2026-10-10T02:48:29.600Z [[33mwarn[39m]: Failed 2FA attempt recorded for user 6ac9a77d2d09f8823a0ca963, type: totp
+2026-10-10T02:48:29.601Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:29 +0000] "POST /api/2fa/verify HTTP/1.1" 400 70 "-" "-"
+2026-10-10T02:48:29.814Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:29 +0000] "POST /api/2fa/verify HTTP/1.1" 400 49 "-" "-"
+2026-10-10T02:48:30.328Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:30 +0000] "POST /api/2fa/verify HTTP/1.1" 400 45 "-" "-"
+2026-10-10T02:48:30.657Z [[32minfo[39m]: Backup code used successfully
+2026-10-10T02:48:30.670Z [[32minfo[39m]: 2FA rate limit cleared for user: 6ac9a77e2d09f8823a0ca9b6
+2026-10-10T02:48:30.671Z [[32minfo[39m]: Backup code verification successful for user: 2fatest
+2026-10-10T02:48:30.672Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:30 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 200 401 "-" "-"
+2026-10-10T02:48:31.109Z [[33mwarn[39m]: Failed 2FA attempt recorded for user 6ac9a77e2d09f8823a0ca9d8, type: backup
+2026-10-10T02:48:31.110Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:31 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 400 71 "-" "-"
+2026-10-10T02:48:31.423Z [[33mwarn[39m]: Failed 2FA attempt recorded for user 6ac9a77f2d09f8823a0ca9f6, type: backup
+2026-10-10T02:48:31.424Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:31 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 400 71 "-" "-"
+2026-10-10T02:48:31.708Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:31 +0000] "POST /api/2fa/verify-backup HTTP/1.1" 400 144 "-" "-"
+2026-10-10T02:48:32.152Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:32.153Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:32 +0000] "GET /api/2fa/status HTTP/1.1" 200 141 "-" "-"
+2026-10-10T02:48:32.589Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:32.590Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:32 +0000] "GET /api/2fa/status HTTP/1.1" 200 161 "-" "-"
+2026-10-10T02:48:33.556Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:33 +0000] "GET /api/2fa/status HTTP/1.1" 401 79 "-" "-"
+2026-10-10T02:48:34.099Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:34.100Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:34 +0000] "POST /api/2fa/disable HTTP/1.1" 400 48 "-" "-"
+2026-10-10T02:48:34.502Z [[32minfo[39m]: User authenticated: 2fatest
+2026-10-10T02:48:34.504Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:34 +0000] "POST /api/2fa/disable HTTP/1.1" 400 48 "-" "-"
+2026-10-10T02:48:35.168Z [[32minfo[39m]: User authenticated: testuser_1791600514996
+2026-10-10T02:48:35.169Z [[32minfo[39m]: ::ffff:127.0.0.1 - - [10/Oct/2026:02:48:35 +0000] "POST /api/2fa/disable HTTP/1.1" 400 65 "-" "-"
+FAIL tests/twoFactor.test.js (42.998 s)
+  ● Two-Factor Authentication › 2FA Routes › POST /api/2fa/verify-setup › should complete 2FA setup with valid token
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 400
+
+      256 |           });
+      257 |
+    > 258 |         expect(response.status).toBe(200);
+          |                                 ^
+      259 |         expect(response.body.success).toBe(true);
+      260 |         expect(response.body.data.backupCodes).toBeDefined();
+      261 |         expect(response.body.data.backupCodes).toHaveLength(8);
+
+      at Object.toBe (tests/twoFactor.test.js:258:33)
+
+  ● Two-Factor Authentication › 2FA Routes › POST /api/2fa/verify-setup › should reject setup with invalid token
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "Invalid TOTP token"
+    Received: "Invalid or expired setup token"
+
+      283 |         expect(response.status).toBe(400);
+      284 |         expect(response.body.success).toBe(false);
+    > 285 |         expect(response.body.message).toBe('Invalid TOTP token');
+          |                                       ^
+      286 |       });
+      287 |
+      288 |       it('should reject setup with invalid setup token', async () => {
+
+      at Object.toBe (tests/twoFactor.test.js:285:39)
+
+  ● Two-Factor Authentication › 2FA Routes › POST /api/2fa/verify › should verify valid 2FA token
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 400
+
+      340 |           });
+      341 |
+    > 342 |         expect(response.status).toBe(200);
+          |                                 ^
+      343 |         expect(response.body.success).toBe(true);
+      344 |         expect(response.body.token).toBeDefined(); // JWT token
+      345 |         expect(response.body.user.email).toBe(testUser.email);
+
+      at Object.toBe (tests/twoFactor.test.js:342:33)
+
+  ● Two-Factor Authentication › 2FA Routes › POST /api/2fa/disable › should disable 2FA with valid token
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 400
+
+      534 |           });
+      535 |
+    > 536 |         expect(response.status).toBe(200);
+          |                                 ^
+      537 |         expect(response.body.success).toBe(true);
+      538 |         expect(response.body.message).toBe('2FA disabled successfully');
+      539 |
+
+      at Object.toBe (tests/twoFactor.test.js:536:33)
+
+PASS tests/checkout-regression.test.js (23.604 s)
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       4 failed, 40 passed, 44 total
+Snapshots:   0 total
+Time:        66.916 s

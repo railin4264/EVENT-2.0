@@ -14,6 +14,8 @@ yarn-error.log*
 .env.production.local
 
 # Build outputs
+.next*
+**/.next*
 /web/.next/
 /web/out/
 /web/build/
@@ -163,3 +165,36 @@ backend-api/.mongod-uri
 # TypeScript incremental build artifacts
 tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
+
+# Local QA artifacts and development database
+eventconnect-frontend/test-results/
+eventconnect-frontend/playwright-report/
+mobile-app/dist-check/
+backend-api/.local-data/
+
+# Local compose credentials
+.env.compose
+
+# Isolated production verification output
+**/.next-audit/
+
+/eventconnect-frontend/.next-map-opening-20261021/
+
+/eventconnect-frontend/.next-sources-workflow-20261021/
+eventconnect-frontend/.next-sources-accessible-20261021/
+eventconnect-frontend/.next-map-directory-20261021/
+
+/eventconnect-frontend/.next-live-connections-20261021/
+
+/eventconnect-frontend/.next-live-connections-final-20261021/
+
+/eventconnect-frontend/.next-design-consistency-20261021/
+/eventconnect-frontend/.next-country-pilot-20261022/
+/eventconnect-frontend/.next-country-final-20261022/
+
+# Temporary screenshots
+phone_screen*.png
+
+
+# Android APK binaries
+*.apk

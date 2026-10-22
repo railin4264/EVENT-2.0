@@ -253,7 +253,7 @@ export default function FeedScreen() {
       </Text>
       <TouchableOpacity
         style={[styles.createPostButton, { backgroundColor: theme.colors.primary }]}
-        onPress={() => router.push('/create-event')}
+        onPress={() => router.push('/create-post')}
       >
         <Text style={styles.createPostButtonText}>Crear publicacion</Text>
       </TouchableOpacity>
@@ -293,7 +293,7 @@ export default function FeedScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.createButton, { backgroundColor: theme.colors.surface, borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1 }]}
-            onPress={() => router.push('/create-event')}
+            onPress={() => router.push('/create-post')}
           >
             <Ionicons name="add" size={24} color={theme.colors.primary} />
           </TouchableOpacity>

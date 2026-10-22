@@ -25,7 +25,23 @@ export default function AchievementsScreen(){
       <View style={[av.header,{paddingTop:insets.top+8}]}>
         <TouchableOpacity style={av.backBtn} onPress={()=>router.back()}><Ionicons name="chevron-back" size={22} color={TXT}/></TouchableOpacity>
         <Text style={av.title}>Logros</Text>
-        <View style={{width:40}}/>
+        <TouchableOpacity
+  style={{
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  }}
+  onPress={() => router.push('/passport' as any)}
+>
+  <Text style={{ fontSize: 13 }}>🇩🇴</Text>
+  <Text style={{ color: '#f59e0b', fontSize: 11, fontWeight: '800' }}>Pasaporte</Text>
+</TouchableOpacity>
       </View>
       <View style={{flexDirection:'row',paddingHorizontal:16,gap:12,marginBottom:16}}>
         {(['unlocked','locked'] as const).map(t=>{const a=tab===t;return(

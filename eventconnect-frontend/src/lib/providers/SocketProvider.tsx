@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import { Socket } from 'socket.io-client'
 import { socketClient } from '@/lib/socket/client'
 import { useAuthStore } from '@/stores/authStore'
+import { useNotificationsStore } from '@/stores/notificationsStore'
 
 interface SocketContextType {
   socket: Socket | null
@@ -33,21 +34,33 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const { token, isAuthenticated } = useAuthStore()
 
   useEffect(() => {
+    setNotifications([])
+    try { localStorage.removeItem('chat-storage') } catch {}
     if (isAuthenticated && token) {
       const socketInstance = socketClient.connect(token)
       setSocket(socketInstance)
 
+      setIsConnected(socketInstance.connected)
+      socketInstance.on('connect_error', () => setIsConnected(false))
+
       // Connection handlers
       socketInstance.on('connect', () => {
         setIsConnected(true)
-        console.log('✅ Socket.IO connected')
+
       })
 
       socketInstance.on('disconnect', () => {
         setIsConnected(false)
-        console.log('❌ Socket.IO disconnected')
+
       })
 
+      socketInstance.on('newNotification', data => {
+        const notification = data.notification || data
+        if (notification?._id) useNotificationsStore.getState().addNotification(notification)
+      })
+      socketInstance.on('unreadCountUpdate', data => {
+        if (typeof data?.unreadCount === 'number') useNotificationsStore.getState().setUnreadCount(data.unreadCount)
+      })
       // Real-time notification handlers
       socketInstance.on('notification', (data: any) => {
         addNotification({
@@ -99,6 +112,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       })
 
       return () => {
+        socketInstance.removeAllListeners()
         socketClient.disconnect()
         setSocket(null)
         setIsConnected(false)

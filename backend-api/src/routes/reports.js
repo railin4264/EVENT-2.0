@@ -7,7 +7,27 @@ const Event = require('../models/Event');
 const Tribe = require('../models/Tribe');
 const { body, validationResult } = require('express-validator');
 
+const AuditService = require('../services/auditService');
 const router = express.Router();
+
+const REVIEW_STATUSES = ['under_review', 'reviewed', 'reviewing', 'in_review'];
+const ALL_REPORT_STATUSES = ['pending', ...REVIEW_STATUSES, 'resolved', 'dismissed', 'escalated'];
+
+function formatAdminReport(report) {
+  const obj = report.toObject ? report.toObject({ virtuals: true }) : { ...report };
+  const target =
+    obj.reportedEvent ||
+    obj.reportedUser ||
+    obj.reportedTribe ||
+    obj.reportedPost ||
+    obj.reportedComment;
+
+  return {
+    ...obj,
+    reportedBy: obj.reporter || obj.reportedBy || null,
+    contentId: String(target?._id || target || obj._id)
+  };
+}
 
 // @desc    Create a new report
 // @route   POST /api/reports
@@ -91,7 +111,7 @@ router.post('/', [
       ...(reportedTribeId && { reportedTribe: reportedTribeId }),
       ...(reportedPostId && { reportedPost: reportedPostId }),
       ...(reportedCommentId && { reportedComment: reportedCommentId }),
-      status: { $in: ['pending', 'under_review'] }
+      status: { $in: ['pending', ...REVIEW_STATUSES] }
     });
 
     if (existingReport) {
@@ -132,16 +152,11 @@ router.post('/', [
 
     await report.save();
 
-    // Log the report
     logger.info(`New report created: ${report._id} by user ${req.user.id}`);
 
-    // Send notification to admins for high/urgent priority reports
     if (priority === 'high' || priority === 'urgent') {
       try {
-        // Find all admin users
         const adminUsers = await User.find({ role: 'admin' }).select('_id');
-
-        // Create notifications for all admins
         const notificationPromises = adminUsers.map(admin => {
           return require('../models/Notification').create({
             recipient: admin._id,
@@ -237,27 +252,75 @@ router.get('/my-reports', protect, async (req, res) => {
   }
 });
 
+// @desc    Get report stats (Admin only)
+// @route   GET /api/reports/stats
+// @access  Private/Admin
+router.get('/stats', protect, restrictTo('admin'), async (req, res) => {
+  try {
+    const rawStats = await Report.getReportStats();
+    const counts = {
+      pending: 0,
+      reviewed: 0,
+      under_review: 0,
+      resolved: 0,
+      dismissed: 0,
+      escalated: 0,
+      total: 0
+    };
+
+    rawStats.forEach(item => {
+      const c = item.count || 0;
+      counts.total += c;
+      if (REVIEW_STATUSES.includes(item._id)) {
+        counts.reviewed += c;
+        counts.under_review += c;
+      } else if (counts[item._id] !== undefined) {
+        counts[item._id] += c;
+      }
+    });
+
+    res.json({
+      success: true,
+      stats: counts,
+      rawStats,
+      data: counts
+    });
+  } catch (error) {
+    logger.error('Get report stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // @desc    Get all reports (Admin only)
 // @route   GET /api/reports/admin
+// @route   GET /api/reports
 // @access  Private/Admin
-router.get('/admin', protect, restrictTo('admin'), async (req, res) => {
+const getAdminReportsHandler = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
-    
+
     const { status, type, category, priority } = req.query;
 
-    // Build query
     const query = {};
-    if (status) query.status = status;
-    if (type) query.type = type;
-    if (category) query.category = category;
-    if (priority) query.priority = priority;
+    if (status && status !== 'all') {
+      if (REVIEW_STATUSES.includes(status)) {
+        query.status = { $in: REVIEW_STATUSES };
+      } else {
+        query.status = status;
+      }
+    }
+    if (type && type !== 'all') query.type = type;
+    if (category && category !== 'all') query.category = category;
+    if (priority && priority !== 'all') query.priority = priority;
 
     const reports = await Report.find(query)
-      .populate('reporter', 'username firstName lastName avatar')
-      .populate('reportedUser', 'username firstName lastName avatar')
+      .populate('reporter', 'username firstName lastName email avatar')
+      .populate('reportedUser', 'username firstName lastName email avatar')
       .populate('reportedEvent', 'title description')
       .populate('reportedTribe', 'name description')
       .populate('reviewedBy', 'username firstName lastName')
@@ -267,10 +330,12 @@ router.get('/admin', protect, restrictTo('admin'), async (req, res) => {
 
     const total = await Report.countDocuments(query);
     const stats = await Report.getReportStats();
+    const formattedReports = reports.map(formatAdminReport);
 
     res.json({
       success: true,
-      reports,
+      reports: formattedReports,
+      data: formattedReports,
       stats,
       pagination: {
         page,
@@ -286,68 +351,10 @@ router.get('/admin', protect, restrictTo('admin'), async (req, res) => {
       message: 'Server error'
     });
   }
-});
+};
 
-// @desc    Update report status (Admin only)
-// @route   PUT /api/reports/:id/status
-// @access  Private/Admin
-router.put('/:id/status', [
-  protect,
-  restrictTo('admin'),
-  body('status').isIn(['pending', 'under_review', 'resolved', 'dismissed', 'escalated']),
-  body('resolution').optional().isLength({ max: 1000 }).trim(),
-  body('actionTaken').optional().isIn([
-    'none', 'warning_sent', 'content_removed', 'user_suspended',
-    'user_banned', 'event_cancelled', 'tribe_deleted', 'post_removed', 'comment_removed'
-  ])
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
-    const { status, resolution, actionTaken, adminNotes } = req.body;
-
-    const report = await Report.findById(req.params.id);
-    if (!report) {
-      return res.status(404).json({
-        success: false,
-        message: 'Report not found'
-      });
-    }
-
-    report.status = status;
-    if (resolution) report.resolution = resolution;
-    if (actionTaken) report.actionTaken = actionTaken;
-    if (adminNotes) report.adminNotes = adminNotes;
-    
-    if (status === 'resolved' || status === 'dismissed') {
-      report.reviewedBy = req.user.id;
-      report.reviewedAt = new Date();
-    }
-
-    await report.save();
-
-    logger.info(`Report ${report._id} status updated to ${status} by admin ${req.user.id}`);
-
-    res.json({
-      success: true,
-      message: 'Report status updated successfully',
-      report
-    });
-  } catch (error) {
-    logger.error('Update report status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
+router.get('/admin', protect, restrictTo('admin'), getAdminReportsHandler);
+router.get('/', protect, restrictTo('admin'), getAdminReportsHandler);
 
 // @desc    Get report categories and types
 // @route   GET /api/reports/config
@@ -381,5 +388,166 @@ router.get('/config', (req, res) => {
     }
   });
 });
+
+// @desc    List organizer verification requests
+// @route   GET /api/reports/organizer-verifications
+// @access  Admin
+router.get('/organizer-verifications', [protect, restrictTo('admin')], async (req, res) => {
+  try {
+    const { status = 'pending' } = req.query;
+    const query = status === 'all'
+      ? { 'organizerVerification.status': { $in: ['pending', 'verified', 'rejected'] } }
+      : { 'organizerVerification.status': status };
+
+    const verifications = await User.find(query)
+      .select('firstName lastName username email phone avatar isOrganizerVerified organizerVerification createdAt')
+      .sort({ 'organizerVerification.submittedAt': -1 });
+
+    res.json({
+      success: true,
+      count: verifications.length,
+      data: verifications
+    });
+  } catch (error) {
+    logger.error('List organizer verifications error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @desc    Review and approve/reject organizer verification
+// @route   PUT /api/reports/organizer-verifications/:userId
+// @access  Admin
+router.put('/organizer-verifications/:userId', [protect, restrictTo('admin')], async (req, res) => {
+  try {
+    const { action, reason } = req.body;
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Acción no válida: debe ser approve o reject' });
+    }
+
+    const user = await User.findById(req.params.userId);
+    if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
+    if (action === 'approve') {
+      user.isOrganizerVerified = true;
+      user.verified = true;
+      if (!user.organizerVerification) user.organizerVerification = {};
+      user.organizerVerification.status = 'verified';
+      user.organizerVerification.reviewedAt = new Date();
+      user.organizerVerification.reviewedBy = req.user.id;
+      user.organizerVerification.rejectionReason = null;
+    } else {
+      user.isOrganizerVerified = false;
+      if (!user.organizerVerification) user.organizerVerification = {};
+      user.organizerVerification.status = 'rejected';
+      user.organizerVerification.rejectionReason = reason || 'No cumple con los requisitos de verificación';
+      user.organizerVerification.reviewedAt = new Date();
+      user.organizerVerification.reviewedBy = req.user.id;
+    }
+
+    await user.save();
+
+    await AuditService.log({
+      action: action === 'approve' ? 'organizer_verification_approved' : 'organizer_verification_rejected',
+      actor: req.user.id,
+      actorUsername: req.user.username,
+      targetType: 'user',
+      targetId: user._id,
+      targetLabel: `${user.firstName} ${user.lastName} (@${user.username})`,
+      status: 'success',
+      details: {
+        documentType: user.organizerVerification?.documentType,
+        documentNumber: user.organizerVerification?.documentNumber,
+        organizationName: user.organizerVerification?.organizationName,
+        reason: action === 'reject' ? reason : null
+      },
+      req
+    });
+
+    res.json({
+      success: true,
+      message: action === 'approve' ? 'Organizador verificado con éxito' : 'Solicitud de verificación rechazada',
+      user: {
+        id: user._id,
+        isOrganizerVerified: user.isOrganizerVerified,
+        organizerVerification: user.organizerVerification
+      }
+    });
+  } catch (error) {
+    logger.error('Review organizer verification error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @desc    Update report status (Admin only)
+// @route   PUT /api/reports/:id/status
+// @route   PATCH /api/reports/:id/status
+// @route   PUT /api/reports/:id
+// @route   PATCH /api/reports/:id
+// @access  Private/Admin
+const updateReportStatusValidators = [
+  protect,
+  restrictTo('admin'),
+  body('status').isIn(ALL_REPORT_STATUSES),
+  body('resolution').optional().isLength({ max: 1000 }).trim(),
+  body('actionTaken').optional().isIn([
+    'none', 'warning_sent', 'content_removed', 'user_suspended',
+    'user_banned', 'event_cancelled', 'tribe_deleted', 'post_removed', 'comment_removed'
+  ])
+];
+
+const updateReportStatusHandler = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { status, resolution, actionTaken, adminNotes } = req.body;
+
+    const report = await Report.findById(req.params.id);
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: 'Report not found'
+      });
+    }
+
+    report.status = status;
+    if (resolution !== undefined) report.resolution = resolution;
+    if (actionTaken !== undefined) report.actionTaken = actionTaken;
+    if (adminNotes !== undefined) report.adminNotes = adminNotes;
+
+    if (['resolved', 'dismissed', ...REVIEW_STATUSES].includes(status)) {
+      report.reviewedBy = req.user.id;
+      report.reviewedAt = new Date();
+    }
+
+    await report.save();
+
+    logger.info(`Report ${report._id} status updated to ${status} by admin ${req.user.id}`);
+
+    res.json({
+      success: true,
+      message: 'Report status updated successfully',
+      report: formatAdminReport(report),
+      data: formatAdminReport(report)
+    });
+  } catch (error) {
+    logger.error('Update report status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+router.put('/:id/status', updateReportStatusValidators, updateReportStatusHandler);
+router.patch('/:id/status', updateReportStatusValidators, updateReportStatusHandler);
+router.put('/:id', updateReportStatusValidators, updateReportStatusHandler);
+router.patch('/:id', updateReportStatusValidators, updateReportStatusHandler);
 
 module.exports = router;

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { User, Bell, Shield, Settings as SettingsIcon, Trash2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import ProfileSettings from '@/components/settings/ProfileSettings'
@@ -9,12 +10,18 @@ import PrivacySettings from '@/components/settings/PrivacySettings'
 import NotificationSettings from '@/components/settings/NotificationSettings'
 import PreferencesSettings from '@/components/settings/PreferencesSettings'
 import DeleteAccountSection from '@/components/settings/DeleteAccountSection'
+import OrganizerVerificationSettings from '@/components/settings/OrganizerVerificationSettings'
+import SupportSettings from '@/components/settings/SupportSettings'
+import { LifeBuoy } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 
-type TabType = 'profile' | 'account' | 'notifications' | 'privacy' | 'preferences' | 'danger'
+type TabType = 'profile' | 'verification' | 'account' | 'notifications' | 'privacy' | 'preferences' | 'support' | 'danger'
 
 export default function SettingsPage() {
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<TabType>('profile')
+
+  if (!user) return <main className="grid min-h-dvh place-items-center bg-background p-6 text-foreground"><div className="max-w-md space-y-4"><h1 className="text-2xl font-semibold">Tu configuración</h1><p className="text-muted-foreground">Inicia sesión para cargar y guardar las preferencias de tu cuenta.</p><Link href="/login?redirect=%2Fsettings" className="inline-flex min-h-11 items-center rounded-xl bg-primary px-5 font-medium text-primary-foreground">Entrar a mi cuenta</Link></div></main>
 
   const tabs = [
     {
@@ -22,6 +29,12 @@ export default function SettingsPage() {
       label: 'Perfil',
       icon: User,
       description: 'Información personal y redes sociales'
+    },
+    {
+      id: 'verification' as TabType,
+      label: 'Verificación de Organizador',
+      icon: ShieldCheck,
+      description: 'Identidad, RNC/Cédula y sello oficial'
     },
     {
       id: 'account' as TabType,
@@ -46,6 +59,12 @@ export default function SettingsPage() {
       label: 'Preferencias',
       icon: SettingsIcon,
       description: 'Tema, idioma y configuración'
+    },
+    {
+      id: 'support' as TabType,
+      label: 'Ayuda y Soporte',
+      icon: LifeBuoy,
+      description: 'Tickets de ayuda, WhatsApp y preguntas frecuentes'
     },
     {
       id: 'danger' as TabType,
@@ -78,6 +97,10 @@ export default function SettingsPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5">
+          <div><h2 className="font-semibold text-foreground">Haz espacio para lo que te gusta</h2><p className="mt-1 text-sm text-muted-foreground">Elige tus intereses o vuelve a personalizar tus recomendaciones cuando quieras.</p></div>
+          <Link href="/onboarding?redirect=%2Fsettings" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Personalizar mis intereses</Link>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Sidebar */}
           <div className="lg:col-span-3">
@@ -132,12 +155,14 @@ export default function SettingsPage() {
 
           {/* Content */}
           <div className="lg:col-span-9">
-            <div className="glass rounded-2xl p-8 border border-white/5">
+            <div key={user.id || user._id} className="glass rounded-2xl p-8 border border-white/5">
               {activeTab === 'profile' && <ProfileSettings user={user} />}
+              {activeTab === 'verification' && <OrganizerVerificationSettings />}
               {activeTab === 'account' && <AccountSettings user={user} />}
               {activeTab === 'notifications' && <NotificationSettings user={user} />}
-              {activeTab === 'privacy' && <PrivacySettings user={user} />}
+              {activeTab === 'privacy' && <PrivacySettings user={user} onRequestSupport={() => setActiveTab('support')} />}
               {activeTab === 'preferences' && <PreferencesSettings user={user} />}
+              {activeTab === 'support' && <SupportSettings user={user} />}
               {activeTab === 'danger' && <DeleteAccountSection />}
             </div>
           </div>

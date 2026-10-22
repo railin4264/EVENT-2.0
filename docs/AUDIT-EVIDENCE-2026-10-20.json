@@ -1,0 +1,156 @@
+{
+  "date": "2026-10-20",
+  "timezone": "America/Santo_Domingo",
+  "gitHead": "44987c073bd467f9acc1608d7e747b9feeb88594",
+  "workingTreeChangedEntries": 569,
+  "appCodeChangedByAudit": false,
+  "tests": {
+    "web": {
+      "passed": 462,
+      "failed": 1,
+      "skipped": 1
+    },
+    "mobile": {
+      "passed": 185,
+      "failed": 0,
+      "skipped": 0
+    },
+    "api": {
+      "passed": 470,
+      "failed": 5,
+      "skipped": 1
+    },
+    "additionalLaunchProbes": {
+      "passed": 0,
+      "failed": 8
+    },
+    "coverageMeasured": false
+  },
+  "hashes": [
+    {
+      "file": "backend-api/package-lock.json",
+      "sha256": "14ec561606d61dcac3e90d9ebfa4ef122187cc8698c7c930a2712847c22455bd"
+    },
+    {
+      "file": "backend-api/src/config/database.js",
+      "sha256": "f8ce1e5f1367e8cc0d7215bd00a780fdf96ff0eca4d27ca9fbd1d413a7931777"
+    },
+    {
+      "file": "backend-api/src/models/Event.js",
+      "sha256": "de39e18297678f0daa884f08a769af01a43189b90e4699eec1a9eb10812da255"
+    },
+    {
+      "file": "backend-api/src/routes/analytics.js",
+      "sha256": "56a80016beabf847a4fa30206e63d271804c348e6d2ae8f4036d3a8fd4f93d3d"
+    },
+    {
+      "file": "backend-api/src/routes/events.js",
+      "sha256": "9dfc34d2882ba5bdabe88f29676598e87f031f8e63d4f73c8165ea549446e06a"
+    },
+    {
+      "file": "backend-api/src/routes/notifications.js",
+      "sha256": "cfa279ad4be1926f90df9473aa91ce52942eec09a5279f43a84de94195b24370"
+    },
+    {
+      "file": "backend-api/src/server.js",
+      "sha256": "f946bec5582a371aba9fd723baafea9892e5e63e7d87857880cbc65e5540abd0"
+    },
+    {
+      "file": "backend-api/src/services/AIRecommendationService.js",
+      "sha256": "ae1668b5710c39894d9c9a17df785ade2290cbeeffc1d11f81b1abb9772ac159"
+    },
+    {
+      "file": "backend-api/src/services/cronService.js",
+      "sha256": "0d45d0c990da7daf705639bca3100cb7efbf9c669f5daa1bc8817f435a246103"
+    },
+    {
+      "file": "backend-api/src/services/notificationService.js",
+      "sha256": "7530bc9ce2b8d341e94f047c57b97608667b891dca0dd8d0b24ca9f061393d06"
+    },
+    {
+      "file": "backend-api/src/services/socketService.js",
+      "sha256": "5f46dab939287ec344754bdcb25b6c0a1eec1a4c9d1f9e8990e738cd8d41f72e"
+    },
+    {
+      "file": "backend-api/tests/audit-probes.launch.js",
+      "sha256": "2d12e6ee11a4f3dfcfd3dd8cd3e5c68a2590bb02721c794259cec1b3ad2d96ed"
+    },
+    {
+      "file": "backend-api/tests/setup.js",
+      "sha256": "44864e81095e52c18d964abf14fffe087379ec6674dd10f6a49249e6b7d844a2"
+    },
+    {
+      "file": "docker-compose.yml",
+      "sha256": "1324524d775a7856739d3a29a54244b1f038e1c5820c57c73a67efdef39b013f"
+    },
+    {
+      "file": "Dockerfile",
+      "sha256": "61723bfb1eaf8aac8ca47d2bdbc6d09e681029711164323a38f9be70f1eebaa8"
+    },
+    {
+      "file": "docs/AUDIT-COMPLETE-2026-10-20.html",
+      "sha256": "3e29fe3e59ce63085272585775eb87c113128a45a0c488584983037aac43d6fa"
+    },
+    {
+      "file": "docs/AUDIT-COMPLETE-2026-10-20.md",
+      "sha256": "07c56935b056e87a69e0181ac0ecd2e1ad46d2e1d20886256222c0d946b46d4c"
+    },
+    {
+      "file": "eventconnect-frontend/next.config.mjs",
+      "sha256": "ad8d7188994711f8f02cb37a1e8583143267f925948b7f080f5deef7c0a32e05"
+    },
+    {
+      "file": "eventconnect-frontend/package-lock.json",
+      "sha256": "96a175f394ccbfec189e40c1b73ef4e1695c668133b100e2f2020047951d63d5"
+    },
+    {
+      "file": "eventconnect-frontend/src/app/events/create/create-event-form.ts",
+      "sha256": "15626fec1bc61456ca2062535362827bb0c6c415841be0c61d00e88469c350f8"
+    },
+    {
+      "file": "eventconnect-frontend/src/app/page.tsx",
+      "sha256": "f28c73adfd565b11b7821d09eedf343cdfdecdd5107f028042655e96d6383243"
+    },
+    {
+      "file": "eventconnect-frontend/src/app/plans/[token]/page.tsx",
+      "sha256": "41b2fa3e1842d9fd5f9c7c2573dd4914bb3f0733d2bea209c5b87031014af799"
+    },
+    {
+      "file": "eventconnect-frontend/src/components/layout/ClientLayout.tsx",
+      "sha256": "ff7e22f6183305db866cd56f1eec0c7de042f34260f04796f799cfe8a8dbe385"
+    },
+    {
+      "file": "eventconnect-frontend/src/components/partners/partner-tools.tsx",
+      "sha256": "2740cb8aaa87c06ab809c47bb8d5dd17f8c1b941cc20c88bd9a23144bc1763c1"
+    },
+    {
+      "file": "mobile-app/app/_layout.tsx",
+      "sha256": "1d07acb31d9c3ecf5ea377cac2925969aa3090e27d3c23898a26a6a8b66934f6"
+    },
+    {
+      "file": "mobile-app/audit-notification-contract.launch.ts",
+      "sha256": "2a3d2ffd733c85f31ac5f111fe0879d07f4064575bd8a92d984d1ad8ebf8d223"
+    },
+    {
+      "file": "mobile-app/package-lock.json",
+      "sha256": "96ab54a6ee46c2e4bf6c196b581b016ffe607790aa0c094b79786015631e74aa"
+    },
+    {
+      "file": "mobile-app/src/components/HostReadinessTools.tsx",
+      "sha256": "322d32beade4bf3a69ab2e571b6ab7a402a63ed8bea4badbfb22005e8e246615"
+    },
+    {
+      "file": "mobile-app/src/contexts/NotificationsContext.tsx",
+      "sha256": "953a724b3fcdb23a2ee1f5de9e09a9ad08f6bf8a0f154d74802b5380239080aa"
+    },
+    {
+      "file": "mobile-app/src/services/notificationsService.ts",
+      "sha256": "6ad532831a755c917ba9d1a0133244af4687d1584f5d8ec2ecc60d9b55a04a9c"
+    },
+    {
+      "file": "mobile-app/src/utils/notifications.ts",
+      "sha256": "d716298c6413823903a57bfd0fa9aad2c1ddfec1eb303eadc934c26b0e2c10df"
+    }
+  ],
+  "logsDirectory": "E:/CodexBuilds/audit-20261020"
+}

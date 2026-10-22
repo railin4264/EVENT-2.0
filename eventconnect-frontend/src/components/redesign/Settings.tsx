@@ -148,7 +148,7 @@ export function Settings() {
                 <div className="space-y-4">
                   <div>
                     <Label className="text-white/80">Nombre completo</Label>
-                    <p className="text-white mt-1">{user ? usersService.getFullName(user) : 'N/A'}</p>
+                    <p className="text-white mt-1">{user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username : 'N/A'}</p>
                   </div>
                   <div>
                     <Label className="text-white/80">Nombre de usuario</Label>
@@ -177,7 +177,7 @@ export function Settings() {
               </div>
 
               <div className="flex space-x-3 mt-6">
-                <Button className="bg-gradient-to-r from-violet-600 to-blue-600">
+                <Button className="bg-gradient-to-r from-violet-600 to-cyan-600">
                   Editar perfil
                 </Button>
                 <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">

@@ -1,368 +1,138 @@
 const express = require('express');
-const { protect } = require('../middleware/auth');
+const rateLimit = require('express-rate-limit');
+const { optionalAuth } = require('../middleware/auth');
 const User = require('../models/User');
 const Event = require('../models/Event');
 const Tribe = require('../models/Tribe');
+const { buildAgeRestrictionFilter } = require('../utils/eventVisibility');
+const { publicEventCard } = require('../utils/publicEventCard');
 const logger = require('../utils/logger');
-
 const router = express.Router();
-
-// Sanitize user input before using in MongoDB regex to prevent ReDoS attacks
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+router.use(rateLimit({ windowMs: 60000, max: 90, standardHeaders: true, legacyHeaders: false }));
+router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
+const HOST_ROLES = ['organizer', 'creator'];
+const escapeRegex = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const fold = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
+function searchRegex(value) {
+  const variants = { a: '[aáàäâã]', e: '[eéèëê]', i: '[iíìïî]', o: '[oóòöôõ]', u: '[uúùüû]', n: '[nñ]' };
+  return escapeRegex(fold(value)).replace(/[aeioun]/g, character => variants[character]);
 }
-
-// Sanitize NoSQL operators from query string to prevent injection
-function sanitizeNoSqlOperators(str) {
-  if (typeof str !== 'string') return str;
-  const noSqlOperators = [
-    '$where', '$gt', '$gte', '$lt', '$lte', '$ne', '$in', '$nin',
-    '$or', '$and', '$not', '$nor', '$exists', '$type', '$mod',
-    '$regex', '$options', '$all', '$elemMatch', '$size', '$comment',
-    '$natural', '$orderby', '$hint', '$maxScan', '$min', '$max',
-    '$returnKey', '$showDiskLoc', '$snapshot', '$query', '$explain'
+function text(value, name, max = 100) {
+  if (value === undefined) return '';
+  if (typeof value !== 'string' || value.length > max) throw new Error(`${name}: texto no válido.`);
+  return value.trim();
+}
+function integer(value, fallback, max) {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'string' || !/^\d+$/.test(value) || Number(value) < 1 || Number(value) > max) throw new Error('Paginación no válida.');
+  return Number(value);
+}
+function parse(query) {
+  const q = text(query.q, 'Búsqueda');
+  const input = text(query.type, 'Tipo');
+  const types = !input || input === 'all' ? ['events', 'users', 'tribes'] : input.split(',');
+  if (types.some(type => !['events', 'users', 'tribes', 'hosts', 'locations'].includes(type))) throw new Error('Tipo de búsqueda no válido.');
+  const page = integer(query.page, 1, 100), limit = integer(query.limit, 12, 30);
+  const category = text(query.category, 'Categoría');
+  const location = text(query.location, 'Lugar');
+  const date = {};
+  for (const [key, operator] of [['startDate', '$gte'], ['endDate', '$lte']]) {
+    if (query[key] !== undefined) {
+      const value = text(query[key], 'Fecha', 40);
+      if (!value || !Number.isFinite(Date.parse(value))) throw new Error('Fecha no válida.');
+      date[operator] = new Date(value);
+    }
+  }
+  if (date.$gte && date.$lte && date.$gte > date.$lte) throw new Error('El intervalo de fechas no es válido.');
+  const price = {};
+  for (const [key, operator] of [['minPrice', '$gte'], ['maxPrice', '$lte']]) {
+    if (query[key] !== undefined) {
+      const value = text(query[key], 'Precio', 20);
+      if (!value || !Number.isFinite(Number(value)) || Number(value) < 0) throw new Error('Precio no válido.');
+      price[operator] = Number(value);
+    }
+  }
+  if (price.$gte !== undefined && price.$lte !== undefined && price.$gte > price.$lte) throw new Error('El intervalo de precios no es válido.');
+  return { q, types, page, limit, category, location, date, price };
+}
+async function search(query, user) {
+  const options = parse(query);
+  const { q, types, page, limit } = options;
+  const groups = { events: { data: [], total: 0 }, users: { data: [], total: 0 }, tribes: { data: [], total: 0 } };
+  if (q.length < 2) return { options, groups, results: [] };
+  const regex = { $regex: searchRegex(q), $options: 'i' };
+  const specs = [];
+  if (types.includes('events') || types.includes('locations')) {
+    const places = [{ 'location.city': regex }, { 'location.country': regex }, { isSecretLocation: { $ne: true }, 'location.venue': regex }, { isSecretLocation: { $ne: true }, 'location.address': regex }];
+    const filter = { status: 'published', isPrivate: { $ne: true }, ...buildAgeRestrictionFilter(user), $or: types.includes('locations') && !types.includes('events') ? places : [{ title: regex }, { description: regex }, { tags: regex }, ...places] };
+    if (options.category) filter.category = options.category;
+    if (options.location) {
+      const place = { $regex: searchRegex(options.location), $options: 'i' };
+      filter.$and.push({ $or: [{ 'location.city': place }, { 'location.country': place }, { isSecretLocation: { $ne: true }, 'location.address': place }] });
+    }
+    if (Object.keys(options.date).length) filter.date = options.date;
+    if (Object.keys(options.price).length) filter['price.amount'] = options.price;
+    specs.push(['events', Event, filter, 'title description date endDate location images category price isSecretLocation isVirtual status createdBy tags', { date: 1, _id: 1 }]);
+  }
+  if (types.includes('users') || types.includes('hosts')) {
+    const personRegex = { $regex: searchRegex(q.startsWith('@') ? q.slice(1) : q), $options: 'i' };
+    const filter = { isActive: true, isPrivate: { $ne: true }, 'settings.privacy.showProfile': { $ne: false }, role: { $ne: 'system' }, $or: ['username', 'firstName', 'lastName', 'bio'].map(field => ({ [field]: personRegex })) };
+    specs.push(['users', User, filter, 'username firstName lastName avatar bio role', { username: 1, _id: 1 }]);
+  }
+  if (types.includes('tribes')) {
+    const filter = { isActive: true, 'settings.privacy': { $nin: ['private', 'secret'] }, $or: [{ name: regex }, { description: regex }, { tags: regex }] };
+    specs.push(['tribes', Tribe, filter, 'name description category stats.totalMembers avatar', { name: 1, _id: 1 }]);
+  }
+  const hostOnly = types.includes('hosts') && !types.includes('users');
+  const publicHostedEvent = { status: 'published', isPrivate: { $ne: true }, ...buildAgeRestrictionFilter(user) };
+  await Promise.all(specs.map(async ([name, Model, filter, fields, sort]) => {
+    if (name === 'users' && hostOnly) {
+      const [facet] = await User.aggregate([
+        { $match: filter },
+        { $lookup: { from: Event.collection.name, let: { author: '$_id' }, pipeline: [
+          { $match: { ...publicHostedEvent, $expr: { $eq: ['$createdBy', '$$author'] } } }, { $limit: 1 }, { $project: { _id: 1 } },
+        ], as: 'publicEvents' } },
+        { $match: { $or: [{ role: { $in: HOST_ROLES } }, { 'publicEvents.0': { $exists: true } }] } },
+        { $facet: { data: [{ $sort: sort }, { $skip: (page - 1) * limit }, { $limit: limit }, { $project: { username: 1, firstName: 1, lastName: 1, avatar: 1, bio: 1, role: 1, publicHost: { $literal: true } } }], count: [{ $count: 'total' }] } },
+      ]).option({ maxTimeMS: 5000 });
+      groups.users = { data: facet?.data || [], total: facet?.count?.[0]?.total || 0 };
+      return;
+    }
+    const [rows, total] = await Promise.all([Model.find(filter).select(fields).sort(sort).skip((page - 1) * limit).limit(limit).lean(), Model.countDocuments(filter)]);
+    groups[name] = { data: name === 'events' ? rows.map(publicEventCard) : rows, total };
+  }));
+  if (!hostOnly && groups.users.data.length) {
+    // The lookup is bounded to this page's users; do not collect every organizer ID.
+    const authors = await Event.distinct('createdBy', { ...publicHostedEvent, createdBy: { $in: groups.users.data.map(person => person._id) } });
+    const publicAuthors = new Set(authors.map(String));
+    groups.users.data = groups.users.data.map(person => ({ ...person, publicHost: publicAuthors.has(String(person._id)) }));
+  }
+  const results = [
+    ...groups.events.data.map(event => ({ id: String(event._id), type: 'event', title: event.title, description: event.description, image: event.images?.[0]?.url || (typeof event.images?.[0] === 'string' ? event.images[0] : undefined), metadata: { date: event.date, category: event.category, price: event.price, location: event.isSecretLocation ? 'Ubicación reservada' : typeof event.location === 'string' ? event.location : event.location?.city || event.location?.address || '', isSecretLocation: event.isSecretLocation === true } })),
+    ...groups.users.data.map(person => ({ id: String(person._id), type: 'user', title: [person.firstName, person.lastName].filter(Boolean).join(' ') || person.username, description: person.bio || `@${person.username}`, image: typeof person.avatar === 'string' ? person.avatar : person.avatar?.url, metadata: { username: person.username, role: person.role, isHost: person.publicHost === true || HOST_ROLES.includes(person.role) } })),
+    ...groups.tribes.data.map(tribe => ({ id: String(tribe._id), type: 'tribe', title: tribe.name, description: tribe.description, image: typeof tribe.avatar === 'string' ? tribe.avatar : tribe.avatar?.url, metadata: { category: tribe.category, memberCount: tribe.stats?.totalMembers || 0 } })),
   ];
-  let sanitized = str;
-  for (const op of noSqlOperators) {
-    const regex = new RegExp(op.replace('$', '\\$'), 'gi');
-    sanitized = sanitized.replace(regex, '');
-  }
-  return sanitized;
+  // Exact and prefix matches first, with stable deterministic tie-breaking.
+  const score = item => fold(item.title).trim() === fold(q) ? 2 : fold(item.title).startsWith(fold(q)) ? 1 : 0;
+  results.sort((a, b) => score(b) - score(a) || a.title.localeCompare(b.title, 'es') || a.id.localeCompare(b.id));
+  return { options, groups, results };
 }
-
-// @desc    Get search suggestions
-// @route   GET /api/search/suggestions
-// @access  Private
-router.get('/suggestions', protect, async (req, res) => {
+async function handle(req, res) {
   try {
-    const { q, type } = req.query;
-
-    if (!q || q.length < 2) {
-      return res.json({
-        success: true,
-        suggestions: []
-      });
-    }
-
-    if (q.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: 'Search query must be 100 characters or fewer'
-      });
-    }
-
-    const safeQ = escapeRegex(q);
-    const suggestions = [];
-
-    // Search users
-    if (!type || type === 'users') {
-      const users = await User.find({
-        $or: [
-          { username: { $regex: safeQ, $options: 'i' } },
-          { firstName: { $regex: safeQ, $options: 'i' } },
-          { lastName: { $regex: safeQ, $options: 'i' } }
-        ]
-      })
-        .select('username firstName lastName avatar')
-        .limit(5);
-
-      suggestions.push(...users.map(user => ({
-        type: 'user',
-        id: user._id,
-        title: `${user.firstName} ${user.lastName}`,
-        subtitle: `@${user.username}`,
-        avatar: user.avatar
-      })));
-    }
-
-    // Search events
-    if (!type || type === 'events') {
-      const events = await Event.find({
-        $or: [
-          { title: { $regex: safeQ, $options: 'i' } },
-          { description: { $regex: safeQ, $options: 'i' } }
-        ],
-        status: 'published'
-      })
-        .select('title description date location')
-        .limit(5);
-
-      suggestions.push(...events.map(event => ({
-        type: 'event',
-        id: event._id,
-        title: event.title,
-        subtitle: event.location || new Date(event.date).toLocaleDateString(),
-        date: event.date
-      })));
-    }
-
-    // Search tribes
-    if (!type || type === 'tribes') {
-      const tribes = await Tribe.find({
-        $or: [
-          { name: { $regex: safeQ, $options: 'i' } },
-          { description: { $regex: safeQ, $options: 'i' } }
-        ]
-      })
-        .select('name description memberCount')
-        .limit(5);
-
-      suggestions.push(...tribes.map(tribe => ({
-        type: 'tribe',
-        id: tribe._id,
-        title: tribe.name,
-        subtitle: `${tribe.memberCount} miembros`,
-        memberCount: tribe.memberCount
-      })));
-    }
-
-    res.json({
-      success: true,
-      suggestions: suggestions.slice(0, 10) // Limit total suggestions
-    });
+    const { options, groups, results } = await search(req.query, req.user);
+    const perType = Object.fromEntries(Object.entries(groups).map(([key, value]) => [key, { total: value.total, pages: Math.ceil(value.total / options.limit) }]));
+    const total = Object.values(groups).reduce((sum, group) => sum + group.total, 0);
+    if (req.path === '/suggestions') return res.json({ success: true, suggestions: results.slice(0, 10).map(item => ({ type: item.type, id: item.id, title: item.title, subtitle: item.description, avatar: item.image })) });
+    if (req.path === '/global') return res.json({ success: true, query: options.q, type: req.query.type || 'all', results: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, { ...group, page: options.page, pages: perType[key].pages }])) });
+    res.json({ success: true, query: options.q, results, data: Object.fromEntries(Object.entries(groups).map(([key, value]) => [key, value.data])), pagination: { page: options.page, limit: options.limit, total, hasMore: Object.values(perType).some(group => group.pages > options.page), perType } });
   } catch (error) {
-    logger.error('Search suggestions error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    if (/no válid|no es válido|Paginación|intervalo/.test(error.message)) return res.status(400).json({ success: false, message: error.message });
+    logger.error('Global search failed', { message: error.message });
+    res.status(500).json({ success: false, message: 'No pudimos completar la búsqueda.' });
   }
-});
-
-// @desc    Global search
-// @route   GET /api/search/global
-// @access  Private
-router.get('/global', protect, async (req, res) => {
-  try {
-    const { q, type, page = 1, limit = 20 } = req.query;
-
-    if (!q || q.length < 2) {
-      return res.json({
-        success: true,
-        results: {
-          users: [],
-          events: [],
-          tribes: []
-        },
-        pagination: {
-          page: 1,
-          limit: parseInt(limit),
-          total: 0,
-          pages: 0
-        }
-      });
-    }
-
-    if (q.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: 'Search query must be 100 characters or fewer'
-      });
-    }
-
-    const safeQ = escapeRegex(q);
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const results = {};
-
-    // Search users
-    if (!type || type === 'users') {
-      const users = await User.find({
-        $or: [
-          { username: { $regex: safeQ, $options: 'i' } },
-          { firstName: { $regex: safeQ, $options: 'i' } },
-          { lastName: { $regex: safeQ, $options: 'i' } }
-        ]
-      })
-        .select('username firstName lastName avatar bio')
-        .skip(skip)
-        .limit(parseInt(limit));
-
-      const userCount = await User.countDocuments({
-        $or: [
-          { username: { $regex: safeQ, $options: 'i' } },
-          { firstName: { $regex: safeQ, $options: 'i' } },
-          { lastName: { $regex: safeQ, $options: 'i' } }
-        ]
-      });
-
-      results.users = {
-        data: users,
-        total: userCount,
-        page: parseInt(page),
-        pages: Math.ceil(userCount / parseInt(limit))
-      };
-    }
-
-    // Search events
-    if (!type || type === 'events') {
-      const events = await Event.find({
-        $or: [
-          { title: { $regex: safeQ, $options: 'i' } },
-          { description: { $regex: safeQ, $options: 'i' } }
-        ],
-        status: 'published'
-      })
-        .populate('createdBy', 'username firstName lastName avatar')
-        .skip(skip)
-        .limit(parseInt(limit))
-        .sort({ date: 1 });
-
-      const eventCount = await Event.countDocuments({
-        $or: [
-          { title: { $regex: safeQ, $options: 'i' } },
-          { description: { $regex: safeQ, $options: 'i' } }
-        ],
-        status: 'published'
-      });
-
-      results.events = {
-        data: events,
-        total: eventCount,
-        page: parseInt(page),
-        pages: Math.ceil(eventCount / parseInt(limit))
-      };
-    }
-
-    // Search tribes
-    if (!type || type === 'tribes') {
-      const tribes = await Tribe.find({
-        $or: [
-          { name: { $regex: safeQ, $options: 'i' } },
-          { description: { $regex: safeQ, $options: 'i' } }
-        ]
-      })
-        .populate('createdBy', 'username firstName lastName avatar')
-        .skip(skip)
-        .limit(parseInt(limit));
-
-      const tribeCount = await Tribe.countDocuments({
-        $or: [
-          { name: { $regex: safeQ, $options: 'i' } },
-          { description: { $regex: safeQ, $options: 'i' } }
-        ]
-      });
-
-      results.tribes = {
-        data: tribes,
-        total: tribeCount,
-        page: parseInt(page),
-        pages: Math.ceil(tribeCount / parseInt(limit))
-      };
-    }
-
-    res.json({
-      success: true,
-      results,
-      query: q,
-      type: type || 'all'
-    });
-  } catch (error) {
-    logger.error('Global search error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
-
-// @desc    Search events, users, tribes by text query
-// @route   GET /api/search
-// @access  Private
-router.get('/', protect, async (req, res) => {
-  try {
-    const { q, type } = req.query;
-
-    if (!q || q.trim().length < 2) {
-      return res.json({
-        success: true,
-        data: { events: [], users: [], tribes: [] }
-      });
-    }
-
-    if (q.length > 100) {
-      return res.status(400).json({
-        success: false,
-        message: 'Search query must be 100 characters or fewer'
-      });
-    }
-
-    // Sanitize NoSQL operators from query
-    const safeQ = sanitizeNoSqlOperators(q.trim());
-    const escapedQ = escapeRegex(safeQ);
-    const searchTypes = type ? type.split(',') : ['events', 'users', 'tribes'];
-    const data = { events: [], users: [], tribes: [] };
-
-    // Search users
-    if (searchTypes.includes('users')) {
-      const users = await User.find({
-        $or: [
-          { username: { $regex: escapedQ, $options: 'i' } },
-          { firstName: { $regex: escapedQ, $options: 'i' } },
-          { lastName: { $regex: escapedQ, $options: 'i' } }
-        ],
-        isActive: true
-      })
-        .select('username firstName lastName avatar bio')
-        .limit(20);
-      data.users = users;
-    }
-
-    // Search events
-    if (searchTypes.includes('events')) {
-      const events = await Event.find({
-        $or: [
-          { title: { $regex: escapedQ, $options: 'i' } },
-          { description: { $regex: escapedQ, $options: 'i' } }
-        ],
-        status: 'published'
-      })
-        .populate('createdBy', 'username firstName lastName avatar')
-        .select('title description date location images category')
-        .limit(20)
-        .sort({ date: 1 });
-      data.events = events;
-    }
-
-    // Search tribes
-    if (searchTypes.includes('tribes')) {
-      const tribes = await Tribe.find({
-        $or: [
-          { name: { $regex: escapedQ, $options: 'i' } },
-          { description: { $regex: escapedQ, $options: 'i' } }
-        ],
-        isActive: true
-      })
-        .populate('creator', 'username firstName lastName avatar')
-        .select('name description category memberCount avatar')
-        .limit(20);
-      data.tribes = tribes;
-    }
-
-    res.json({
-      success: true,
-      data
-    });
-  } catch (error) {
-    logger.error('Search error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
-
-// @desc    Trending searches
-// @route   GET /api/search/trending
-// @access  Public
-router.get('/trending', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      trending: ['conciertos', 'fiestas', 'tech', 'arte', 'deportes', 'networking', 'food', 'musica']
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
+}
+router.get('/trending', (req, res) => res.json({ success: true, trending: [], suggestions: ['Música', 'Aire libre', 'Gastronomía'], kind: 'suggested' }));
+router.get('/suggestions', optionalAuth, handle);
+router.get('/global', optionalAuth, handle);
+router.get('/', optionalAuth, handle);
 module.exports = router;

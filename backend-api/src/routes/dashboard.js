@@ -7,6 +7,54 @@ const Follow = require('../models/Follow');
 
 const router = express.Router();
 
+// Get advanced analytics for event creators (B2B Feature)
+router.get('/creator-analytics', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Find all events created by this user
+    const events = await Event.find({ createdBy: userId });
+
+    if (!events.length) {
+      return res.json({ success: true, data: { totalViews: 0, totalAttendees: 0, conversionRate: 0, eventsData: [] } });
+    }
+
+    let totalViews = 0;
+    let totalAttendees = 0;
+
+    const eventsData = events.map(event => {
+      const viewsCount = event.views ? event.views.length : 0;
+      const attendeesCount = event.attendees ? event.attendees.length : 0;
+
+      totalViews += viewsCount;
+      totalAttendees += attendeesCount;
+
+      return {
+        _id: event._id,
+        title: event.title,
+        views: viewsCount,
+        attendees: attendeesCount,
+        conversionRate: viewsCount > 0 ? ((attendeesCount / viewsCount) * 100).toFixed(2) : 0,
+        status: event.status
+      };
+    });
+
+    const aggregateConversionRate = totalViews > 0 ? ((totalAttendees / totalViews) * 100).toFixed(2) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        totalViews,
+        totalAttendees,
+        aggregateConversionRate: `${aggregateConversionRate}%`,
+        eventsData
+      }
+    });
+  } catch (error) {
+    console.error('Creator analytics error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch creator analytics' });
+  }
+});
+
 // Get user dashboard stats (fixed ObjectId casting)
 router.get('/stats', auth, async (req, res) => {
   try {
@@ -14,55 +62,6 @@ router.get('/stats', auth, async (req, res) => {
     const userObjectId = new mongoose.Types.ObjectId(userId);
     const currentDate = new Date();
     const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-
-    // B2B CREATOR ANALYTICS ENDPOINT INJECTED HERE (To avoid overriding below code)
-    // Get advanced analytics for event creators (B2B Feature)
-    router.get('/creator-analytics', auth, async (req, res) => {
-      try {
-        const userId = req.user.id;
-        // Find all events created by this user
-        const events = await Event.find({ createdBy: userId });
-
-        if (!events.length) {
-          return res.json({ success: true, data: { totalViews: 0, totalAttendees: 0, conversionRate: 0, eventsData: [] } });
-        }
-
-        let totalViews = 0;
-        let totalAttendees = 0;
-
-        const eventsData = events.map(event => {
-          const viewsCount = event.views ? event.views.length : 0;
-          const attendeesCount = event.attendees ? event.attendees.length : 0;
-
-          totalViews += viewsCount;
-          totalAttendees += attendeesCount;
-
-          return {
-            _id: event._id,
-            title: event.title,
-            views: viewsCount,
-            attendees: attendeesCount,
-            conversionRate: viewsCount > 0 ? ((attendeesCount / viewsCount) * 100).toFixed(2) : 0,
-            status: event.status
-          };
-        });
-
-        const aggregateConversionRate = totalViews > 0 ? ((totalAttendees / totalViews) * 100).toFixed(2) : 0;
-
-        res.json({
-          success: true,
-          data: {
-            totalViews,
-            totalAttendees,
-            aggregateConversionRate: `${aggregateConversionRate}%`,
-            eventsData
-          }
-        });
-      } catch (error) {
-        console.error('Creator analytics error:', error);
-        res.status(500).json({ success: false, message: 'Failed to fetch creator analytics' });
-      }
-    });
 
     // Get user stats
     const user = await User.findById(userId);
@@ -72,13 +71,13 @@ router.get('/stats', auth, async (req, res) => {
 
     // Count events attended
     const eventsAttended = await Event.countDocuments({
-      attendees: userObjectId,
+      'attendees.user': userObjectId,
       date: { $lt: currentDate }
     });
 
     // Count events created
     const eventsCreated = await Event.countDocuments({
-      creator: userObjectId
+      createdBy: userObjectId
     });
 
     // Count connections (followers + following)
@@ -88,7 +87,7 @@ router.get('/stats', auth, async (req, res) => {
 
     // Monthly growth
     const monthlyEventsAttended = await Event.countDocuments({
-      attendees: userObjectId,
+      'attendees.user': userObjectId,
       date: { $gte: firstDayOfMonth, $lt: currentDate }
     });
 
@@ -138,22 +137,21 @@ router.get('/upcoming-events', auth, async (req, res) => {
     // Get events user is attending or created
     const upcomingEvents = await Event.find({
       $or: [
-        { attendees: userObjectId },
-        { creator: userObjectId }
+        { 'attendees.user': userObjectId },
+        { createdBy: userObjectId }
       ],
       date: { $gte: currentDate }
     })
       .sort({ date: 1 })
       .limit(limit)
-      .select('title date location category attendees')
-      .populate('location.name', 'name coordinates');
+      .select('title date location category attendees');
 
     const formattedEvents = upcomingEvents.map(event => ({
       _id: event._id,
       title: event.title,
       date: event.date,
       location: {
-        name: event.location?.name || 'TBD',
+        name: event.location?.venue || event.location?.address || event.location?.name || 'TBD',
         coordinates: event.location?.coordinates || [0, 0]
       },
       category: event.category,

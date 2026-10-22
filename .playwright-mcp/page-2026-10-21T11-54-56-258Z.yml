@@ -1,0 +1,38 @@
+- generic [active] [ref=f32e1]:
+  - link "Saltar al contenido" [ref=f32e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - main [ref=f32e4]:
+    - generic [ref=f32e5]:
+      - complementary [ref=f32e6]:
+        - link "EventNow" [ref=f32e7] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f32e10]:
+          - paragraph [ref=f32e11]: Los mejores planes se comparten
+          - heading "Tu gente. Tu próximo plan." [level=1] [ref=f32e12]: Tu gente.Tu próximo plan.
+          - paragraph [ref=f32e13]: Guarda lo que te gusta, prepara tu próxima salida y encuentra a tu comunidad.
+          - generic [ref=f32e14]: Puedes descubrir eventos sin cuenta. Entra cuando quieras asistir, guardar o participar.
+        - link "← Seguir explorando" [ref=f32e15] [cursor=pointer]:
+          - /url: /events
+      - generic [ref=f32e17]:
+        - heading "Iniciar sesión" [level=2] [ref=f32e18]
+        - paragraph [ref=f32e19]:
+          - text: ¿No tienes cuenta?
+          - link "Regístrate gratis" [ref=f32e20] [cursor=pointer]:
+            - /url: /register?redirect=%2Fevents
+        - generic [ref=f32e21]:
+          - generic [ref=f32e22]:
+            - generic [ref=f32e23]: Correo electrónico
+            - textbox "Correo electrónico" [ref=f32e25]:
+              - /placeholder: tu@email.com
+          - generic [ref=f32e26]:
+            - generic [ref=f32e27]: Contraseña
+            - generic [ref=f32e28]:
+              - textbox "Contraseña" [ref=f32e29]:
+                - /placeholder: ••••••••
+              - button "Mostrar contraseña" [ref=f32e30] [cursor=pointer]
+          - link "¿Olvidaste tu contraseña?" [ref=f32e35] [cursor=pointer]:
+            - /url: /forgot-password
+          - button "Iniciar sesión" [ref=f32e36] [cursor=pointer]
+        - link "← Explorar eventos sin cuenta" [ref=f32e40] [cursor=pointer]:
+          - /url: /events
+  - alert [ref=f32e41]

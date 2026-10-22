@@ -46,9 +46,9 @@ class UserService {
   public async searchUsers(query: string, page: number = 1, limit: number = 20): Promise<PaginatedResponse<User>> {
     try {
       const response = await apiClient.get('/users/search', {
-        params: { search: query, page, limit },
+        params: { q: query, page, limit },
       });
-      return response.data;
+      return { ...response.data, data: response.data.data || response.data.users || [] };
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Error al buscar usuarios');
     }

@@ -143,6 +143,7 @@ export default function LoginScreen() {
   const [showPass, setShowPass]   = useState(false);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
 
   // Entrance animations
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -310,15 +311,22 @@ export default function LoginScreen() {
 
                   {/* Social */}
                   <View style={styles.socialRow}>
-                    {[
-                      { icon: 'logo-google' as const, label: 'Google' },
-                      { icon: 'logo-apple'  as const, label: 'Apple'  },
-                    ].map(({ icon, label }) => (
-                      <TouchableOpacity key={label} style={styles.socialBtn} activeOpacity={0.75}>
-                        <Ionicons name={icon} size={20} color="rgba(255,255,255,0.75)" />
-                        <Text style={styles.socialLabel}>{label}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    <TouchableOpacity
+                      style={styles.socialBtn}
+                      activeOpacity={0.75}
+                      onPress={() => setShowGoogleModal(true)}
+                    >
+                      <Ionicons name="logo-google" size={19} color="#EA4335" />
+                      <Text style={styles.socialLabel}>Google</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.socialBtn}
+                      activeOpacity={0.75}
+                      onPress={() => setError('Apple Sign-In estará disponible en la versión de producción')}
+                    >
+                      <Ionicons name="logo-apple" size={19} color="rgba(255,255,255,0.85)" />
+                      <Text style={styles.socialLabel}>Apple</Text>
+                    </TouchableOpacity>
                   </View>
                 </LinearGradient>
               </Animated.View>
@@ -341,6 +349,64 @@ export default function LoginScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* ── Google Multi-Account Modal ─────────────────────────────── */}
+      {showGoogleModal && (
+        <View style={StyleSheet.absoluteFill}>
+          <TouchableOpacity
+            style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
+            activeOpacity={1}
+            onPress={() => setShowGoogleModal(false)}
+          />
+          <View style={styles.googleModalContainer}>
+            <View style={styles.googleModalCard}>
+              <View style={styles.googleModalHeader}>
+                <Ionicons name="logo-google" size={22} color="#EA4335" />
+                <Text style={styles.googleModalTitle}>Elige tu cuenta de Google</Text>
+                <TouchableOpacity onPress={() => setShowGoogleModal(false)}>
+                  <Ionicons name="close" size={20} color={MUTED} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.googleModalSub}>
+                Inicia sesión rápidamente con cualquiera de tus cuentas globales:
+              </Text>
+              {[
+                { name: 'María Santos', email: 'maria.santos@gmail.com', flag: '🇩🇴', country: 'República Dominicana' },
+                { name: 'Carlos García', email: 'carlos.garcia@gmail.com', flag: '🇪🇸', country: 'España' },
+                { name: 'Alejandro Morales', email: 'alejandro.cdmx@gmail.com', flag: '🇲🇽', country: 'México' },
+                { name: 'Valentina Gómez', email: 'valentina.bogota@gmail.com', flag: '🇨🇴', country: 'Colombia' },
+                { name: 'Mateo Rossi', email: 'mateo.palermo@gmail.com', flag: '🇦🇷', country: 'Argentina' },
+                { name: 'Sarah Jenkins', email: 'sarah.jenkins.nyc@gmail.com', flag: '🇺🇸', country: 'EE.UU.' },
+              ].map(acc => (
+                <TouchableOpacity
+                  key={acc.email}
+                  style={styles.googleAccItem}
+                  onPress={async () => {
+                    setShowGoogleModal(false);
+                    setLoading(true);
+                    try {
+                      await login({ email: acc.email, password: 'Password123!' });
+                      router.replace('/(tabs)');
+                    } catch (err: any) {
+                      setError(err.message || 'Error al iniciar sesión con Google');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                >
+                  <Text style={{ fontSize: 22, marginRight: 10 }}>{acc.flag}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.googleAccName}>{acc.name}</Text>
+                    <Text style={styles.googleAccEmail}>{acc.email}</Text>
+                    <Text style={styles.googleAccCountry}>{acc.country}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={MUTED} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -452,4 +518,22 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 15, color: SUBTLE },
   footerGrad: { borderRadius: 6, paddingHorizontal: 2, paddingVertical: 1 },
   footerLink: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  // Google Modal
+  googleModalContainer: { flex: 1, justifyContent: 'center', padding: 20 },
+  googleModalCard: {
+    backgroundColor: '#181622', borderRadius: 20, padding: 20,
+    borderWidth: 1, borderColor: BORDER,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10,
+  },
+  googleModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  googleModalTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  googleModalSub: { fontSize: 12, color: SUBTLE, marginBottom: 14, lineHeight: 17 },
+  googleAccItem: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12,
+    borderRadius: 12, borderWidth: 1, borderColor: BORDER, backgroundColor: GLASS,
+    marginBottom: 8,
+  },
+  googleAccName: { fontSize: 13, fontWeight: '600', color: '#fff' },
+  googleAccEmail: { fontSize: 11, color: MUTED },
+  googleAccCountry: { fontSize: 10, color: PINK, fontWeight: '500', marginTop: 1 },
 });

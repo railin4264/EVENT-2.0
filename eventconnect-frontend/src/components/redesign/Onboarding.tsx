@@ -1,364 +1,166 @@
-import { useState } from 'react'
-import { ArrowRight, ChevronLeft, Star, Calendar, Users, MapPin, Check, Bell, Shield, Mail, Smartphone, Activity, Eye, MessageCircle, Globe, Trophy, Sparkles } from 'lucide-react'
-import { Card } from './ui/card'
-import { Button } from './ui/button'
-import { Badge } from './ui/badge'
-import { Progress } from './ui/progress'
-import { settingsService } from '@/lib/api/services/settings.service'
+'use client'
+
+import React, { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, Bell, Check, Loader2, MapPin, Search, ShieldCheck } from 'lucide-react'
+import { CATEGORY_LIST } from '@/lib/categories'
+import { initialInterests, loadOnboardingSettings, saveOnboardingSettings, choicesFromSettings,
+  MAX_ONBOARDING_INTERESTS, type OnboardingChoices } from '@/lib/auth/onboarding'
+import { usersService } from '@/lib/api/services/users.service'
 import { useAuthStore } from '@/stores/authStore'
-import toast from 'react-hot-toast'
 
 interface OnboardingProps {
-  user: any
+  user: { id?: string; _id?: string; firstName?: string; name?: string; username?: string; interests?: string[] }
   onComplete: () => void
+  onSkip?: () => void
 }
 
-export function Onboarding({ user, onComplete }: OnboardingProps) {
-  const [currentStep, setCurrentStep] = useState(0)
-  const [preferences, setPreferences] = useState({
-    eventTypes: ((user?.interests as string[]) || []) as string[],
-    notifications: {
-      eventReminders: true,
-      newFollowers: true,
-      eventInvites: true,
-      achievements: true,
-      weeklyDigest: true,
-      pushNotifications: true,
-      emailNotifications: true
-    },
-    privacy: {
-      profilePublic: true,
-      showLocation: true,
-      allowDirectMessages: true,
-      showOnlineStatus: true,
-      showActivityStatus: true,
-      dataCollection: false
-    }
-  })
+const identity = (user?: { id?: string; _id?: string } | null) => String(user?._id || user?.id || '')
 
-  const steps = [
-    { title: '¡Bienvenido a Event Connect 2.0!', description: 'Explora. Conecta. Vibra. Gana.', content: 'welcome' },
-    { title: 'Personaliza tu experiencia', description: 'Selecciona los tipos de eventos que más te interesan', content: 'preferences' },
-    { title: 'Configura tus notificaciones', description: 'Decide cómo quieres que te mantengamos informado', content: 'notifications' },
-    { title: 'Privacidad y configuración', description: 'Controla quién puede ver tu información', content: 'privacy' },
-    { title: '¡Todo listo!', description: 'Estás preparado para comenzar tu aventura', content: 'complete' }
-  ]
+export function Onboarding({ user, onComplete, onSkip = onComplete }: OnboardingProps) {
+  const [step, setStep] = useState(0)
+  const [search, setSearch] = useState('')
+  const [interests, setInterests] = useState(() => initialInterests(user?.interests))
+  const [choices, setChoices] = useState<OnboardingChoices>({ email: false, push: false, showLocation: false })
+  const [settingsReady, setSettingsReady] = useState(false)
+  const [modifiedChoices, setModifiedChoices] = useState<Partial<OnboardingChoices>>({})
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [selectionError, setSelectionError] = useState('')
+  const heading = useRef<HTMLHeadingElement>(null)
+  const requestVersion = useRef(0)
+  const busy = useRef(false)
+  const mounted = useRef(false)
 
-  const eventTypes = [
-    { id: 'music', name: 'Música', icon: '🎵' },
-    { id: 'tech', name: 'Tecnología', icon: '💻' },
-    { id: 'art', name: 'Arte', icon: '🎨' },
-    { id: 'food', name: 'Gastronomía', icon: '🍽️' },
-    { id: 'sports', name: 'Deportes', icon: '⚽' },
-    { id: 'gaming', name: 'Gaming', icon: '🎮' },
-    { id: 'business', name: 'Negocios', icon: '💼' },
-    { id: 'wellness', name: 'Bienestar', icon: '🧘' }
-  ]
-
-  const INTEREST_COLORS: Record<string, string> = {
-    music: '#8B5CF6', tech: '#3B82F6', art: '#EC4899', food: '#F59E0B',
-    sports: '#10B981', gaming: '#6366F1', business: '#0EA5E9', wellness: '#14B8A6',
-  }
-
-  // All notification settings with full labels
-  const notificationLabels: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
-    eventReminders:     { label: 'Recordatorios de eventos',  desc: 'Te recordaremos tus eventos próximos',      icon: <Bell className="w-4 h-4 text-primary" /> },
-    newFollowers:       { label: 'Nuevos seguidores',         desc: 'Cuando alguien te siga',                    icon: <Users className="w-4 h-4 text-blue-400" /> },
-    eventInvites:       { label: 'Invitaciones a eventos',    desc: 'Cuando te inviten a eventos',               icon: <Calendar className="w-4 h-4 text-green-400" /> },
-    achievements:       { label: 'Logros y XP',               desc: 'Nuevos logros desbloqueados',               icon: <Trophy className="w-4 h-4 text-yellow-400" /> },
-    weeklyDigest:       { label: 'Resumen semanal',           desc: 'Resumen de actividad semanal',              icon: <Activity className="w-4 h-4 text-pink-400" /> },
-    pushNotifications:  { label: 'Notificaciones push',       desc: 'Alertas en tiempo real en tu dispositivo', icon: <Smartphone className="w-4 h-4 text-cyan-400" /> },
-    emailNotifications: { label: 'Notificaciones por email',  desc: 'Recibe actualizaciones en tu correo',       icon: <Mail className="w-4 h-4 text-orange-400" /> },
-  }
-
-  // All privacy settings with full labels
-  const privacyLabels: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
-    profilePublic:        { label: 'Perfil público',         desc: 'Otros usuarios pueden ver tu perfil',            icon: <Globe className="w-4 h-4 text-blue-400" /> },
-    showLocation:         { label: 'Mostrar ubicación',      desc: 'Tu ubicación será visible en eventos',           icon: <MapPin className="w-4 h-4 text-green-400" /> },
-    allowDirectMessages:  { label: 'Mensajes directos',      desc: 'Permitir mensajes de otros usuarios',            icon: <MessageCircle className="w-4 h-4 text-primary" /> },
-    showOnlineStatus:     { label: 'Estado en línea',        desc: 'Mostrar cuando estás activo en la plataforma',   icon: <Activity className="w-4 h-4 text-cyan-400" /> },
-    showActivityStatus:   { label: 'Actividad reciente',     desc: 'Mostrar tus eventos y actividades recientes',    icon: <Eye className="w-4 h-4 text-pink-400" /> },
-    dataCollection:       { label: 'Mejora de experiencia',  desc: 'Compartir datos anónimos para mejorar la app',   icon: <Shield className="w-4 h-4 text-orange-400" /> },
-  }
-
-  const nextStep = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1)
-    } else {
-      handleComplete()
-    }
-  }
-
-  const handleComplete = async () => {
-    const userId = (user?._id || user?.id) as string
+  const loadSettings = async () => {
+    const version = ++requestVersion.current
+    setLoading(true)
+    setError('')
     try {
-      await settingsService.updateSettings(userId, {
-        eventTypes: preferences.eventTypes,
-        notifications: preferences.notifications,
-        privacy: preferences.privacy,
-      })
-      toast.success('Preferencias guardadas')
-    } catch (error) {
-      console.warn('Could not save preferences:', error)
-      // Don't block — proceed even if API fails
+      const settings = await loadOnboardingSettings()
+      if (version !== requestVersion.current) return
+      setChoices(choicesFromSettings(settings))
+      setSettingsReady(true)
+    } catch {
+      if (version === requestVersion.current) setError('No pudimos cargar tus ajustes. Reintenta o continúa sin personalizar.')
+    } finally { if (version === requestVersion.current) setLoading(false) }
+  }
+
+  useEffect(() => {
+    mounted.current = true
+    void loadSettings()
+    return () => { mounted.current = false; requestVersion.current += 1 }
+  }, [])
+  useEffect(() => { heading.current?.focus() }, [step])
+
+  const toggleInterest = (slug: string) => {
+    setSelectionError('')
+    if (interests.includes(slug)) setInterests(previous => previous.filter(value => value !== slug))
+    else if (interests.length >= MAX_ONBOARDING_INTERESTS) setSelectionError(`Puedes elegir hasta ${MAX_ONBOARDING_INTERESTS} intereses. Quita uno para añadir otro.`)
+    else setInterests(previous => [...previous, slug])
+  }
+
+  const finish = async () => {
+    const ownerId = identity(user)
+    const stillCurrent = () => {
+      const current = useAuthStore.getState()
+      return mounted.current && Boolean(ownerId) && current.isAuthenticated && identity(current.user) === ownerId
     }
-    // Mark onboarding completed so it does not reappear on reload
+    if (busy.current || !stillCurrent()) return
+    if (interests.length > MAX_ONBOARDING_INTERESTS) {
+      setSelectionError(`Tienes más de ${MAX_ONBOARDING_INTERESTS} intereses. Quita algunos para guardar.`)
+      setStep(0)
+      return
+    }
+    busy.current = true
+    setSaving(true)
+    setError('')
+    let interestsSaved = false
     try {
-      useAuthStore.setState((st: any) => ({ user: { ...(st.user || {}), onboardingCompleted: true } }))
-    } catch {}
-    onComplete()
-  }
-  const prevStep = () => {
-    if (currentStep > 0) setCurrentStep(currentStep - 1)
-  }
-
-  const toggleEventType = (typeId: string) => {
-    setPreferences(prev => ({
-      ...prev,
-      eventTypes: prev.eventTypes.includes(typeId)
-        ? prev.eventTypes.filter(id => id !== typeId)
-        : [...prev.eventTypes, typeId]
-    }))
-  }
-
-  const toggleNotification = (key: string) => {
-    setPreferences(prev => ({
-      ...prev,
-      notifications: {
-        ...prev.notifications,
-        [key]: !prev.notifications[key as keyof typeof prev.notifications]
+      await usersService.updateProfile({ interests })
+      if (!stillCurrent()) return
+      interestsSaved = true
+      useAuthStore.setState(state => mounted.current && state.isAuthenticated && identity(state.user) === ownerId ? { user: { ...state.user, interests } } : {})
+      if (Object.keys(modifiedChoices).length) {
+        if (!stillCurrent()) return
+        const settings = await saveOnboardingSettings(modifiedChoices)
+        if (!stillCurrent()) return
+        useAuthStore.setState(state => mounted.current && state.isAuthenticated && identity(state.user) === ownerId ? { user: { ...state.user, settings: { ...state.user.settings, ...settings } } } : {})
       }
-    }))
+      if (stillCurrent()) onComplete()
+    } catch {
+      if (stillCurrent()) setError(interestsSaved ? 'Tus intereses se guardaron, pero faltan los ajustes. Puedes reintentar sin perder tu selección.' : 'No pudimos guardar tus intereses. Tu selección sigue aquí; inténtalo de nuevo.')
+    } finally {
+      busy.current = false
+      if (stillCurrent()) setSaving(false)
+    }
   }
 
-  const togglePrivacy = (key: string) => {
-    setPreferences(prev => ({
-      ...prev,
-      privacy: {
-        ...prev.privacy,
-        [key]: !prev.privacy[key as keyof typeof prev.privacy]
-      }
-    }))
-  }
-
-  const progress = ((currentStep + 1) / steps.length) * 100
-  const userName = user?.name || user?.username || 'Usuario'
-
+  const name = user?.firstName || user?.name || user?.username
+  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const query = normalize(search.trim())
+  const visibleCategories = CATEGORY_LIST.filter(category => normalize([category.label, category.slug, ...category.examples].join(' ')).includes(query))
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute inset-0 particle-bg">
-        <div className="absolute inset-0 animated-bg opacity-20"></div>
-      </div>
-      <div className="absolute top-20 left-10 w-20 h-20 rounded-full bg-gradient-to-r from-violet-500/30 to-blue-500/30 blur-xl"></div>
-      <div className="absolute bottom-20 right-10 w-32 h-32 rounded-full bg-gradient-to-r from-pink-500/30 to-violet-500/30 blur-xl"></div>
-
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl">
-          {/* Progress */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-muted-foreground text-sm">Paso {currentStep + 1} de {steps.length}</span>
-              <span className="text-muted-foreground text-sm">{Math.round(progress)}%</span>
-            </div>
-            <Progress value={progress} className="h-2" />
-          </div>
-
-          {/* Main Card */}
-          <Card className="glass-card p-8 text-center">
-
-            {/* Welcome Step */}
-            {steps[currentStep].content === 'welcome' && (
-              <div className="space-y-6">
-                <div className="inline-block p-6 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 mb-4">
-                  <Sparkles className="w-12 h-12 text-foreground" />
-                </div>
-                <h1 className="text-3xl font-bold text-foreground mb-4">¡Hola {userName}! 👋</h1>
-                <p className="text-xl text-muted-foreground mb-6">{steps[currentStep].description}</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="p-4 rounded-lg bg-card">
-                    <Calendar className="w-8 h-8 text-blue-400 mx-auto mb-2" />
-                    <p className="text-muted-foreground text-sm">Descubre eventos únicos</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-card">
-                    <Users className="w-8 h-8 text-green-400 mx-auto mb-2" />
-                    <p className="text-muted-foreground text-sm">Conecta con personas</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-card">
-                    <MapPin className="w-8 h-8 text-primary mx-auto mb-2" />
-                    <p className="text-muted-foreground text-sm">Explora tu ciudad</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-card">
-                    <Trophy className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
-                    <p className="text-muted-foreground text-sm">Gana logros y XP</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Preferences Step */}
-            {steps[currentStep].content === 'preferences' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground mb-2">{steps[currentStep].title}</h2>
-                  <p className="text-muted-foreground mb-6">{steps[currentStep].description}</p>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {eventTypes.map((type) => (
-                    <div
-                      key={type.id}
-                      onClick={() => toggleEventType(type.id)}
-                      className={`p-4 rounded-lg cursor-pointer transition-all hover:scale-105 ${
-                        preferences.eventTypes.includes(type.id)
-                          ? `border-2`
-                          : 'bg-card border-2 border-transparent hover:border-border'
-                      }`}
-                  style={
-                    preferences.eventTypes.includes(type.id)
-                      ? { backgroundColor: (INTEREST_COLORS[type.id] || '#6366F1') + '22', borderColor: INTEREST_COLORS[type.id] || '#6366F1' }
-                      : undefined
-                  }
-                >
-                  <div className="text-3xl mb-2">{type.icon}</div>
-                      <p className="text-sm font-medium" style={{ color: preferences.eventTypes.includes(type.id) ? (INTEREST_COLORS[type.id] || '#6366F1') : undefined }}>{type.name}</p>
-                      {preferences.eventTypes.includes(type.id) && (
-                        <Check className="w-4 h-4 mx-auto mt-2" style={{ color: INTEREST_COLORS[type.id] || '#6366F1' }} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-muted-foreground text-sm">{preferences.eventTypes.length} tipos seleccionados</p>
-              </div>
-            )}
-
-            {/* Notifications Step */}
-            {steps[currentStep].content === 'notifications' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground mb-2">{steps[currentStep].title}</h2>
-                  <p className="text-muted-foreground mb-6">{steps[currentStep].description}</p>
-                </div>
-                <div className="space-y-3 text-left">
-                  {Object.entries(preferences.notifications).map(([key, value]) => {
-                    const info = notificationLabels[key]
-                    if (!info) return null
-                    return (
-                      <div key={key} className="flex items-center justify-between p-4 rounded-lg bg-card hover:bg-card transition-colors">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="shrink-0">{info.icon}</div>
-                          <div className="min-w-0">
-                            <p className="text-foreground font-medium text-sm">{info.label}</p>
-                            <p className="text-muted-foreground text-xs truncate">{info.desc}</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => toggleNotification(key)}
-                          className={`relative ml-4 w-12 h-6 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-muted'}`}
-                        >
-                          <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Privacy Step */}
-            {steps[currentStep].content === 'privacy' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-foreground mb-2">{steps[currentStep].title}</h2>
-                  <p className="text-muted-foreground mb-6">{steps[currentStep].description}</p>
-                </div>
-                <div className="space-y-3 text-left">
-                  {Object.entries(preferences.privacy).map(([key, value]) => {
-                    const info = privacyLabels[key]
-                    if (!info) return null
-                    return (
-                      <div key={key} className="flex items-center justify-between p-4 rounded-lg bg-card hover:bg-card transition-colors">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="shrink-0">{info.icon}</div>
-                          <div className="min-w-0">
-                            <p className="text-foreground font-medium text-sm">{info.label}</p>
-                            <p className="text-muted-foreground text-xs truncate">{info.desc}</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => togglePrivacy(key)}
-                          className={`relative ml-4 w-12 h-6 rounded-full transition-colors shrink-0 ${value ? 'bg-primary' : 'bg-muted'}`}
-                        >
-                          <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Complete Step */}
-            {steps[currentStep].content === 'complete' && (
-              <div className="space-y-6">
-                <div className="inline-block p-6 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 mb-4">
-                  <Check className="w-12 h-12 text-foreground" />
-                </div>
-                <h2 className="text-3xl font-bold text-foreground mb-4">¡Configuración completa!</h2>
-                <p className="text-xl text-muted-foreground mb-6">Tu perfil está listo. ¡Es hora de comenzar a explorar!</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="p-4 rounded-lg bg-card">
-                    <Badge className="bg-primary/20 text-primary mb-2">+100 XP</Badge>
-                    <p className="text-muted-foreground text-sm">Bono de bienvenida</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-card">
-                    <Badge className="bg-blue-500/20 text-blue-300 mb-2">Logro: Nuevo Explorador</Badge>
-                    <p className="text-muted-foreground text-sm">Primer logro desbloqueado</p>
-                  </div>
-                  <div className="p-4 rounded-lg bg-card">
-                    <Badge className="bg-green-500/20 text-green-300 mb-2">Eventos recomendados</Badge>
-                    <p className="text-muted-foreground text-sm">Basados en tus intereses</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          {/* Navigation */}
-          <div className="flex items-center justify-between mt-8">
-            {currentStep > 0 ? (
-            <Button
-  variant="ghost"
-  onClick={prevStep}
-  className="border border-border text-foreground hover:bg-primary/10"
->
-  <ChevronLeft className="w-4 h-4" />
-  Anterior
-</Button>
-            ) : (
-              <div /> /* spacer to keep layout */
-            )}
-
-            <div className="flex space-x-2">
-              {steps.map((_, index) => (
-                <div
-                  key={index}
-                  className={`w-2 h-2 rounded-full transition-colors ${
-                    index <= currentStep ? 'bg-primary' : 'bg-muted'
-                  }`}
-                />
-              ))}
-            </div>
-
-            <Button
-              onClick={nextStep}
-              className="bg-gradient-to-r bg-primary hover:bg-primary/90"
-            >
-              {currentStep === steps.length - 1 ? 'Comenzar' : 'Siguiente'}
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </div>
+    <section aria-label="Personalización de tu cuenta" className="min-h-screen bg-background px-5 pb-32 pt-8 text-foreground sm:py-12">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-8 flex items-center justify-between gap-4">
+          <span className="text-lg font-bold tracking-tight">EventNow<span className="text-primary">.</span></span>
+          <button type="button" onClick={onSkip} disabled={saving} className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50">Omitir sin guardar</button>
         </div>
+        <div className="mb-8 flex gap-2" aria-label={`Personalización: paso ${step + 1} de 2`}>
+          {[0, 1].map(index => <span key={index} className={`h-1 flex-1 rounded-full ${index <= step ? 'bg-primary' : 'bg-muted'}`} />)}
+        </div>
+        <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-8">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.15em] text-primary">Personalización opcional · {step + 1} de 2</p>
+          <h1 ref={heading} tabIndex={-1} className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl">{step === 0 ? `Encuentra lo que te mueve${name ? `, ${name}` : ''}.` : 'Tu selección, a tu manera.'}</h1>
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">{step === 0 ? 'Elige lo que te interesa para orientar tus recomendaciones. Puedes no elegir nada y cambiarlo después.' : 'Revisa tus intereses antes de guardar. Puedes volver atrás o continuar sin personalizar.'}</p>
+
+          {step === 0 ? <div className="mt-7">
+            <label htmlFor="interest-search" className="mb-2 block text-sm font-medium">Buscar intereses</label>
+            <div className="relative mb-3"><Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" aria-hidden="true" /><input id="interest-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Música, senderismo, ciencia…" className="w-full rounded-xl border border-border bg-background py-3 pl-10 pr-4 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" /></div>
+            <div role="group" aria-label="Categorías de intereses" tabIndex={0} className="max-h-[45dvh] overflow-y-auto overscroll-contain rounded-xl p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {visibleCategories.map(category => {
+                const selected = interests.includes(category.slug)
+                return <button key={category.slug} type="button" aria-pressed={selected} onClick={() => toggleInterest(category.slug)} className={`flex min-h-16 items-center gap-2 rounded-xl border px-3 py-3 text-left text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${selected ? 'border-primary bg-primary/10 text-foreground' : 'border-border hover:border-primary/40 hover:bg-muted'}`}>
+                  <span className="text-xl" aria-hidden="true">{category.emoji}</span><span className="flex-1 leading-snug">{category.label}</span>{selected && <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />}
+                </button>
+              })}
+            </div>
+            {!visibleCategories.length && <p role="status" className="p-4 text-sm text-muted-foreground">No encontramos ese interés. Prueba otra palabra o explora todas las categorías.</p>}
+            </div>
+            {interests.filter(slug => !CATEGORY_LIST.some(category => category.slug === slug)).map(slug => <button key={slug} type="button" aria-pressed="true" onClick={() => toggleInterest(slug)} className="mr-2 mt-3 rounded-xl border border-primary bg-primary/10 px-3 py-2 text-sm">{slug} · Quitar</button>)}
+            <p className="mt-4 text-sm text-muted-foreground" aria-live="polite">{interests.length} de {MAX_ONBOARDING_INTERESTS} intereses seleccionados</p>
+            {selectionError && <p role="alert" className="mt-2 text-sm text-red-500">{selectionError}</p>}
+          </div> : <div className="mt-7 space-y-4">
+            <div className="rounded-2xl bg-muted/50 p-4"><p className="mb-3 text-sm font-semibold">{interests.length ? `${interests.length} intereses elegidos` : 'Explorar sin intereses elegidos'}</p><div className="flex flex-wrap gap-2">{interests.map(slug => <span key={slug} className="rounded-full border border-border bg-background px-3 py-1 text-xs">{CATEGORY_LIST.find(category => category.slug === slug)?.label || slug}</span>)}</div></div>
+            <details className="rounded-2xl border border-border p-4"><summary className="cursor-pointer text-sm font-semibold">Privacidad y avisos (opcional)</summary>
+            {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Leyendo tus ajustes actuales…</p>}
+            <fieldset disabled={!settingsReady || saving} className="mt-4 space-y-3 disabled:opacity-60">
+              {[
+                { key: 'showLocation' as const, title: 'Compartir mi ubicación guardada', description: 'Muestra la dirección de tu perfil. No activa el GPS ni obtiene tu ubicación.', icon: MapPin },
+                { key: 'email' as const, title: 'Recibir avisos por correo', description: 'Puedes cambiar esta preferencia en cualquier momento desde Ajustes.', icon: Bell },
+                { key: 'push' as const, title: 'Permitir avisos de la app', description: 'El permiso del navegador se gestiona por separado en Ajustes. No se solicita ahora.', icon: ShieldCheck },
+              ].map(option => <label key={option.key} className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border p-4">
+                <option.icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" /><span className="flex-1"><span className="block text-sm font-semibold">{option.title}</span><span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{option.description}</span></span>
+                <input type="checkbox" checked={choices[option.key]} onChange={event => {
+                  const checked = event.target.checked
+                  setChoices(previous => ({ ...previous, [option.key]: checked }))
+                  setModifiedChoices(previous => ({ ...previous, [option.key]: checked }))
+                }} className="mt-1 h-4 w-4 accent-primary" />
+              </label>)}
+            </fieldset>
+            </details>
+          </div>}
+
+          {error && <div role="alert" className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4 text-sm"><p>{error}</p>{!settingsReady && <button type="button" onClick={() => void loadSettings()} disabled={loading} className="mt-2 font-semibold text-primary underline disabled:opacity-50">Reintentar carga</button>}</div>}
+          <div className="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center gap-3 border-t border-border bg-background px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] sm:static sm:mt-8 sm:bg-transparent sm:px-0 sm:pb-0 sm:pt-6 sm:shadow-none">
+            {step === 1 && <button type="button" disabled={saving} onClick={() => setStep(0)} className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm font-semibold hover:bg-muted disabled:opacity-50"><ArrowLeft className="h-4 w-4" />Atrás</button>}
+            <button type="button" disabled={saving} onClick={() => step === 0 ? setStep(1) : void finish()} className="ml-auto inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:cursor-wait disabled:opacity-50">{saving ? <><Loader2 className="h-4 w-4 animate-spin" />Guardando…</> : step === 0 ? <>Siguiente<ArrowRight className="h-4 w-4" /></> : <>Guardar y continuar<ArrowRight className="h-4 w-4" /></>}</button>
+          </div>
+        </section>
+        <p className="mt-5 text-center text-xs leading-relaxed text-muted-foreground">Tu cuenta ya está creada. Personalizarla es opcional y puedes volver desde Ajustes.</p>
       </div>
-    </div>
+    </section>
   )
 }

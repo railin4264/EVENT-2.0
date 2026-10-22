@@ -4,19 +4,19 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:ring-destructive/20 aria-invalid:border-destructive active:scale-[0.97]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-40 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background aria-invalid:ring-destructive/20 aria-invalid:border-destructive active:scale-[0.97] motion-reduce:transition-none motion-reduce:transform-none",
   {
     variants: {
       variant: {
         // Default — electric violet fill with glow
         default:
-          "bg-primary text-primary-foreground shadow-[0_4px_14px_rgba(139,92,246,0.35)] hover:bg-primary/90 hover:shadow-[0_6px_20px_rgba(139,92,246,0.50)] hover:-translate-y-px",
+          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:shadow-md hover:-translate-y-px",
 
         // Electric — violet → cyan gradient
         electric:
           "text-white shadow-[0_4px_20px_rgba(139,92,246,0.30)] hover:shadow-[0_6px_28px_rgba(139,92,246,0.45)] hover:-translate-y-px"
-          + " [background:linear-gradient(135deg,#8B5CF6_0%,#06B6D4_100%)]"
-          + " hover:[background:linear-gradient(135deg,#7C3AED_0%,#0891B2_100%)]",
+          + " [background:linear-gradient(135deg,#65439c_0%,#166b80_100%)]"
+          + " hover:[background:linear-gradient(135deg,#523681_0%,#12576a_100%)]",
 
         // Cyan electric
         cyan:
@@ -33,18 +33,18 @@ const buttonVariants = cva(
         // Outline — violet tinted border + glass
         outline:
           "border border-primary/25 bg-transparent text-foreground backdrop-blur-sm"
-          + " hover:border-primary/50 hover:bg-primary/8 hover:text-primary"
+          + " hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
           + " dark:border-primary/20 dark:hover:bg-primary/10",
 
         // Secondary (alias for backward compat — same as outline)
         secondary:
           "border border-primary/25 bg-transparent text-foreground backdrop-blur-sm"
-          + " hover:border-primary/50 hover:bg-primary/8 hover:text-primary"
+          + " hover:border-primary/50 hover:bg-primary/10 hover:text-primary"
           + " dark:border-primary/20 dark:hover:bg-primary/10",
 
         // Ghost
         ghost:
-          "text-foreground hover:bg-primary/8 hover:text-primary dark:hover:bg-primary/10",
+          "text-foreground hover:bg-primary/10 hover:text-primary dark:hover:bg-primary/10",
 
         // Glass — frosted glass
         glass:

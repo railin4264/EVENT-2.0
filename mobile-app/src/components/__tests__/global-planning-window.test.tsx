@@ -1,0 +1,27 @@
+jest.mock('../../contexts/ThemeContext', () => { const actual = jest.requireActual('../../contexts/ThemeContext'); return { ...actual, useTheme: () => ({ theme: actual.darkTheme }) }; });
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import { TextInput, Text, TouchableOpacity } from 'react-native';
+import { GlobalPlanningWindowNative } from '../planning/global-planning-window';
+import { apiClient } from '../../services/apiClient';
+jest.mock('../../services/apiClient', () => ({ apiClient: { get: jest.fn() } }));
+jest.mock('../../utils/global-planning-export', () => ({ exportPlanningCalendar: jest.fn(), sharePlanningSummary: jest.fn() }));
+const get = apiClient.get as jest.Mock;
+let tree: TestRenderer.ReactTestRenderer;
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; jest.clearAllMocks(); });
+afterEach(async () => { if (tree) await act(async () => tree.unmount()); });
+const button = (label: string) => tree.root.findAllByType(TouchableOpacity).find(b => b.findAllByType(Text).some(t => t.props.children === label))!;
+test('preset search locks inputs while pending and changing destination removes stale results', async () => {
+  let finish!: (value: any) => void;
+  get.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  await act(async () => { tree = TestRenderer.create(<GlobalPlanningWindowNative />); });
+  expect(get).not.toHaveBeenCalled();
+  await act(async () => button('Tengo 2 horas').props.onPress());
+  await act(async () => button('Buscar planes que encajan').props.onPress());
+  expect(get).toHaveBeenCalledTimes(1);
+  expect(tree.root.findAllByType(TextInput).every(input => input.props.editable === false)).toBe(true);
+  await act(async () => finish({ data: { success: true, data: [{ _id: 'aaaaaaaaaaaaaaaaaaaaaaaa', title: 'Plan de otra ciudad', date: '2027-01-02T22:00:00Z', endDate: '2027-01-02T23:00:00Z' }] } }));
+  expect(JSON.stringify(tree.toJSON())).toContain('Plan de otra ciudad');
+  await act(async () => tree.root.findAllByType(TextInput).find(input => input.props.accessibilityLabel === 'Ciudad (opcional)')!.props.onChangeText('Madrid'));
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Plan de otra ciudad');
+});

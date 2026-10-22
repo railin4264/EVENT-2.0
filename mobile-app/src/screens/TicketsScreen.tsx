@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, ActivityIndicator,
@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
-import { ticketService } from '@/services';
+import { useTicketPasses } from '@/hooks/useTicketPasses';
 import type { Ticket } from '@/types';
 
 type FilterTab = 'active' | 'used' | 'expired';
@@ -15,31 +15,17 @@ type FilterTab = 'active' | 'used' | 'expired';
 export default function TicketsScreen() {
   const router = useRouter();
   const { theme } = useTheme();
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tickets, loading, offline, savedAt, error, reload } = useTicketPasses();
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>('active');
-
-  const loadTickets = useCallback(async () => {
-    try {
-      const result = await ticketService.getMyTickets();
-      setTickets(result.data || []);
-    } catch (error) {
-      console.error('Error loading tickets:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => { loadTickets(); }, [loadTickets]);
+  const loadTickets = async () => { try { await reload(); } finally { setRefreshing(false); } };
 
   const now = new Date();
 
   const filteredTickets = tickets.filter(t => {
-    const expired = new Date(t.validUntil) < now;
+    const expired = t.validUntil ? new Date(t.validUntil) < now : false;
     switch (activeTab) {
-      case 'active': return t.status === 'active' && !expired;
+      case 'active': return (t.status === 'active' || (t.status as string) === 'valid') && !expired;
       case 'used': return t.status === 'used';
       case 'expired': return t.status !== 'used' && expired;
       default: return true;
@@ -48,15 +34,15 @@ export default function TicketsScreen() {
 
   const getStatusColor = (ticket: Ticket) => {
     if (ticket.status === 'used') return '#9ca3af';
-    if (new Date(ticket.validUntil) < now) return '#ef4444';
-    if (ticket.status === 'active') return '#10b981';
+    if (ticket.validUntil && new Date(ticket.validUntil) < now) return '#ef4444';
+    if (ticket.status === 'active' || (ticket.status as string) === 'valid') return '#10b981';
     return '#f59e0b';
   };
 
   const getStatusLabel = (ticket: Ticket) => {
     if (ticket.status === 'used') return 'Usado';
-    if (new Date(ticket.validUntil) < now) return 'Expirado';
-    if (ticket.status === 'active') return 'Activo';
+    if (ticket.validUntil && new Date(ticket.validUntil) < now) return 'Expirado';
+    if (ticket.status === 'active' || (ticket.status as string) === 'valid') return 'Válido';
     return 'Cancelado';
   };
 
@@ -98,7 +84,7 @@ export default function TicketsScreen() {
             <View style={styles.infoItem}>
               <Ionicons name="calendar-outline" size={14} color={theme.colors.textSecondary} />
               <Text style={[styles.infoText, { color: theme.colors.textSecondary }]}>
-                {new Date(item.validFrom).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {new Date(item.validFrom || event?.date || item.purchaseDate).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' })}
               </Text>
             </View>
             {event?.location && (
@@ -114,7 +100,7 @@ export default function TicketsScreen() {
           {/* Footer */}
           <View style={[styles.ticketFooter, { borderTopColor: theme.colors.border }]}>
             <Text style={[styles.ticketPrice, { color: theme.colors.primary }]}>
-              {item.currency} {item.price.toFixed(2)}
+              {item.currency} {Number(item.price || 0).toFixed(2)}
             </Text>
             <View style={styles.qrButton}>
               <Ionicons name="qr-code-outline" size={16} color={theme.colors.primary} />
@@ -146,10 +132,12 @@ export default function TicketsScreen() {
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
         <Text style={[styles.title, { color: theme.colors.text }]}>Mis Entradas</Text>
         <Text style={[styles.count, { color: theme.colors.textSecondary }]}>
-          {tickets.filter(t => t.status === 'active' && new Date(t.validUntil) >= now).length} activas
+          {tickets.filter(t => ['active', 'valid'].includes(t.status) && new Date(t.validUntil) >= now).length} activas
         </Text>
       </View>
 
+      {offline && <Text style={{ color: theme.colors.textSecondary, padding: 16 }}>Pases guardados · Sin conexión. Última actualización: {savedAt ? new Date(savedAt).toLocaleString('es') : 'desconocida'}. El acceso se valida en la puerta.</Text>}
+      {!!error && <TouchableOpacity onPress={loadTickets} accessibilityRole="button"><Text style={{ color: theme.colors.error || '#ef4444', padding: 16 }}>{error} Toca para reintentar.</Text></TouchableOpacity>}
       {/* Tabs */}
       <View style={[styles.tabBar, { backgroundColor: theme.colors.surface, borderBottomColor: theme.colors.border }]}>
         {TABS.map(tab => (
@@ -188,7 +176,7 @@ export default function TicketsScreen() {
             <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Sin entradas</Text>
             <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
               {activeTab === 'active'
-                ? 'Compra entradas para tus eventos favoritos'
+                ? 'Confirma tu asistencia a un evento para encontrar tu pase aquí'
                 : activeTab === 'used'
                 ? 'Aquí aparecerán tus entradas usadas'
                 : 'No tienes entradas expiradas'}

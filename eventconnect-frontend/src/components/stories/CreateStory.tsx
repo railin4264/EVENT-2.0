@@ -166,7 +166,7 @@ export default function CreateStory({ isOpen, onClose, onStoryCreated, eventId }
               <div className="space-y-3">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full p-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl flex items-center gap-3 hover:from-purple-600 hover:to-pink-600 transition-all"
+                  className="w-full p-4 bg-gradient-to-r from-violet-500 to-cyan-500 text-white rounded-xl flex items-center gap-3 hover:from-purple-600 hover:to-pink-600 transition-all"
                 >
                   <div className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
                     <Camera className="w-5 h-5" />
@@ -179,7 +179,7 @@ export default function CreateStory({ isOpen, onClose, onStoryCreated, eventId }
 
                 <button
                   onClick={() => setStep('text')}
-                  className="w-full p-4 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-xl flex items-center gap-3 hover:from-blue-600 hover:to-indigo-600 transition-all"
+                  className="w-full p-4 bg-gradient-to-r from-violet-500 to-cyan-500 text-white rounded-xl flex items-center gap-3 hover:from-blue-600 hover:to-indigo-600 transition-all"
                 >
                   <div className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
                     <Type className="w-5 h-5" />

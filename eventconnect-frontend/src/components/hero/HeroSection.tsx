@@ -28,7 +28,7 @@ export function HeroSection({ onEventClick, onExploreClick, onCreateClick }: Her
       price: 'Gratis',
       category: 'Música',
       image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800',
-      gradient: 'from-violet-500 to-pink-500',
+      gradient: 'from-violet-500 to-cyan-500',
       icon: '🎵',
       liked: false
     },
@@ -43,7 +43,7 @@ export function HeroSection({ onEventClick, onExploreClick, onCreateClick }: Her
       price: '$2500',
       category: 'Tecnología',
       image: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=800',
-      gradient: 'from-blue-500 to-cyan-500',
+      gradient: 'from-violet-500 to-cyan-500',
       icon: '🚀',
       liked: true
     },
@@ -118,7 +118,7 @@ export function HeroSection({ onEventClick, onExploreClick, onCreateClick }: Her
             <Button
               size="lg"
               onClick={onExploreClick}
-              className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white px-8 py-4 rounded-xl neon-glow-violet hover-lift"
+              className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700 text-white px-8 py-4 rounded-xl neon-glow-violet hover-lift"
             >
               Explorar eventos
               <ArrowRight className="ml-2 w-5 h-5" />

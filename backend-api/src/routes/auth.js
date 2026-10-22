@@ -18,7 +18,7 @@ const validateRegister = [
     .normalizeEmail()
     .withMessage('Valid email is required'),
   body('password')
-    .isLength({ min: 8 })
+    .isLength({ min: 8, max: 128 })
     .withMessage('Password must be at least 8 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
     .withMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'),
@@ -28,10 +28,17 @@ const validateRegister = [
     .isLength({ min: 1, max: 50 })
     .withMessage('First name must be between 1-50 characters'),
   body('lastName')
-    .optional()
+    .optional({ values: 'falsy' })
     .trim()
     .isLength({ min: 1, max: 50 })
     .withMessage('Last name must be between 1-50 characters'),
+  body('name')
+    .optional()
+    .isString()
+    .bail()
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2-100 characters'),
   body('username')
     .trim()
     .isLength({ min: 3, max: 30 })
@@ -89,7 +96,14 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
     if ((!resolvedFirst || !resolvedLast) && typeof name === 'string' && name.trim()) {
       const parts = name.trim().split(/\s+/);
       resolvedFirst = resolvedFirst || parts[0];
-      resolvedLast = resolvedLast || parts.slice(1).join(' ') || parts[0];
+      resolvedLast = resolvedLast || parts.slice(1).join(' ');
+    }
+
+    // A display name is enough to get started; never fabricate a surname.
+    resolvedLast = resolvedLast || '';
+    if (!resolvedFirst || resolvedFirst.length > 50 || resolvedLast.length > 50) {
+      return res.status(400).json({ success: false, message: 'Validation failed',
+        errors: [{ path: 'name', msg: 'Escribe un nombre válido (máximo 50 caracteres por parte)' }] });
     }
 
     // Terms acceptance is captured if provided, but registration is not
@@ -107,19 +121,32 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
       });
     }
 
-    // Create user with interests
+    // Create user with country & locale resolution
+    const rawCountryCode = String(req.body.countryCode || '').toUpperCase();
+    const rawCountry = req.body.country || '';
+    const countryCode = rawCountryCode || (rawCountry === 'España' ? 'ES' : rawCountry === 'México' ? 'MX' : rawCountry === 'Estados Unidos' ? 'US' : rawCountry === 'Colombia' ? 'CO' : rawCountry === 'Argentina' ? 'AR' : 'DO');
+    const country = rawCountry || (countryCode === 'ES' ? 'España' : countryCode === 'MX' ? 'México' : countryCode === 'US' ? 'Estados Unidos' : countryCode === 'CO' ? 'Colombia' : countryCode === 'AR' ? 'Argentina' : 'República Dominicana');
+    const preferredLocale = req.body.preferredLocale || (countryCode === 'ES' ? 'es-ES' : countryCode === 'MX' ? 'es-MX' : countryCode === 'US' ? 'en-US' : countryCode === 'CO' ? 'es-CO' : countryCode === 'AR' ? 'es-AR' : 'es-DO');
+    const preferredCurrency = req.body.preferredCurrency || (countryCode === 'ES' ? 'EUR' : countryCode === 'MX' ? 'MXN' : countryCode === 'US' ? 'USD' : countryCode === 'CO' ? 'COP' : countryCode === 'AR' ? 'ARS' : 'DOP');
+
     const userData = {
       username,
       email,
       password,
       firstName: resolvedFirst,
       lastName: resolvedLast,
-      birthDate
+      birthDate,
+      country,
+      countryCode,
+      preferredLocale,
+      preferredCurrency,
+      location: {
+        type: 'Point',
+        coordinates: location?.coordinates || (countryCode === 'ES' ? [-3.7038, 40.4168] : countryCode === 'MX' ? [-99.1332, 19.4326] : countryCode === 'US' ? [-74.006, 40.7128] : [-69.9312, 18.4861]),
+        country,
+        countryCode
+      }
     };
-    // Prevent privilege escalation: never trust role/admin/permission fields
-    // from client input.
-    const safeUserData = stripForbiddenUserFields(userData);
-
     // Add optional fields if provided
     if (interests && Array.isArray(interests)) {
       userData.interests = interests;
@@ -133,6 +160,9 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
     if (req.body.phone) {
       userData.phone = req.body.phone;
     }
+
+    // Sanitize the complete payload, including optional profile fields.
+    const safeUserData = stripForbiddenUserFields(userData);
 
     // Auto-verify email in development mode so users can log in immediately
     if (process.env.NODE_ENV !== 'production') {
@@ -158,12 +188,16 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      name: `${user.firstName} ${user.lastName}`,
+      name: `${user.firstName} ${user.lastName}`.trim(),
       avatar: user.avatar,
       role: user.role,
       interests: user.interests,
       bio: user.bio,
       location: user.location,
+      country: user.country || 'República Dominicana',
+      countryCode: user.countryCode || 'DO',
+      preferredLocale: user.preferredLocale || 'es-DO',
+      preferredCurrency: user.preferredCurrency || 'DOP',
       stats: { eventsCreated: 0, eventsAttended: 0, followers: 0, following: 0, points: 0, level: 1 }
     };
 
@@ -211,7 +245,7 @@ router.post('/login', sanitizeBody, validateLogin, async (req, res) => {
     // Check for user
     const user = await User.findOne({ email }).select('+password');
 
-    if (!user) {
+    if (!user || !user.isActive) {
       logger.warn(`Login failed: User not found for email ${email}`);
       return res.status(401).json({
         success: false,
@@ -295,11 +329,15 @@ router.post('/login', sanitizeBody, validateLogin, async (req, res) => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      name: `${user.firstName} ${user.lastName}`,
+      name: `${user.firstName} ${user.lastName}`.trim(),
       avatar: user.avatar,
       role: user.role,
       bio: user.bio,
       location: user.location,
+      country: user.country || 'República Dominicana',
+      countryCode: user.countryCode || 'DO',
+      preferredLocale: user.preferredLocale || 'es-DO',
+      preferredCurrency: user.preferredCurrency || 'DOP',
       interests: user.interests || [],
       isActive: user.isActive,
       stats: {
@@ -436,6 +474,7 @@ router.post('/logout', protect, async (req, res) => {
 
     // Remove current access token
     req.user.tokens = req.user.tokens ? req.user.tokens.filter(tokenObj => tokenObj.token !== req.token) : [];
+    req.user.revokedTokens = [...(req.user.revokedTokens || []), req.token].slice(-50);
 
     // Remove refresh token if provided
     if (refreshToken) {
@@ -469,6 +508,7 @@ router.post('/logout-all', protect, enforceSecondFactor, async (req, res) => {
     if (req.token) req.user.revokedTokens.push(req.token);
     req.user.tokens = [];
     req.user.refreshTokens = [];
+    req.user.sessionVersion = (req.user.sessionVersion || 0) + 1;
 
     // Keep the revoked list bounded
     if (req.user.revokedTokens.length > 50) {
@@ -524,6 +564,7 @@ router.post('/change-password', protect, enforceSecondFactor, async (req, res) =
     }
 
     user.password = newPassword;
+    user.sessionVersion = (user.sessionVersion || 0) + 1;
     // Rotate all sessions: invalidate every existing token so stolen/old
     // tokens stop working immediately after a password change.
     if (!user.revokedTokens) user.revokedTokens = [];
@@ -556,11 +597,15 @@ router.get('/me', protect, async (req, res) => {
       email: u.email,
       firstName: u.firstName,
       lastName: u.lastName,
-      name: `${u.firstName} ${u.lastName}`,
+      name: `${u.firstName} ${u.lastName}`.trim(),
       avatar: u.avatar,
       role: u.role,
       bio: u.bio,
       location: u.location,
+      country: u.country || 'República Dominicana',
+      countryCode: u.countryCode || 'DO',
+      preferredLocale: u.preferredLocale || 'es-DO',
+      preferredCurrency: u.preferredCurrency || 'DOP',
       interests: u.interests || [],
       isActive: u.isActive,
       settings: u.settings,
@@ -691,8 +736,8 @@ router.post('/verify-2fa', async (req, res) => {
       });
     }
 
-    const user = await User.findById(decoded.id).select('+password');
-    if (!user || !user.twoFactor || !user.twoFactor.isEnabled) {
+    const user = await User.findById(decoded.id).select('+password +twoFactor.secret');
+    if (!user || !user.isActive || !user.twoFactor || !user.twoFactor.isEnabled || (decoded.sessionVersion || 0) !== (user.sessionVersion || 0)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid request'
@@ -731,7 +776,7 @@ router.post('/verify-2fa', async (req, res) => {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      name: `${user.firstName} ${user.lastName}`,
+      name: `${user.firstName} ${user.lastName}`.trim(),
       avatar: user.avatar,
       role: user.role,
       isActive: user.isActive
@@ -753,6 +798,53 @@ router.post('/verify-2fa', async (req, res) => {
     });
   }
 });
+
+const recoveryLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: process.env.NODE_ENV === 'test' ? 100 : 10,
+  standardHeaders: true, legacyHeaders: false, message: { success: false, message: 'Too many recovery attempts. Please try again later.' } });
+
+router.post('/forgot-password', recoveryLimiter, body('email').isEmail().normalizeEmail(), async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json({ success: false, message: 'Valid email required' });
+  const message = 'Si existe una cuenta con ese correo, recibirás un enlace para restablecer tu contraseña.';
+  try {
+    const user = await User.findOne({ email: req.body.email, isActive: true });
+    if (user) {
+      const crypto = require('crypto');
+      const token = crypto.randomBytes(32).toString('hex');
+      user.resetPasswordToken = crypto.createHash('sha256').update(token).digest('hex');
+      user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+      await require('../services/emailService').sendPasswordReset(user.email, user.firstName, token);
+    }
+    res.json({ success: true, message });
+  } catch (error) {
+    logger.error('Password recovery failed:', error.message);
+    res.status(500).json({ success: false, message: 'No se pudo procesar la solicitud.' });
+  }
+});
+
+router.post('/reset-password', recoveryLimiter,
+  body('token').isHexadecimal().isLength({ min: 64, max: 64 }),
+  body('password').isLength({ min: 8, max: 128 }).matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/),
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ success: false, message: 'Enlace o contraseña inválidos. Usa mayúsculas, minúsculas, números y un símbolo.' });
+    try {
+      const crypto = require('crypto');
+      const hash = crypto.createHash('sha256').update(req.body.token).digest('hex');
+      // Consume once atomically so concurrent replay cannot reset the account twice.
+      const user = await User.findOneAndUpdate({ resetPasswordToken: hash, resetPasswordExpires: { $gt: new Date() }, isActive: true },
+        { $unset: { resetPasswordToken: '', resetPasswordExpires: '' } }, { new: true });
+      if (!user) return res.status(400).json({ success: false, message: 'El enlace no es válido o ha expirado.' });
+      user.password = req.body.password;
+      user.sessionVersion = (user.sessionVersion || 0) + 1;
+      user.tokens = [];
+      user.refreshTokens = [];
+      await user.save();
+      res.json({ success: true, message: 'Contraseña actualizada. Inicia sesión de nuevo.' });
+    } catch (error) {
+      logger.error('Password reset failed:', error.message);
+      res.status(500).json({ success: false, message: 'No se pudo actualizar la contraseña.' });
+    }
+  });
 
 module.exports = router;
 

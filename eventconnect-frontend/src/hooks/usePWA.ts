@@ -19,11 +19,15 @@ export function usePWA() {
     setIsInstalled(isStandalone || isIOSInstalled)
 
     // Register service worker
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'development') {
+      // An old production worker must not serve stale HTML during local development.
+      void navigator.serviceWorker.getRegistration().then(registration => registration?.unregister()).catch(() => {})
+    }
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
       navigator.serviceWorker
-        .register('/sw.js')
+        .register('/sw.js', { updateViaCache: 'none' })
         .then((registration) => {
-          console.log('SW registered: ', registration)
+          void registration.update().catch(() => {})
         })
         .catch((registrationError) => {
           console.log('SW registration failed: ', registrationError)
@@ -87,28 +91,26 @@ export function useServiceWorker() {
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
 
-    // Check for service worker updates
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        setSwUpdateAvailable(true)
-      })
-    }
+    const initiallyControlled = Boolean(navigator.serviceWorker?.controller)
+    const controllerChanged = () => { if (initiallyControlled) setSwUpdateAvailable(true) }
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('controllerchange', controllerChanged)
 
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      if ('serviceWorker' in navigator) navigator.serviceWorker.removeEventListener('controllerchange', controllerChanged)
     }
   }, [])
 
-  const updateServiceWorker = () => {
+  const updateServiceWorker = async () => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistration().then((registration) => {
-        if (registration && registration.waiting) {
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' })
-          window.location.reload()
-        }
-      })
+      try {
+        const registration = await navigator.serviceWorker.getRegistration()
+        await registration?.update()
+        registration?.waiting?.postMessage({ type: 'SKIP_WAITING' })
+      } catch { /* The user can still reload a network-only build. */ }
     }
+    window.location.reload()
   }
 
   return {

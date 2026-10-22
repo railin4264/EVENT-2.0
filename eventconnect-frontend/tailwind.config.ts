@@ -26,7 +26,7 @@ const config: Config = {
         foreground: 'hsl(var(--foreground))',
         // Electric Violet — primary brand color
         primary: {
-          DEFAULT: '#8B5CF6',
+          DEFAULT: 'hsl(var(--primary))',
           50:  '#F5F3FF',
           100: '#EDE9FE',
           200: '#DDD6FE',
@@ -42,7 +42,7 @@ const config: Config = {
         },
         // Cyan Electric — secondary
         secondary: {
-          DEFAULT: '#06B6D4',
+          DEFAULT: 'hsl(var(--secondary))',
           50:  '#ECFEFF',
           100: '#CFFAFE',
           200: '#A5F3FC',
@@ -58,7 +58,7 @@ const config: Config = {
         },
         // Hot Pink — accent
         accent: {
-          DEFAULT: '#EC4899',
+          DEFAULT: 'hsl(var(--accent))',
           50:  '#FDF2F8',
           100: '#FCE7F3',
           200: '#FBCFE8',

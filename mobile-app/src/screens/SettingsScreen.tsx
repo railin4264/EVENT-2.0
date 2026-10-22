@@ -1,24 +1,26 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList,
-  Image, ActivityIndicator, RefreshControl, TextInput, Dimensions,
-  Animated, StatusBar, Alert, Switch } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator,
+  StatusBar, Alert, Switch } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import * as Haptics from 'expo-haptics';
-const PINK='#ec4899',VIOLET='#8b5cf6',BLUE='#3b82f6',BG='#0C0B10',SURF='rgba(255,255,255,0.05)',BORDER='rgba(255,255,255,0.08)',TXT='#ffffff',TXTS='rgba(255,255,255,0.5)';
+import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
+import { usePrivacyPreferences } from '@/hooks/usePrivacyPreferences';
+const PINK='#ec4899',VIOLET='#8b5cf6',BG='#0C0B10',SURF='rgba(255,255,255,0.05)',BORDER='rgba(255,255,255,0.08)',TXT='#ffffff',TXTS='rgba(255,255,255,0.5)';
 
 export default function SettingsScreen(){
   const router=useRouter(),insets=useSafeAreaInsets(),{user,logout}=useAuth();
-  const [pushNotif,setPushNotif]=useState(true),[emailNotif,setEmailNotif]=useState(true),[locationSvc,setLocationSvc]=useState(false);
+  const privacy=usePrivacyPreferences();
+  const tool=(kind:string)=>router.push({pathname:'/account-tools',params:{kind}} as any);
+  const notifications=useNotificationPreferences();
   const SECS=[
-    {title:'Cuenta',items:[{label:'Editar perfil',icon:'person-outline',type:'arrow',onPress:()=>router.push('/(tabs)/profile' as any)},{label:'Cambiar contraseña',icon:'lock-closed-outline',type:'arrow',onPress:()=>{}},{label:'Verificar cuenta',icon:'checkmark-circle-outline',type:'arrow',onPress:()=>{}}]},
-    {title:'Notificaciones',items:[{label:'Push',icon:'notifications-outline',type:'toggle',value:pushNotif,onPress:()=>setPushNotif(v=>!v)},{label:'Email',icon:'mail-outline',type:'toggle',value:emailNotif,onPress:()=>setEmailNotif(v=>!v)}]},
-    {title:'Privacidad',items:[{label:'Ubicación',icon:'location-outline',type:'toggle',value:locationSvc,onPress:()=>setLocationSvc(v=>!v)},{label:'Perfil público',icon:'eye-outline',type:'arrow',onPress:()=>{}},{label:'Mis datos',icon:'shield-outline',type:'arrow',onPress:()=>{}}]},
-    {title:'Soporte',items:[{label:'Centro de ayuda',icon:'help-circle-outline',type:'arrow',onPress:()=>{}},{label:'Reportar bug',icon:'bug-outline',type:'arrow',onPress:()=>{}},{label:'Acerca de',icon:'information-circle-outline',type:'arrow',onPress:()=>{}}]},
+    {title:'Cuenta',items:[{label:'Mi perfil',icon:'person-outline',type:'arrow',onPress:()=>router.push('/(tabs)/profile' as any)},{label:'Recuperar contraseña',icon:'lock-closed-outline',type:'arrow',onPress:()=>tool('password')},{label:'Ayuda con verificación',icon:'checkmark-circle-outline',type:'arrow',onPress:()=>tool('verification')}]},
+    {title:'Notificaciones',items:[{label:'Preferencia push',icon:'notifications-outline',type:'toggle',value:notifications.values.push,disabled:!notifications.ready||notifications.saving,onPress:()=>void notifications.save('push',!notifications.values.push)},{label:'Email',icon:'mail-outline',type:'toggle',value:notifications.values.email,disabled:!notifications.ready||notifications.saving,onPress:()=>void notifications.save('email',!notifications.values.email)},{label:'Planes de mis amigos',icon:'people-outline',type:'toggle',value:notifications.values.friendPlans,disabled:!notifications.ready||notifications.saving,onPress:()=>void notifications.save('friendPlans',!notifications.values.friendPlans)},{label:'Compartir mi asistencia con amigos',icon:'heart-outline',type:'toggle',value:notifications.values.shareAttendance,disabled:!notifications.ready||notifications.saving,onPress:()=>void notifications.save('shareAttendance',!notifications.values.shareAttendance)}]},
+    {title:'Privacidad',items:[{label:'Mostrar ubicación en mi perfil',icon:'location-outline',type:'toggle',value:privacy.values.showLocation,disabled:!privacy.ready||privacy.saving,onPress:()=>void privacy.save('showLocation',!privacy.values.showLocation)},{label:'Mostrar mi perfil',icon:'eye-outline',type:'toggle',value:privacy.values.showProfile,disabled:!privacy.ready||privacy.saving,onPress:()=>void privacy.save('showProfile',!privacy.values.showProfile)},{label:'Mostrar eventos a los que asisto',icon:'calendar-outline',type:'toggle',value:privacy.values.showAttendedEvents,disabled:!privacy.ready||privacy.saving,onPress:()=>void privacy.save('showAttendedEvents',!privacy.values.showAttendedEvents)},{label:'Mis datos',icon:'shield-outline',type:'arrow',onPress:()=>tool('data')}]},
+    {title:'Soporte',items:[{label:'Centro de ayuda',icon:'help-circle-outline',type:'arrow',onPress:()=>tool('help')},{label:'Reportar un problema',icon:'bug-outline',type:'arrow',onPress:()=>tool('support')},{label:'Acerca de',icon:'information-circle-outline',type:'arrow',onPress:()=>tool('about')}]},
   ];
   const doLogout=()=>Alert.alert('Cerrar sesión','¿Estás seguro?',[{text:'Cancelar',style:'cancel'},{text:'Salir',style:'destructive',onPress:()=>{Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);logout();}}]);
   return(
@@ -39,14 +41,21 @@ export default function SettingsScreen(){
             <Text style={st.secTitle}>{sec.title}</Text>
             <View style={st.secCard}>
               {(sec.items as any[]).map((item,ii)=>(
-                <TouchableOpacity key={ii} style={[st.item,ii<sec.items.length-1&&st.itemBorder]} onPress={item.onPress} activeOpacity={item.type==='toggle'?1:0.7}>
+                <TouchableOpacity key={ii} disabled={item.disabled} accessibilityRole={item.type==='toggle'?'switch':'button'} accessibilityLabel={item.label} accessibilityState={item.type==='toggle'?{checked:item.value,disabled:item.disabled}:undefined} style={[st.item,ii<sec.items.length-1&&st.itemBorder]} onPress={item.onPress} activeOpacity={item.type==='toggle'?1:0.7}>
                   <View style={[st.itemIcon,{backgroundColor:PINK+'18'}]}><Ionicons name={item.icon} size={18} color={PINK}/></View>
                   <Text style={st.itemLabel}>{item.label}</Text>
                   {item.type==='arrow'&&<Ionicons name="chevron-forward" size={18} color={TXTS}/>}
-                  {item.type==='toggle'&&<Switch value={item.value} onValueChange={item.onPress} trackColor={{false:BORDER,true:PINK+'80'}} thumbColor={item.value?PINK:TXTS}/>}
+                  {item.type==='toggle'&&<Switch accessibilityLabel={item.label} disabled={item.disabled} value={item.value} onValueChange={item.onPress} trackColor={{false:BORDER,true:PINK+'80'}} thumbColor={item.value?PINK:TXTS}/>}
                 </TouchableOpacity>
               ))}
             </View>
+            {sec.title==='Notificaciones'&&<View style={{paddingHorizontal:20,paddingTop:10,paddingBottom:14}}>
+              <Text style={{color:TXTS,fontSize:12,lineHeight:18}}>Planes y asistencia se comparten solo entre amigos mutuos, en eventos públicos. Los eventos secretos quedan excluidos. Activar una preferencia no concede permisos de notificación a este dispositivo.</Text>
+              {!notifications.ready&&!notifications.error&&<ActivityIndicator color={PINK} accessibilityLabel="Cargando preferencias"/>}
+              {notifications.saving&&<Text style={{color:TXTS,fontSize:12,marginTop:6}}>Guardando preferencia…</Text>}
+              {notifications.error&&<><Text accessibilityRole="alert" style={{color:'#fca5a5',fontSize:13,marginTop:8}}>{notifications.error}</Text>{!notifications.ready&&<TouchableOpacity accessibilityRole="button" onPress={()=>void notifications.load()}><Text style={{color:PINK,marginTop:8}}>Reintentar carga</Text></TouchableOpacity>}</>}
+            </View>}
+            {sec.title==='Privacidad'&&<View style={{paddingHorizontal:20,paddingTop:10,paddingBottom:14}}><Text style={{color:TXTS,fontSize:12,lineHeight:18}}>Estas opciones controlan la visibilidad de tu información. Mostrar ubicación en el perfil no activa ni solicita GPS.</Text>{!privacy.ready&&!privacy.error&&<ActivityIndicator color={PINK} accessibilityLabel="Cargando privacidad"/>}{privacy.saving&&<Text style={{color:TXTS,marginTop:6}}>Guardando privacidad…</Text>}{privacy.error&&<><Text accessibilityRole="alert" style={{color:'#fca5a5',marginTop:8}}>{privacy.error}</Text>{!privacy.ready&&<TouchableOpacity accessibilityRole="button" onPress={()=>void privacy.load()}><Text style={{color:PINK,marginTop:8}}>Reintentar carga de privacidad</Text></TouchableOpacity>}</>}</View>}
           </View>
         ))}
         <View style={{paddingHorizontal:16,marginTop:8}}>

@@ -7,23 +7,9 @@ import { Input } from './ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { ImageWithFallback } from './figma/ImageWithFallback'
 import { CldImage } from 'next-cloudinary'
-import { tribesService } from '@/lib/api/services/tribes.service'
+import { tribesService, type Tribe } from '@/lib/api/services/tribes.service'
 import { useAuth } from '@/lib/providers/AuthProvider'
 import toast from 'react-hot-toast'
-
-interface Tribe {
-  _id: string
-  name: string
-  description: string
-  image?: string
-  category: string
-  members: string[]
-  membersCount: number
-  createdBy: string
-  isPrivate: boolean
-  createdAt: Date
-  updatedAt: Date
-}
 
 export function Tribes() {
   const { user } = useAuth()
@@ -62,7 +48,7 @@ export function Tribes() {
       if (response.success && response.data) {
         // Filter tribes where user is a member
         const userTribes = response.data.filter(tribe =>
-          tribe.members.includes(user._id)
+          tribe.isMember || (Array.isArray(tribe.members) && tribe.members.some((m: any) => (m?.user?._id || m?.user || m?._id || m) === user._id))
         )
         setMyTribes(userTribes)
       }
@@ -125,16 +111,17 @@ export function Tribes() {
 
   const isUserMember = (tribe: Tribe) => {
     if (!user) return false
-    return tribe.members.includes(user._id)
+    return Boolean(tribe.isMember || (Array.isArray(tribe.members) && tribe.members.some((m: any) => (m?.user?._id || m?.user || m?._id || m) === user._id)))
   }
 
   const isUserOwner = (tribe: Tribe) => {
     if (!user) return false
-    return tribe.createdBy === user._id
+    const creatorId = tribe.createdBy?._id || tribe.createdBy || tribe.creator?._id || tribe.creator
+    return String(creatorId) === String(user._id)
   }
 
   const filteredDiscoverTribes = allTribes.filter(tribe => !isUserMember(tribe))
-  const trendingTribes = allTribes.slice(0, 10).sort((a, b) => b.membersCount - a.membersCount)
+  const trendingTribes = allTribes.slice(0, 10).sort((a, b) => (b.membersCount || b.memberCount || 0) - (a.membersCount || a.memberCount || 0))
 
   if (!user) {
     return (
@@ -152,7 +139,7 @@ export function Tribes() {
           <h1 className="text-3xl font-bold text-white mb-2">Tribes</h1>
           <p className="text-white/70">Conecta con comunidades que comparten tus pasiones</p>
         </div>
-        <Button className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700">
+        <Button className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700">
           <Plus className="w-4 h-4 mr-2" />
           Crear Tribe
         </Button>
@@ -218,7 +205,7 @@ export function Tribes() {
             <Card className="glass-card p-12 text-center">
               <p className="text-white/60 mb-4">No estás en ninguna tribe aún</p>
               <Button
-                className="bg-gradient-to-r from-violet-600 to-blue-600"
+                className="bg-gradient-to-r from-violet-600 to-cyan-600"
                 onClick={() => document.querySelector<HTMLButtonElement>('[value="discover"]')?.click()}
               >
                 Descubrir Tribes
@@ -351,7 +338,7 @@ export function Tribes() {
                       </div>
 
                       <Button
-                        className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+                        className="w-full bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700"
                         onClick={() => handleJoinTribe(tribe._id)}
                       >
                         Unirse
@@ -408,7 +395,7 @@ export function Tribes() {
                           <Badge className="bg-green-500/20 text-green-400">Miembro</Badge>
                         ) : (
                           <Button
-                            className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+                            className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700"
                             onClick={() => handleJoinTribe(tribe._id)}
                           >
                             Unirse

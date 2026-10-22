@@ -2,7 +2,7 @@
 # EventConnect 2.0 Backend - Dockerfile
 # ============================================
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Instalar dependencias del sistema
 RUN apk add --no-cache libc6-compat
@@ -15,7 +15,7 @@ WORKDIR /app
 FROM base AS deps
 
 COPY package.json package-lock.json* ./
-RUN npm install --production
+RUN npm ci --omit=dev
 
 # ============================================
 # Etapa de build
@@ -39,6 +39,7 @@ RUN adduser --system --uid 1001 eventconnect
 
 # Copiar archivos necesarios
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/scripts/verify-release-indexes.js /app/scripts/inspect-event-scale.js ./scripts/
 COPY --from=builder /app/package.json ./package.json
 COPY --from=deps /app/node_modules ./node_modules
 
@@ -51,6 +52,6 @@ EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:5000/ready || exit 1
 
 CMD ["node", "src/server.js"]

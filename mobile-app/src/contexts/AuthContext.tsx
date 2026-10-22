@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
+import { clearTicketPasses } from '../utils/ticketPassStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, LoginForm, RegisterForm, ApiResponse } from '@/types';
-import { authService } from '@/services/AuthService';
+import { authService, AuthData } from '@/services/AuthService';
+import { onSessionChange } from '@/services/apiClient';
 import { STORAGE_KEYS } from '@/constants';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -11,6 +13,7 @@ interface AuthContextType {
   isLoading: boolean;
   token: string | null;
   login: (credentials: LoginForm) => Promise<void>;
+  verifyTwoFactor: (tempToken: string, code: string) => Promise<void>;
   register: (userData: RegisterForm) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (userData: Partial<User>) => Promise<void>;
@@ -29,6 +32,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const queryClient = useQueryClient();
+  const passOwnerRef = useRef<string | null>(null);
+  passOwnerRef.current = user?._id || user?.id || passOwnerRef.current;
+
+  useEffect(() => onSessionChange(nextToken => {
+    setToken(nextToken);
+    if (nextToken) authService.setAuthToken(nextToken);
+    else {
+      if (passOwnerRef.current) void clearTicketPasses(passOwnerRef.current).catch(() => undefined);
+      passOwnerRef.current = null;
+      setUser(null);
+      authService.clearAuthToken();
+      queryClient.clear();
+    }
+  }), [queryClient]);
 
   // Check if user is authenticated on app start
   useEffect(() => {
@@ -58,10 +75,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     mutationFn: (credentials: LoginForm) => authService.login(credentials),
     onSuccess: async (response: ApiResponse<{ user: User; token: string }>) => {
       if (response.success && response.data) {
-        const { user: userData, token } = response.data;
+        const { user: userData, token, refreshToken } = response.data as { user: User; token: string; refreshToken: string };
 
         // Store auth data
         await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+        await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
         await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
 
         // Update state
@@ -73,9 +91,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
         queryClient.invalidateQueries({ queryKey: ['user'] });
       }
     },
-    onError: (error) => {
-      console.error('Login error:', error);
-      throw error;
+  });
+
+  const twoFactorMutation = useMutation({
+    mutationFn: ({ tempToken, code }: { tempToken: string; code: string }) => authService.verifyTwoFactor(tempToken, code),
+    onSuccess: async (response: ApiResponse<AuthData>) => {
+      if (!response.success || !response.data) throw new Error('No se pudo completar la sesión.');
+      const { user: userData, token: accessToken, refreshToken } = response.data;
+      await AsyncStorage.multiSet([
+        [STORAGE_KEYS.AUTH_TOKEN, accessToken],
+        [STORAGE_KEYS.REFRESH_TOKEN, refreshToken],
+        [STORAGE_KEYS.USER_DATA, JSON.stringify(userData)],
+      ]);
+      setUser(userData);
+      setToken(accessToken);
+      authService.setAuthToken(accessToken);
+      queryClient.invalidateQueries({ queryKey: ['user'] });
     },
   });
 
@@ -84,10 +115,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     mutationFn: (userData: RegisterForm) => authService.register(userData),
     onSuccess: async (response: ApiResponse<{ user: User; token: string }>) => {
       if (response.success && response.data) {
-        const { user: userData, token } = response.data;
+        const { user: userData, token, refreshToken } = response.data as { user: User; token: string; refreshToken: string };
 
         // Store auth data
         await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+        await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
         await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
 
         // Update state
@@ -152,10 +184,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const logout = async () => {
+    const passOwner = user?._id || user?.id;
+    passOwnerRef.current = null;
+    setUser(null);
+    setToken(null);
+    queryClient.clear();
+    if (passOwner) await clearTicketPasses(String(passOwner)).catch(() => undefined);
     try {
+      await authService.logout().catch(() => undefined);
       // Clear stored data
       await AsyncStorage.multiRemove([
         STORAGE_KEYS.AUTH_TOKEN,
+        STORAGE_KEYS.REFRESH_TOKEN,
         STORAGE_KEYS.USER_DATA,
       ]);
 
@@ -170,6 +210,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       queryClient.clear();
     } catch (error) {
       console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      setToken(null);
+      authService.clearAuthToken();
+      queryClient.clear();
     }
   };
 
@@ -183,6 +228,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (response.success && response.data) {
         const { token } = response.data;
         await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+        setToken(token);
         authService.setAuthToken(token);
       }
     } catch (error) {
@@ -196,8 +242,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     token,
     isAuthenticated: !!user,
-    isLoading: isLoading || loginMutation.isPending || registerMutation.isPending,
+    isLoading: isLoading || loginMutation.isPending || registerMutation.isPending || twoFactorMutation.isPending,
     login,
+    verifyTwoFactor: async (tempToken, code) => { await twoFactorMutation.mutateAsync({ tempToken, code }); },
     register,
     logout,
     updateProfile,

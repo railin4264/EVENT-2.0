@@ -49,7 +49,7 @@ const requiresTwoFactor = async (req, res, next) => {
 const enforceSecondFactor = async (req, res, next) => {
   try {
     const user = req.user;
-    const { twoFactorToken } = req.body || req.headers;
+    const twoFactorToken = req.body?.twoFactorToken || req.get('x-two-factor-token');
 
     if (!user) {
       return res.status(401).json({
@@ -85,7 +85,8 @@ const enforceSecondFactor = async (req, res, next) => {
     }
 
     // Verify the 2FA token
-    const isValidToken = twoFactorService.verifyToken(twoFactorToken, user.twoFactor.secret);
+    const secretUser = await User.findById(user._id).select('+twoFactor.secret');
+    const isValidToken = secretUser?.twoFactor?.secret && twoFactorService.verifyToken(twoFactorToken, secretUser.twoFactor.secret);
     if (!isValidToken) {
       await twoFactorService.recordFailedAttempt(user._id.toString(), 'totp');
       return res.status(400).json({
@@ -116,7 +117,7 @@ const enforceSecondFactor = async (req, res, next) => {
 const optionalSecondFactor = async (req, res, next) => {
   try {
     const user = req.user;
-    const { twoFactorToken } = req.body || req.headers;
+    const twoFactorToken = req.body?.twoFactorToken || req.get('x-two-factor-token');
 
     if (!user || !twoFactorToken) {
       // No user or no 2FA token provided, continue normally
@@ -125,7 +126,8 @@ const optionalSecondFactor = async (req, res, next) => {
 
     // If user has 2FA enabled and token is provided, verify it
     if (user.twoFactor && user.twoFactor.isEnabled) {
-      const isValidToken = twoFactorService.verifyToken(twoFactorToken, user.twoFactor.secret);
+      const secretUser = await User.findById(user._id).select('+twoFactor.secret');
+      const isValidToken = secretUser?.twoFactor?.secret && twoFactorService.verifyToken(twoFactorToken, secretUser.twoFactor.secret);
 
       if (isValidToken) {
         req.verified2FA = true;

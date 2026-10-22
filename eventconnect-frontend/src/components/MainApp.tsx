@@ -113,7 +113,7 @@ function MainAppContent() {
       {(activeView === 'dashboard' || activeView === 'events') && !showEventDetail && (
         <button
           onClick={() => setShowEventDetail(true)}
-          className="fixed bottom-8 right-8 w-16 h-16 rounded-full bg-gradient-to-r from-violet-600 to-pink-600 flex items-center justify-center neon-glow-violet hover:scale-110 transition-transform z-50 shadow-xl"
+          className="fixed bottom-8 right-8 w-16 h-16 rounded-full bg-gradient-to-r from-violet-600 to-cyan-600 flex items-center justify-center neon-glow-violet hover:scale-110 transition-transform z-50 shadow-xl"
           aria-label="Ver evento destacado"
         >
           <span className="text-2xl">🎵</span>

@@ -1,10 +1,11 @@
 'use client'
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { ChatRoom, ChatMessage, ChatParticipant } from '@/types/api.types'
 
 interface ChatState {
+  ownerId: string | null
+  setOwner: (ownerId: string | null) => void
   rooms: ChatRoom[]
   currentRoom: ChatRoom | null
   messages: Record<string, ChatMessage[]>
@@ -42,9 +43,9 @@ interface ChatState {
   clearError: () => void
 }
 
-export const useChatStore = create<ChatState>()(
-  persist(
-    (set, get) => ({
+export const useChatStore = create<ChatState>()((set) => ({
+      ownerId: null,
+      setOwner: (ownerId) => set(state => state.ownerId === ownerId ? {} : { ownerId, rooms: [], currentRoom: null, messages: {}, typingUsers: {}, onlineUsers: [], unreadCounts: {}, error: null, isLoading: false }),
       rooms: [],
       currentRoom: null,
       messages: {},
@@ -169,14 +170,5 @@ export const useChatStore = create<ChatState>()(
       setLoading: (loading) => set({ isLoading: loading }),
       setError: (error) => set({ error }),
       clearError: () => set({ error: null }),
-    }),
-    {
-      name: 'chat-storage',
-      partialize: (state) => ({
-        rooms: state.rooms,
-        messages: state.messages,
-        unreadCounts: state.unreadCounts,
-      }),
-    }
-  )
-)
+
+}))

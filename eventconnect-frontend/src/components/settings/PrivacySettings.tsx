@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Shield, Eye, EyeOff, MapPin, Users, Calendar, Globe } from 'lucide-react'
 import { apiClient } from '@/lib/api/client'
 import toast from 'react-hot-toast'
+import { useAuthStore } from '@/stores/authStore'
 
 interface PrivacySettingsProps {
   user: any
+  onRequestSupport?: () => void
 }
 
 interface PrivacySettings {
@@ -16,25 +18,29 @@ interface PrivacySettings {
   showLocation: boolean
 }
 
-export default function PrivacySettings({ user }: PrivacySettingsProps) {
+export default function PrivacySettings({ user, onRequestSupport }: PrivacySettingsProps) {
   const queryClient = useQueryClient()
+  const writeLock = useRef(false)
+  const owner = user?.id || user?._id
 
   const [settings, setSettings] = useState<PrivacySettings>({
-    showProfile: true,
-    showAttendedEvents: true,
+    showProfile: false,
+    showAttendedEvents: false,
     showLocation: false
   })
 
   const [isPrivate, setIsPrivate] = useState(user?.isPrivate || false)
 
   // Fetch privacy settings
-  const { data: userSettings } = useQuery({
-    queryKey: ['settings', user?.id],
+  const { data: userSettings, isError, isFetching, refetch } = useQuery({
+    queryKey: ['settings', owner],
     queryFn: async () => {
       const response = await apiClient.get('/users/me/settings')
+      if (!response.data?.success || !response.data?.settings?.privacy) throw new Error('No se pudo cargar la privacidad')
       return response.data.settings
     },
-    enabled: !!user
+    enabled: Boolean(owner),
+    retry: false
   })
 
   useEffect(() => {
@@ -44,45 +50,59 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
   }, [userSettings])
 
   const updatePrivacyMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: { key: keyof PrivacySettings; value: boolean; previous: boolean }) => {
       const response = await apiClient.put('/users/me/settings', {
-        privacy: data
+        privacy: { [data.key]: data.value }
       })
+      if (!response.data?.success || typeof response.data?.settings?.privacy?.[data.key] !== 'boolean') throw new Error('El servidor no confirmó el cambio')
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
+      setSettings(response.settings.privacy)
       toast.success('Configuración de privacidad actualizada')
-      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      queryClient.setQueryData(['settings', owner], response.settings)
     },
-    onError: () => {
+    onError: (_error, change) => {
+      setSettings(previous => ({ ...previous, [change.key]: change.previous }))
       toast.error('Error al actualizar configuración de privacidad')
-    }
+    },
+    onSettled: () => { writeLock.current = false }
   })
 
   const updateProfilePrivacyMutation = useMutation({
     mutationFn: async (isPrivate: boolean) => {
       const response = await apiClient.put('/users/me/profile', { isPrivate })
+      if (!response.data?.success || typeof response.data?.user?.isPrivate !== 'boolean') throw new Error('El servidor no confirmó el cambio')
       return response.data
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
+      setIsPrivate(response.user.isPrivate)
+      const state = useAuthStore.getState()
+      if (String(state.user?.id || state.user?._id) === String(owner)) state.updateUser({ isPrivate: response.user.isPrivate })
       toast.success('Privacidad del perfil actualizada')
       queryClient.invalidateQueries({ queryKey: ['user'] })
     },
-    onError: () => {
+    onError: (_error, change) => {
+      setIsPrivate(!change)
       toast.error('Error al actualizar privacidad del perfil')
-    }
+    },
+    onSettled: () => { writeLock.current = false }
   })
 
   const handleToggle = (key: keyof PrivacySettings) => {
+    if (!userSettings || isFetching || writeLock.current) return
+    writeLock.current = true
     const newSettings = {
       ...settings,
       [key]: !settings[key]
     }
     setSettings(newSettings)
-    updatePrivacyMutation.mutate(newSettings)
+    updatePrivacyMutation.mutate({ key, value: newSettings[key], previous: settings[key] })
   }
 
   const handlePrivateProfileToggle = () => {
+    if (!userSettings || isFetching || writeLock.current) return
+    writeLock.current = true
     const newValue = !isPrivate
     setIsPrivate(newValue)
     updateProfilePrivacyMutation.mutate(newValue)
@@ -98,6 +118,8 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
           Controla quién puede ver tu información y actividad
         </p>
       </div>
+
+      {isError && <p role="alert" className="text-sm text-destructive">No pudimos cargar la privacidad. <button onClick={() => void refetch()} className="font-semibold underline">Reintentar carga</button></p>}
 
       {/* Private Profile */}
       <div className="bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/20 dark:to-purple-900/20 border border-primary-200 dark:border-primary-800 rounded-2xl p-6">
@@ -117,6 +139,8 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
                 <input
                   type="checkbox"
                   checked={isPrivate}
+                  aria-label="Perfil privado"
+                  disabled={!userSettings || isFetching || updatePrivacyMutation.isPending || updateProfilePrivacyMutation.isPending}
                   onChange={handlePrivateProfileToggle}
                   className="sr-only peer"
                 />
@@ -156,6 +180,8 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
               <input
                 type="checkbox"
                 checked={settings.showProfile}
+                aria-label="Mostrar mi perfil"
+                disabled={!userSettings || isFetching || updatePrivacyMutation.isPending || updateProfilePrivacyMutation.isPending}
                 onChange={() => handleToggle('showProfile')}
                 className="sr-only peer"
               />
@@ -182,6 +208,8 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
               <input
                 type="checkbox"
                 checked={settings.showAttendedEvents}
+                aria-label="Mostrar eventos a los que asisto"
+                disabled={!userSettings || isFetching || updatePrivacyMutation.isPending || updateProfilePrivacyMutation.isPending}
                 onChange={() => handleToggle('showAttendedEvents')}
                 className="sr-only peer"
               />
@@ -208,6 +236,8 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
               <input
                 type="checkbox"
                 checked={settings.showLocation}
+                aria-label="Mostrar ubicación en mi perfil"
+                disabled={!userSettings || isFetching || updatePrivacyMutation.isPending || updateProfilePrivacyMutation.isPending}
                 onChange={() => handleToggle('showLocation')}
                 className="sr-only peer"
               />
@@ -230,8 +260,8 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
                 Tu privacidad es importante para nosotros. Aquí puedes controlar qué información es visible para otros usuarios.
               </p>
               <ul className="space-y-1 mt-3">
-                <li>• La información básica como nombre y foto de perfil siempre será visible</li>
-                <li>• Los usuarios bloqueados no podrán ver tu perfil</li>
+                <li>• Ocultar tu perfil limita su apertura y su aparición en los listados de usuarios.</li>
+                <li>• Cambiar la visibilidad no elimina información que ya hayas compartido.</li>
                 <li>• Puedes cambiar estas configuraciones en cualquier momento</li>
               </ul>
             </div>
@@ -246,14 +276,14 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
         </h3>
 
         <div className="space-y-3">
-          <button className="w-full text-left p-4 glass bg-white/5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+          <button onClick={onRequestSupport} disabled={!onRequestSupport} className="w-full text-left p-4 glass bg-white/5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-foreground">
-                  Descargar mis datos
+                  Solicitar copia de mis datos
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Obtén una copia de tu información
+                  Abre una solicitud al equipo de soporte
                 </p>
               </div>
               <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -262,14 +292,14 @@ export default function PrivacySettings({ user }: PrivacySettingsProps) {
             </div>
           </button>
 
-          <button className="w-full text-left p-4 glass bg-white/5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+          <button onClick={onRequestSupport} disabled={!onRequestSupport} className="w-full text-left p-4 glass bg-white/5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-foreground">
-                  Usuarios bloqueados
+                  Ayuda con bloqueos y privacidad
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Administra tu lista de usuarios bloqueados
+                  Consulta una incidencia con el equipo
                 </p>
               </div>
               <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

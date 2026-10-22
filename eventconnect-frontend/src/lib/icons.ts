@@ -1,7 +1,3 @@
-// @ts-nocheck — lucide-react v0.469 named exports are valid at runtime;
-// TypeScript type declarations use a format that conflicts with moduleResolution:bundler.
-// Icons work correctly in all components — this suppresses false-positive TS2614 errors.
-
 /**
  * Centralized icon exports from lucide-react
  * This file helps maintain consistency and handle icon name changes

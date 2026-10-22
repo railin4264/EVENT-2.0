@@ -25,7 +25,6 @@ class MapErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Silently catch Leaflet initialization errors caused by React StrictMode
     if (!error.message?.includes('Map container is already initialized')) {
       console.error('Map error:', error, errorInfo)
     }
@@ -34,17 +33,21 @@ class MapErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="w-full h-96 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-          <div className="text-center p-4">
-            <p className="text-gray-600 dark:text-gray-400">Unable to load map</p>
+        <div className="w-full h-full min-h-[360px] bg-slate-950 rounded-2xl flex items-center justify-center border border-slate-800">
+          <div className="text-center p-6 max-w-sm">
+            <div className="w-12 h-12 rounded-2xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center mx-auto mb-3 text-2xl">
+              🗺️
+            </div>
+            <p className="text-white font-semibold mb-1">No se pudo inicializar el mapa</p>
+            <p className="text-xs text-slate-400 mb-4">Reintenta cargar el lienzo interactivo</p>
             <button
               onClick={() => {
                 this.setState({ hasError: false, errorCount: 0 })
                 this.props.onReset?.()
               }}
-              className="mt-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-semibold rounded-xl hover:bg-violet-500 transition-colors"
             >
-              Retry
+              Reintentar mapa
             </button>
           </div>
         </div>
@@ -55,50 +58,62 @@ class MapErrorBoundary extends Component<
   }
 }
 
-interface LazyMapComponentProps {
+export interface LazyMapComponentProps {
   userLocation?: {
     lat: number
     lng: number
     address?: string
   }
-  events?: any[] // Accept any event type from discovery page
-  tribes?: any[] // Accept any tribe type from discovery page
+  events?: any[]
+  tribes?: any[]
+  ideas?: any[]
   onEventClick?: (event: any) => void
   onLocationChange?: (location: { lat: number; lng: number; address?: string }) => void
   onLocationUpdate?: (location: { lat: number; lng: number; address?: string }) => void
   showRadius?: boolean
+  /** Show only when userLocation is an actual user-provided GPS position. */
+  showUserLocation?: boolean
+  suppressSelectionPopup?: boolean
+  fitToEvents?: boolean
+  overviewMode?: 'world' | 'country' | 'city'
   radiusKm?: number
   radius?: number
   className?: string
   height?: string
   selectedEvent?: any | null
   selectedItem?: any | null
-  viewType?: 'events' | 'tribes'
+  viewType?: 'events' | 'tribes' | 'ideas'
   onEventSelect?: (event: any | null) => void
   onTribeSelect?: (tribe: any | null) => void
+  onIdeaSelect?: (idea: any | null) => void
   categoryColors?: { [key: string]: string }
+  mapStyle?: 'dark' | 'light' | 'satellite'
+  onMapStyleChange?: (style: 'dark' | 'light' | 'satellite') => void
+  onMoveEnd?: (center: { lat: number; lng: number }) => void
+  onSearchArea?: (center: { lat: number; lng: number }) => void
+  flyToTarget?: { lat: number; lng: number; zoom?: number; ts?: number } | null
 }
 
-// Loading component for map
 const MapLoadingFallback = () => (
-  <div className="w-full h-96 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-    <div className="text-center">
+  <div className="w-full h-full min-h-[360px] bg-slate-950 flex items-center justify-center relative overflow-hidden">
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.12)_0%,transparent_70%)] animate-pulse" />
+    <div className="text-center relative z-10">
       <LoadingSpinner size="lg" />
-      <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Loading map...</p>
+      <p className="mt-3 text-sm font-medium text-slate-300">Calibrando radar de eventos…</p>
     </div>
   </div>
 )
 
 export default function LazyMapComponent(props: LazyMapComponentProps) {
   const defaultProps = {
-    userLocation: { lat: 0, lng: 0 },
+    userLocation: { lat: 18.4721, lng: -69.9192, address: 'Santo Domingo, República Dominicana' },
     events: [],
     tribes: [],
     selectedEvent: null,
     selectedItem: null,
     viewType: 'events',
-    onEventSelect: () => { },
-    onTribeSelect: () => { },
+    onEventSelect: () => {},
+    onTribeSelect: () => {},
     categoryColors: {},
     ...props
   }

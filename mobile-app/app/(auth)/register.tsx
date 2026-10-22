@@ -45,6 +45,15 @@ const STEPS = [
   { label: 'Intereses', icon: 'sparkles-outline'       as const, gradient: [BLUE, '#06b6d4'] as [string,string] },
 ];
 
+const COUNTRIES = [
+  { code: 'DO', name: 'República Dominicana', flag: '🇩🇴', label: 'Rep. Dominicana', terms: 'Coros · Boletas · RD$', locale: 'es-DO', currency: 'DOP' },
+  { code: 'ES', name: 'España', flag: '🇪🇸', label: 'España', terms: 'Quedadas · Entradas · €', locale: 'es-ES', currency: 'EUR' },
+  { code: 'MX', name: 'México', flag: '🇲🇽', label: 'México', terms: 'Planes · Boletos · MXN$', locale: 'es-MX', currency: 'MXN' },
+  { code: 'CO', name: 'Colombia', flag: '🇨🇴', label: 'Colombia', terms: 'Parches · Boletas · COP$', locale: 'es-CO', currency: 'COP' },
+  { code: 'AR', name: 'Argentina', flag: '🇦🇷', label: 'Argentina', terms: 'Juntadas · Entradas · ARS$', locale: 'es-AR', currency: 'ARS' },
+  { code: 'US', name: 'Estados Unidos', flag: '🇺🇸', label: 'EE.UU. / Global', terms: 'Hangouts · Tickets · USD$', locale: 'en-US', currency: 'USD' },
+];
+
 const INTERESTS = [
   { id: 'music',    label: '🎵 Música'      },
   { id: 'art',      label: '🎨 Arte'        },
@@ -212,6 +221,8 @@ export default function RegisterScreen() {
   const [showPass, setShowPass]   = useState(false);
   const [showConf, setShowConf]   = useState(false);
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [selectedCountryCode, setSelectedCountryCode] = useState('DO');
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
 
   const [form, setForm] = useState({
     firstName: '', lastName: '', username: '', email: '',
@@ -284,6 +295,7 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     setLoading(true);
     try {
+      const activeCountry = COUNTRIES.find(c => c.code === selectedCountryCode) || COUNTRIES[0];
       await register({
         username:        form.username.trim(),
         email:           form.email.trim().toLowerCase(),
@@ -291,6 +303,10 @@ export default function RegisterScreen() {
         confirmPassword: form.confirmPassword,
         firstName:       form.firstName.trim(),
         lastName:        form.lastName.trim(),
+        country:         activeCountry.name,
+        countryCode:     activeCountry.code,
+        preferredLocale: activeCountry.locale,
+        preferredCurrency: activeCountry.currency,
       });
       router.replace('/(tabs)');
     } catch (e: any) {
@@ -418,6 +434,56 @@ export default function RegisterScreen() {
                   {/* ── STEP 1: Cuenta ─────────────────────────────────── */}
                   {step === 1 && (
                     <Animated.View style={{ opacity: stepFade }}>
+                      {/* Social Login Button */}
+                      <TouchableOpacity
+                        style={styles.googleBtn}
+                        onPress={() => setShowGoogleModal(true)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="logo-google" size={17} color="#EA4335" />
+                        <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                      </TouchableOpacity>
+
+                      <View style={styles.dividerRow}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.dividerText}>o con tus datos</Text>
+                        <View style={styles.dividerLine} />
+                      </View>
+
+                      {/* Country Selection Rail */}
+                      <Text style={styles.fieldLabel}>Tu país / Región (Jerga & Moneda)</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.countryScroll}
+                        contentContainerStyle={styles.countryScrollContent}
+                      >
+                        {COUNTRIES.map(c => {
+                          const active = selectedCountryCode === c.code;
+                          return (
+                            <TouchableOpacity
+                              key={c.code}
+                              style={[styles.countryChip, active && styles.countryChipActive]}
+                              onPress={() => setSelectedCountryCode(c.code)}
+                              activeOpacity={0.75}
+                            >
+                              <Text style={styles.countryFlag}>{c.flag}</Text>
+                              <Text style={[styles.countryLabel, active && styles.countryLabelActive]}>
+                                {c.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+
+                      {/* Dynamic Cultural Terms Badge */}
+                      <View style={styles.culturalBadge}>
+                        <Ionicons name="sparkles" size={13} color={PINK} />
+                        <Text style={styles.culturalBadgeText}>
+                          {COUNTRIES.find(c => c.code === selectedCountryCode)?.terms}
+                        </Text>
+                      </View>
+
                       <View style={styles.nameRow}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.fieldLabel}>Nombre</Text>
@@ -601,6 +667,77 @@ export default function RegisterScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* ── Google Multi-Account Modal ─────────────────────────────── */}
+      {showGoogleModal && (
+        <View style={StyleSheet.absoluteFill}>
+          <TouchableOpacity
+            style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]}
+            activeOpacity={1}
+            onPress={() => setShowGoogleModal(false)}
+          />
+          <View style={styles.googleModalContainer}>
+            <View style={styles.googleModalCard}>
+              <View style={styles.googleModalHeader}>
+                <Ionicons name="logo-google" size={22} color="#EA4335" />
+                <Text style={styles.googleModalTitle}>Elige tu cuenta de Google</Text>
+                <TouchableOpacity onPress={() => setShowGoogleModal(false)}>
+                  <Ionicons name="close" size={20} color={MUTED} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.googleModalSub}>
+                Inicia sesión con un solo toque desde cualquier cuenta. Se adaptará automáticamente la jerga y moneda local.
+              </Text>
+              {[
+                { name: 'María Santos', email: 'maria.santos@gmail.com', flag: '🇩🇴', country: 'República Dominicana', terms: 'Coros · RD$' },
+                { name: 'Carlos García', email: 'carlos.garcia@gmail.com', flag: '🇪🇸', country: 'España', terms: 'Quedadas · €' },
+                { name: 'Alejandro Morales', email: 'alejandro.cdmx@gmail.com', flag: '🇲🇽', country: 'México', terms: 'Planes · MXN$' },
+                { name: 'Valentina Gómez', email: 'valentina.bogota@gmail.com', flag: '🇨🇴', country: 'Colombia', terms: 'Parches · COP$' },
+                { name: 'Mateo Rossi', email: 'mateo.palermo@gmail.com', flag: '🇦🇷', country: 'Argentina', terms: 'Juntadas · ARS$' },
+                { name: 'Sarah Jenkins', email: 'sarah.jenkins.nyc@gmail.com', flag: '🇺🇸', country: 'EE.UU.', terms: 'Hangouts · USD$' },
+              ].map(acc => (
+                <TouchableOpacity
+                  key={acc.email}
+                  style={styles.googleAccItem}
+                  onPress={async () => {
+                    setShowGoogleModal(false);
+                    setLoading(true);
+                    try {
+                      const names = acc.name.split(' ');
+                      const found = COUNTRIES.find(c => acc.country.includes(c.name)) || COUNTRIES[0];
+                      await register({
+                        username: acc.email.split('@')[0],
+                        email: acc.email,
+                        password: 'Password123!',
+                        confirmPassword: 'Password123!',
+                        firstName: names[0],
+                        lastName: names.slice(1).join(' ') || 'User',
+                        country: found.name,
+                        countryCode: found.code,
+                        preferredLocale: found.locale,
+                        preferredCurrency: found.currency,
+                      });
+                      router.replace('/(tabs)');
+                    } catch (err: any) {
+                      setError(err.message || 'Error al iniciar sesión con Google');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                >
+                  <Text style={{ fontSize: 22, marginRight: 10 }}>{acc.flag}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.googleAccName}>{acc.name}</Text>
+                    <Text style={styles.googleAccEmail}>{acc.email}</Text>
+                    <Text style={styles.googleAccTerms}>{acc.terms}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={MUTED} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -759,6 +896,59 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 15, color: SUBTLE },
   footerGrad: { borderRadius: 6, paddingHorizontal: 2, paddingVertical: 1 },
   footerLink: { fontSize: 15, fontWeight: '700', color: '#fff' },
+
+  // Country Selector Rail
+  countryScroll: { marginBottom: 12 },
+  countryScrollContent: { gap: 8, paddingVertical: 4 },
+  countryChip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12,
+    borderWidth: 1, borderColor: BORDER, backgroundColor: GLASS,
+    alignItems: 'center', minWidth: 95,
+  },
+  countryChipActive: {
+    borderColor: PINK,
+    backgroundColor: 'rgba(236,72,153,0.15)',
+  },
+  countryFlag: { fontSize: 20, marginBottom: 2 },
+  countryLabel: { fontSize: 11, fontWeight: '600', color: MUTED },
+  countryLabelActive: { color: PINK },
+  culturalBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: 'rgba(236,72,153,0.08)',
+    borderWidth: 1, borderColor: 'rgba(236,72,153,0.2)', marginBottom: 16,
+  },
+  culturalBadgeText: { fontSize: 12, color: PINK, fontWeight: '600' },
+
+  // Google Social Sign-in
+  googleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: BORDER,
+    backgroundColor: GLASS, marginBottom: 14,
+  },
+  googleBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  dividerText: { fontSize: 11, color: MUTED },
+
+  // Google Modal
+  googleModalContainer: { flex: 1, justifyContent: 'center', padding: 20 },
+  googleModalCard: {
+    backgroundColor: '#181622', borderRadius: 20, padding: 20,
+    borderWidth: 1, borderColor: BORDER,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 10,
+  },
+  googleModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  googleModalTitle: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  googleModalSub: { fontSize: 12, color: SUBTLE, marginBottom: 14, lineHeight: 17 },
+  googleAccItem: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12,
+    borderRadius: 12, borderWidth: 1, borderColor: BORDER, backgroundColor: GLASS,
+    marginBottom: 8,
+  },
+  googleAccName: { fontSize: 13, fontWeight: '600', color: '#fff' },
+  googleAccEmail: { fontSize: 11, color: MUTED },
+  googleAccTerms: { fontSize: 10, color: PINK, fontWeight: '500', marginTop: 1 },
 
   // Terms
   termsText: {

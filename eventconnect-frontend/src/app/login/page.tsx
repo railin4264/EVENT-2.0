@@ -4,14 +4,15 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, Loader2, Calendar, ArrowRight, Sparkles } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, Loader2, Calendar, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
+import { authPageHref, safeRedirect, publicExploreHref } from '@/lib/auth/redirect'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import OAuthButtons from '@/components/auth/OAuthButtons'
-import { ParticleField } from '@/components/redesign/ui/particle-field'
+import { readEventRsvpIntent } from '@/components/events/event-rsvp-intent'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'El correo es requerido').email('Email inválido'),
@@ -40,7 +41,7 @@ function Field({
       </label>
       {children}
       {error && (
-        <p role="alert" className="text-xs text-red-500 font-medium">
+        <p id={`${id}-error`} role="alert" className="text-xs text-red-500 font-medium">
           {error}
         </p>
       )}
@@ -53,8 +54,11 @@ function Field({
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const rsvpReturn = readEventRsvpIntent(searchParams.get('redirect'))
   const { login } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
+  const [tempToken, setTempToken] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
 
   const {
     register,
@@ -64,83 +68,31 @@ function LoginForm() {
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await login({ email: data.email, password: data.password })
+      await login({ email: data.email, password: data.password, ...(tempToken ? { tempToken, code: verificationCode } : {}) })
       toast.success('¡Bienvenido de vuelta!')
       const redirect = searchParams.get('redirect')
-      router.push(redirect && redirect.startsWith('/') ? redirect : '/events')
+      router.replace(safeRedirect(redirect))
     } catch (error: any) {
+      if (error.requiresTwoFactor) {
+        setTempToken(error.tempToken)
+        toast('Introduce el código de seis dígitos para continuar.')
+        return
+      }
       toast.error(error.response?.data?.message || error.message || 'Error al iniciar sesión')
     }
   }
 
   return (
-    <div className="min-h-screen flex bg-white dark:bg-gray-950">
+    <div className="min-h-dvh flex bg-background text-foreground">
 
-      {/* ── Left panel: branding ──────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:flex-1 flex-col justify-between relative overflow-hidden bg-gray-950 p-12">
-        {/* Ambient glow */}
-        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute top-0 left-0 w-[600px] h-[600px] bg-emerald-500/20 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-teal-500/15 rounded-full blur-[100px] translate-x-1/3 translate-y-1/3" />
-        </div>
-
-        {/* Logo */}
-        <div className="relative z-10 flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-            <Calendar className="w-5 h-5 text-white" aria-hidden="true" />
-          </div>
-          <span className="text-xl font-bold text-white tracking-tight">
-            Event<span className="text-emerald-400">Now</span>
-          </span>
-        </div>
-
-        {/* Center copy */}
-        <div className="relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-6 rounded-full bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-sm font-medium">
-              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-              Bienvenido de vuelta
-            </div>
-            <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-tight mb-4 tracking-tight">
-              Tu próxima<br />experiencia<br />te espera
-            </h1>
-            <p className="text-gray-400 text-base leading-relaxed max-w-sm">
-              Miles de eventos en tu ciudad esperan que los descubras. Entra y sigue desde donde lo dejaste.
-            </p>
-          </motion.div>
-
-          {/* Social proof */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="mt-12 grid grid-cols-3 gap-6"
-          >
-            {[
-              { n: '10K+', l: 'Eventos' },
-              { n: '50K+', l: 'Usuarios' },
-              { n: '4.9★', l: 'Rating' },
-            ].map(({ n, l }) => (
-              <div key={l}>
-                <div className="text-2xl font-black text-white">{n}</div>
-                <div className="text-xs text-gray-500 uppercase tracking-wider mt-0.5">{l}</div>
-              </div>
-            ))}
-          </motion.div>
-        </div>
-
-        <p className="relative z-10 text-xs text-gray-600">
-          © 2025 EventNow
-        </p>
-      </div>
+      <aside className="hidden flex-1 flex-col justify-between bg-muted/40 p-12 lg:flex">
+        <Link href="/" className="flex items-center gap-2 text-xl font-semibold text-foreground"><Calendar className="h-6 w-6 text-primary" />EventNow</Link>
+        <div className="max-w-md"><p className="text-sm font-semibold text-primary">Los mejores planes se comparten</p><h1 className="mt-5 text-5xl font-semibold leading-tight tracking-tight text-foreground">Tu gente.<br />Tu próximo plan.</h1><p className="mt-6 text-lg leading-relaxed text-muted-foreground">Guarda lo que te gusta, prepara tu próxima salida y encuentra a tu comunidad.</p><div className="mt-9 rounded-2xl border border-border bg-background p-5 text-sm leading-6 text-muted-foreground">Puedes descubrir eventos sin cuenta. Entra cuando quieras asistir, guardar o participar.</div></div>
+        <Link href={publicExploreHref(searchParams.get('redirect'))} className="text-sm font-medium text-primary">← Seguir explorando</Link>
+      </aside>
 
       {/* ── Right panel: form ─────────────────────────────────────────── */}
       <div className="relative flex-1 flex items-center justify-center px-4 sm:px-8 py-12">
-        <ParticleField className="pointer-events-none opacity-60" color="16, 185, 129" />
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -149,11 +101,11 @@ function LoginForm() {
         >
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-10">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
               <Calendar className="w-4 h-4 text-white" aria-hidden="true" />
             </div>
             <span className="text-lg font-bold text-gray-900 dark:text-white">
-              Event<span className="text-emerald-500">Now</span>
+              Event<span className="text-violet-500">Now</span>
             </span>
           </div>
 
@@ -162,11 +114,16 @@ function LoginForm() {
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
             ¿No tienes cuenta?{' '}
-            <Link href="/register" className="font-semibold text-emerald-600 dark:text-emerald-400 hover:underline underline-offset-2">
+            <Link href={authPageHref('/register', searchParams.get('redirect'))} className="font-semibold text-violet-600 dark:text-violet-400 hover:underline underline-offset-2">
               Regístrate gratis
             </Link>
           </p>
 
+          {rsvpReturn && <p role="note" className="mb-5 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed text-foreground">
+            Al iniciar sesión volverás al evento para confirmar tu asistencia. La confirmación requiere un clic tuyo al regresar.
+          </p>}
+
+          <div className="mb-6"><OAuthButtons mode="login" /></div>
           <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
             <Field id="email" label="Correo electrónico" error={errors.email?.message}>
               <div className="relative">
@@ -178,7 +135,7 @@ function LoginForm() {
                   {...register('email')}
                   aria-invalid={!!errors.email}
                   aria-describedby={errors.email ? 'email-error' : undefined}
-                  className="w-full pl-10 pr-4 py-3 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60 transition-all"
+                  className="w-full pl-10 pr-4 py-3 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
                   placeholder="tu@email.com"
                 />
               </div>
@@ -193,7 +150,7 @@ function LoginForm() {
                   autoComplete="current-password"
                   {...register('password')}
                   aria-invalid={!!errors.password}
-                  className="w-full pl-10 pr-11 py-3 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/60 transition-all"
+                  className="w-full pl-10 pr-11 py-3 text-sm rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500/40 focus:border-violet-500/60 transition-all"
                   placeholder="••••••••"
                 />
                 <button
@@ -213,15 +170,20 @@ function LoginForm() {
             <div className="flex justify-end">
               <Link
                 href="/forgot-password"
-                className="text-xs text-gray-500 dark:text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                className="text-xs text-gray-500 dark:text-gray-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
               >
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
 
+            {tempToken && <Field id="verification-code" label="Código de verificación">
+              <input id="verification-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={verificationCode} onChange={event => setVerificationCode(event.target.value.replace(/\D/g, ''))} className="w-full rounded-xl border border-border bg-background px-4 py-3 text-foreground" placeholder="000000" />
+              <p className="text-xs text-muted-foreground">Introduce el código de tu aplicación de autenticación.</p>
+              <button type="button" className="text-xs text-primary underline" onClick={() => { setTempToken(''); setVerificationCode('') }}>Usar otra cuenta</button>
+            </Field>}
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || Boolean(tempToken && verificationCode.length !== 6)}
               className="group w-full flex items-center justify-center gap-2 py-3 px-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-xl font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-black/10"
             >
               {isSubmitting ? (
@@ -231,24 +193,17 @@ function LoginForm() {
                 </>
               ) : (
                 <>
-                  Iniciar sesión
+                  {rsvpReturn ? 'Continuar para confirmar asistencia' : 'Iniciar sesión'}
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
                 </>
               )}
             </button>
           </form>
 
-          <div className="my-6 flex items-center gap-3 text-xs text-gray-400">
-            <div className="h-px flex-1 bg-gray-100 dark:bg-white/10" />
-            o
-            <div className="h-px flex-1 bg-gray-100 dark:bg-white/10" />
-          </div>
-
-          <OAuthButtons mode="login" />
 
           <div className="mt-8 pt-6 border-t border-gray-100 dark:border-white/5 text-center">
             <Link
-              href="/events"
+              href={publicExploreHref(searchParams.get('redirect'))}
               className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               ← Explorar eventos sin cuenta
@@ -265,7 +220,7 @@ function LoginForm() {
 function LoginLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-950">
-      <Loader2 className="w-8 h-8 animate-spin text-emerald-500" aria-label="Cargando…" />
+      <Loader2 className="w-8 h-8 animate-spin text-violet-500" aria-label="Cargando…" />
     </div>
   )
 }

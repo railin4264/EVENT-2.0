@@ -1,7 +1,8 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useAuthStore } from '@/stores/authStore'
 
 export default function QueryProvider({
   children,
@@ -29,11 +30,17 @@ export default function QueryProvider({
             retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
           },
           mutations: {
-            retry: 1,
+            retry: false,
           },
         },
       })
   )
+
+  useEffect(() => useAuthStore.subscribe((state, previous) => {
+    if ((state.user?._id || state.user?.id) !== (previous.user?._id || previous.user?.id)) {
+      queryClient.clear()
+    }
+  }), [queryClient])
 
   return (
     <QueryClientProvider client={queryClient}>

@@ -136,8 +136,7 @@ jest.mock('axios', () => ({
   },
 }));
 
-// Silence the warning: Animated: `useNativeDriver` is not supported
-jest.mock('react-native/Libraries/Animated/NativeAnimatedHelper');
+// jest-expo provides animation mocks for the installed React Native version.
 
 
 

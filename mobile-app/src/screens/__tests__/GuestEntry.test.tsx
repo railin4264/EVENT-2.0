@@ -1,0 +1,20 @@
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import IndexScreen from '../../../app/index';
+const mockReplace = jest.fn();
+let mockLoading = true;
+jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));
+jest.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ isAuthenticated: false, isLoading: mockLoading }) }));
+jest.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: { colors: { bg: '#111' } } }) }));
+jest.mock('../../components/SplashScreen', () => ({ SplashScreen: () => null }));
+test('opening the app as a guest waits for session hydration then opens public discovery', async () => {
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  let tree!: TestRenderer.ReactTestRenderer;
+  await act(async () => { tree = TestRenderer.create(<IndexScreen />); });
+  expect(mockReplace).not.toHaveBeenCalled();
+  mockLoading = false;
+  await act(async () => tree.update(<IndexScreen />));
+  expect(mockReplace).toHaveBeenCalledWith('/(tabs)');
+  expect(mockReplace).not.toHaveBeenCalledWith('/(auth)/welcome');
+  await act(async () => tree.unmount());
+});

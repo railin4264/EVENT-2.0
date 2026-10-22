@@ -4,6 +4,8 @@ const User = require('../models/User');
 const Tribe = require('../models/Tribe');
 const Post = require('../models/Post');
 const Follow = require('../models/Follow');
+const { CARD_FIELDS, publicEventCard, publicRecommendationFilter } = require('../utils/publicEventCard');
+const { confirmedRegistrations } = require('../utils/recommendationRanking');
 
 class AIRecommendationService {
   constructor() {
@@ -20,7 +22,7 @@ class AIRecommendationService {
       const userEvents = await Event.find({
         $or: [
           { createdBy: userId },
-          { attendees: userId }
+          { 'attendees.user': userId }
         ]
       });
 
@@ -64,7 +66,9 @@ class AIRecommendationService {
     // Calculate social activity score
     preferences.socialActivity = follows.length + (posts.length * 2);
     preferences.eventCreationRate = events.filter(e => e.createdBy.toString() === user._id.toString()).length;
-    preferences.participationRate = events.filter(e => e.attendees.includes(user._id)).length;
+    preferences.participationRate = events.filter(
+      e => (e.attendees || []).some(a => (a.user || a).toString() === user._id.toString())
+    ).length;
 
     return preferences;
   }
@@ -115,23 +119,21 @@ class AIRecommendationService {
       // Get events that similar users attended/created
       const similarUserIds = similarUsers.map(u => u.userId);
       const query = {
-        status: 'published',
-        date: { $gte: new Date() },
-        isPrivate: false,
+        ...publicRecommendationFilter(user, options),
         $or: [
           { createdBy: { $in: similarUserIds } },
-          { attendees: { $in: similarUserIds } }
+          { 'attendees.user': { $in: similarUserIds } }
         ],
-        attendees: { $ne: user._id }, // Don't recommend events user already joined
+        'attendees.user': { $ne: user._id }, // Don't recommend events user already joined
         createdBy: { $ne: user._id } // Don't recommend user's own events
       };
 
-      const events = await Event.find(query)
+      const events = await Event.find(query).select(`${CARD_FIELDS} attendees`)
         .populate('createdBy', 'firstName lastName avatar')
-        .limit(options.limit || 10);
+        .limit(Math.min(30, Math.max(1, Number(options.limit) || 10)));
 
       return events.map(event => ({
-        ...event.toObject(),
+        ...publicEventCard(event),
         recommendationScore: 15, // Base collaborative score
         recommendationReasons: ['Usuarios similares están interesados'],
         recommendationType: 'collaborative_filtering',
@@ -230,44 +232,117 @@ class AIRecommendationService {
       .slice(0, limit);
   }
 
-  async getRuleBasedEventRecommendations(user, options, userPrefs = null) {
-    const { location, radius = 25, limit = 10 } = options;
+  calculateDistanceKm(lat1, lng1, lat2, lng2) {
+    if (
+      typeof lat1 !== 'number' ||
+      typeof lng1 !== 'number' ||
+      typeof lat2 !== 'number' ||
+      typeof lng2 !== 'number' ||
+      Number.isNaN(lat1) ||
+      Number.isNaN(lng1) ||
+      Number.isNaN(lat2) ||
+      Number.isNaN(lng2)
+    ) {
+      return null;
+    }
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 10) / 10;
+  }
 
-    // Build event query
-    const query = {
-      status: 'published',
-      date: { $gte: new Date() },
-      isPrivate: false
-    };
+  async getRuleBasedEventRecommendations(user, options = {}, userPrefs = null) {
+    const { location, radius = 50 } = options;
+    const limit = Math.min(30, Math.max(1, Number(options.limit) || 10));
+    const baseQuery = publicRecommendationFilter(user, options);
 
-    // Geographic filter
-    if (location || user.location?.coordinates) {
-      const coords = location
-        ? [location.lng, location.lat]
-        : user.location.coordinates;
-      query.location = {
-        $geoWithin: {
-          $centerSphere: [coords, radius / 6371]
-        }
-      };
+    // Determine effective user coordinates (ignore default [0, 0])
+    let userLat = null;
+    let userLng = null;
+
+    if (location && location.lat !== undefined && location.lng !== undefined) {
+      userLat = Number(location.lat);
+      userLng = Number(location.lng);
+    } else if (
+      Array.isArray(user?.location?.coordinates) &&
+      user.location.coordinates.length === 2 &&
+      (user.location.coordinates[0] !== 0 || user.location.coordinates[1] !== 0)
+    ) {
+      userLng = Number(user.location.coordinates[0]);
+      userLat = Number(user.location.coordinates[1]);
     }
 
-    const events = await Event.find(query)
-      .populate('createdBy', 'firstName lastName avatar')
-      .limit(limit * 2);
+    const hasValidCoords =
+      userLat !== null &&
+      userLng !== null &&
+      Number.isFinite(userLat) && Number.isFinite(userLng) &&
+      Math.abs(userLat) <= 90 && Math.abs(userLng) <= 180;
 
-    // Rule-based scoring system with enhanced AI
+    let events = [];
+    if (hasValidCoords) {
+      const geoQuery = {
+        ...baseQuery,
+        location: {
+          $geoWithin: {
+            $centerSphere: [[userLng, userLat], Math.min(500, Math.max(0.1, Number(radius) || 50)) / 6371]
+          }
+        }
+      };
+      events = await Event.find(geoQuery).select(`${CARD_FIELDS} attendees`)
+        .populate('createdBy', 'firstName lastName username avatar')
+        .limit(limit * 3);
+    }
+
+    // A selected area is a constraint, never silently expanded to the world.
+    if (!hasValidCoords) {
+      const existingIds = events.map(e => e._id);
+      const fallbackEvents = await Event.find({
+        ...baseQuery,
+        ...(existingIds.length > 0 ? { _id: { $nin: existingIds } } : {})
+      }).select(`${CARD_FIELDS} attendees`)
+        .populate('createdBy', 'firstName lastName username avatar')
+        .sort({ date: 1, startDate: 1 })
+        .limit(limit * 3);
+      events = [...events, ...fallbackEvents];
+    }
+
+    // Rule-based scoring system with proximity + interest + popularity + timing
     const scoredEvents = events.map(event => {
-      let score = 0;
+      let score = 10; // Base score for published upcoming event
       const reasons = [];
 
-      // Score by user interests (enhanced with preference analysis)
-      const userInterests = user.interests || [];
+      // Score by proximity if user coordinates are available
+      let distanceKm = null;
+      const evCoords = event.location?.coordinates;
+      if (hasValidCoords && Array.isArray(evCoords) && evCoords.length === 2) {
+        distanceKm = this.calculateDistanceKm(userLat, userLng, evCoords[1], evCoords[0]);
+        if (distanceKm !== null) {
+          if (distanceKm <= 15) {
+            score += 25;
+            reasons.push(event.isSecretLocation ? 'En la zona seleccionada' : `Muy cerca de ti (${distanceKm} km)`);
+          } else if (distanceKm <= 50) {
+            score += 18;
+            reasons.push(event.isSecretLocation ? 'En la zona seleccionada' : `Cerca de tu ubicación (${distanceKm} km)`);
+          } else if (distanceKm <= 200) {
+            score += 10;
+            reasons.push('En tu región');
+          }
+        }
+      }
+
+      // Score by user interests
+      const userInterests = user?.interests || [];
       const eventCategory = event.category;
 
       if (userInterests.includes(eventCategory)) {
         let categoryScore = 20;
-        // Boost score if this category is highly preferred by user
         if (userPrefs?.categories?.[eventCategory]) {
           categoryScore += Math.min(userPrefs.categories[eventCategory] * 2, 10);
         }
@@ -276,8 +351,9 @@ class AIRecommendationService {
       }
 
       // Score by time preferences
-      if (userPrefs?.timePreferences) {
-        const eventHour = new Date(event.date).getHours();
+      const eventDate = event.date || event.startDate;
+      if (userPrefs?.timePreferences && eventDate) {
+        const eventHour = new Date(eventDate).getHours();
         const eventTimeSlot = this.getTimeSlot(eventHour);
         if (userPrefs.timePreferences[eventTimeSlot]) {
           score += Math.min(userPrefs.timePreferences[eventTimeSlot], 8);
@@ -286,34 +362,43 @@ class AIRecommendationService {
       }
 
       // Score by popularity
-      const attendeesCount = event.attendees?.length || 0;
+      const attendeesCount = confirmedRegistrations(event.attendees);
       if (attendeesCount > 0) {
-        score += Math.min(attendeesCount / 10, 15);
-        if (attendeesCount > 20) {
-          reasons.push('Evento popular');
+        score += Math.min(attendeesCount / 5, 15);
+        if (attendeesCount >= 10) {
+          reasons.push('Tendencia en tu zona');
         }
       }
 
       // Score by newness
-      const daysSinceCreated = (Date.now() - event.createdAt) / (1000 * 60 * 60 * 24);
-      if (daysSinceCreated < 3) {
+      const daysSinceCreated = (Date.now() - new Date(event.createdAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceCreated < 7) {
         score += 10;
-        reasons.push('Evento reciente');
+        reasons.push('Evento destacado reciente');
       }
 
       // Score by time until event
-      const daysUntilEvent = (event.date - Date.now()) / (1000 * 60 * 60 * 24);
-      if (daysUntilEvent >= 1 && daysUntilEvent <= 14) {
-        score += 15;
-        reasons.push('Fecha ideal para planear');
+      if (eventDate) {
+        const daysUntilEvent = (new Date(eventDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
+        if (daysUntilEvent >= 0 && daysUntilEvent <= 21) {
+          score += 15;
+          reasons.push('Próximamente');
+        }
+      }
+
+      if (reasons.length === 0) {
+        reasons.push('Recomendado para ti');
       }
 
       return {
-        ...event.toObject(),
+        ...publicEventCard(event),
+        distanceKm: event.isSecretLocation ? null : distanceKm,
         recommendationScore: Math.max(score, 0),
         recommendationReasons: reasons,
         recommendationType: 'rule_based',
-        confidence: this.calculateConfidence(score, reasons.length)
+        confidence: this.calculateConfidence(score, reasons.length),
+        confidenceKind: 'heuristic_score',
+        rankingVersion: 'rules-v2'
       };
     });
 
@@ -367,7 +452,9 @@ class AIRecommendationService {
           recommendationScore: score,
           recommendationReasons: reasons,
           recommendationType: 'rule_based',
-          confidence: this.calculateConfidence(score, reasons.length)
+          confidence: this.calculateConfidence(score, reasons.length),
+          confidenceKind: 'heuristic_score',
+          rankingVersion: 'rules-v2'
         };
       });
 
@@ -382,7 +469,8 @@ class AIRecommendationService {
 
   // Trending Content
   async getTrendingContent(options = {}) {
-    const { timeframe = '24h', location, limit = 10, category } = options;
+    const { timeframe = '24h', location, category } = options;
+    const limit = Math.min(30, Math.max(1, Number(options.limit) || 10));
 
     try {
       const timeframeDays = this.parseTimeframe(timeframe);
@@ -390,8 +478,7 @@ class AIRecommendationService {
 
       const query = {
         createdAt: { $gte: since },
-        status: 'published',
-        isPrivate: false
+        ...publicRecommendationFilter(options.user, options)
       };
 
       if (category) {
@@ -406,18 +493,18 @@ class AIRecommendationService {
         };
       }
 
-      const events = await Event.find(query)
+      const events = await Event.find(query).select(`${CARD_FIELDS} attendees`)
         .populate('createdBy', 'firstName lastName avatar')
         .limit(limit * 2);
 
       const trendingEvents = events.map(event => {
         const daysSinceCreated = (Date.now() - event.createdAt) / (1000 * 60 * 60 * 24);
-        const attendeesCount = event.attendees?.length || 0;
+        const attendeesCount = confirmedRegistrations(event.attendees);
 
         const score = attendeesCount / Math.pow(daysSinceCreated + 1, 1.5);
 
         return {
-          ...event.toObject(),
+          ...publicEventCard(event),
           trendingScore: score,
           recommendationType: 'trending'
         };

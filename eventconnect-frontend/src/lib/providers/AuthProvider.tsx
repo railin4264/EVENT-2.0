@@ -2,7 +2,7 @@
 
 import { createContext, useContext, ReactNode } from 'react'
 import { useAuthStore } from '@/stores/authStore'
-import type { User, RegisterRequest } from '@/types/api.types'
+import type { User, RegisterData } from '@/types/api.types'
 
 interface AuthContextType {
   user: User | null
@@ -10,7 +10,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
-  register: (data: RegisterRequest) => Promise<void>
+  register: (data: RegisterData) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loginStore({ email, password } as any)
   }
 
-  const register = async (data: RegisterRequest) => {
+  const register = async (data: RegisterData) => {
     await registerStore(data as any)
   }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,20 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Tribe, TRIBE_CATEGORIES } from '@/services/tribesService';
+import { tribeAccess } from '@/utils/tribeAccess';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TribeCardProps {
   tribe: Tribe;
-  onPress: (tribe: Tribe) => void;
+  onPress: (_tribe: Tribe) => void;
   showJoinButton?: boolean;
-  onJoin?: (tribeId: string) => void;
+  onJoin?: (_tribeId: string) => void | Promise<void>;
   compact?: boolean;
 }
 
@@ -30,6 +34,16 @@ export default function TribeCard({
   compact = false
 }: TribeCardProps) {
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const access = tribeAccess(tribe, user?._id || user?.id);
+  const [joining, setJoining] = useState(false);
+  const joiningRef = useRef(false);
+  const mounted = useRef(true);
+  const scope = `${user?._id || user?.id || 'guest'}:${tribe._id}`;
+  const latestScope = useRef(scope);
+  latestScope.current = scope;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { joiningRef.current = false; setJoining(false); }, [scope]);
 
   const getCategoryInfo = () => {
     return TRIBE_CATEGORIES.find(cat => cat.value === tribe.category) || 
@@ -38,16 +52,25 @@ export default function TribeCard({
 
   const categoryInfo = getCategoryInfo();
 
-  const handleJoin = (e: any) => {
+  const handleJoin = async (e: any) => {
     e.stopPropagation();
-    if (onJoin) {
-      onJoin(tribe._id);
-    }
+    if (!onJoin || joiningRef.current || !['join', 'request'].includes(access.action)) return;
+    joiningRef.current = true;
+    setJoining(true);
+    try { await onJoin(tribe._id); }
+    catch { if (mounted.current && latestScope.current === scope) Alert.alert('No se completó la acción', 'Comprueba tu conexión e inténtalo de nuevo.'); }
+    finally { if (mounted.current && latestScope.current === scope) { joiningRef.current = false; setJoining(false); } }
   };
 
   const cardStyles = compact 
     ? [styles.compactCard, { backgroundColor: theme.colors.surface }]
     : [styles.card, { backgroundColor: theme.colors.surface, width: cardWidth }];
+
+  const isPrivate = access.isPrivate;
+  const avatarUrl = typeof tribe.avatar === 'string' ? tribe.avatar : tribe.avatar?.url;
+  const memberCount = tribe.stats?.totalMembers ?? tribe.stats?.memberCount ?? tribe.membersCount ?? tribe.memberCount ?? (Array.isArray(tribe.members) ? tribe.members.filter(member => member.status === 'active').length : 0);
+  const eventCount = tribe.stats?.totalEvents ?? tribe.stats?.eventCount ?? 0;
+  const tagsList = Array.isArray(tribe.tags) ? tribe.tags : [];
 
   return (
     <TouchableOpacity
@@ -57,8 +80,8 @@ export default function TribeCard({
     >
       {/* Header with avatar/icon */}
       <View style={styles.header}>
-        {tribe.avatar?.url ? (
-          <Image source={{ uri: tribe.avatar.url }} style={styles.avatar} />
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
             <Text style={[styles.avatarEmoji, { color: theme.colors.onPrimary }]}>
@@ -74,11 +97,11 @@ export default function TribeCard({
             </Text>
           </View>
           
-          {tribe.settings.privacy !== 'public' && (
+          {isPrivate && (
             <Ionicons
-              name={tribe.settings.privacy === 'private' ? 'lock-closed' : 'eye-off'}
-              size={16}
-              color={theme.colors.onSurfaceVariant}
+              name="lock-closed"
+              size={15}
+              color="#f59e0b"
             />
           )}
         </View>
@@ -109,11 +132,11 @@ export default function TribeCard({
               color={theme.colors.primary} 
             />
             <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
-              {tribe.stats.totalMembers} miembros
+              {memberCount} miembros
             </Text>
           </View>
           
-          {tribe.stats.totalEvents > 0 && (
+          {eventCount > 0 && (
             <View style={styles.stat}>
               <Ionicons 
                 name="calendar" 
@@ -121,16 +144,16 @@ export default function TribeCard({
                 color={theme.colors.primary} 
               />
               <Text style={[styles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                {tribe.stats.totalEvents} eventos
+                {eventCount} eventos
               </Text>
             </View>
           )}
         </View>
 
         {/* Tags */}
-        {tribe.tags.length > 0 && !compact && (
+        {tagsList.length > 0 && !compact && (
           <View style={styles.tags}>
-            {tribe.tags.slice(0, 3).map((tag, index) => (
+            {tagsList.slice(0, 3).map((tag, index) => (
               <View
                 key={`${tribe._id}-tag-${tag}-${index}`}
                 style={[styles.tag, { backgroundColor: theme.colors.surfaceVariant }]}
@@ -146,26 +169,36 @@ export default function TribeCard({
 
       {/* Footer */}
       <View style={styles.footer}>
-        {tribe.isMember ? (
+        {access.isMember ? (
           <View style={[styles.memberBadge, { backgroundColor: theme.colors.primary }]}>
             <Ionicons name="checkmark" size={14} color={theme.colors.onPrimary} />
             <Text style={[styles.memberText, { color: theme.colors.onPrimary }]}>
               Miembro
             </Text>
           </View>
-        ) : showJoinButton ? (
+        ) : access.pending ? (
+          <View style={[styles.memberBadge, { backgroundColor: 'rgba(245, 158, 11, 0.2)', borderWidth: 1, borderColor: '#f59e0b' }]}>
+            <Ionicons name="time-outline" size={14} color="#f59e0b" />
+            <Text style={[styles.memberText, { color: '#f59e0b' }]}>
+              Pendiente
+            </Text>
+          </View>
+        ) : access.isBanned || (!access.canJoin && !access.canRequestJoin) ? (
+          <Text style={[styles.memberText, { color: theme.colors.onSurfaceVariant }]}>{access.actionLabel}</Text>
+        ) : showJoinButton && onJoin ? (
           <TouchableOpacity
-            style={[styles.joinButton, { backgroundColor: theme.colors.primaryContainer }]}
+            style={[styles.joinButton, { backgroundColor: isPrivate ? 'rgba(139, 92, 246, 0.15)' : theme.colors.primaryContainer, borderWidth: isPrivate ? 1 : 0, borderColor: isPrivate ? '#8b5cf6' : 'transparent' }]}
             onPress={handleJoin}
+            disabled={joining}
             activeOpacity={0.7}
           >
-            <Ionicons 
-              name="add" 
-              size={16} 
-              color={theme.colors.onPrimaryContainer} 
-            />
-            <Text style={[styles.joinText, { color: theme.colors.onPrimaryContainer }]}>
-              Unirse
+            {joining ? <ActivityIndicator size="small" color={theme.colors.primary} /> : <Ionicons
+              name={access.canRequestJoin ? "lock-closed-outline" : "add"}
+              size={14}
+              color={isPrivate ? "#a78bfa" : theme.colors.onPrimaryContainer}
+            />}
+            <Text style={[styles.joinText, { color: isPrivate ? "#a78bfa" : theme.colors.onPrimaryContainer }]}>
+              {access.canRequestJoin ? 'Solicitar' : 'Unirse'}
             </Text>
           </TouchableOpacity>
         ) : null}

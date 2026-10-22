@@ -169,7 +169,7 @@ export function OrganizerStats() {
           <Badge className="bg-violet-500/20 text-violet-300 px-3 py-1">
             {organizerProfile.level}
           </Badge>
-          <Button className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700">
+          <Button className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700">
             Crear nuevo evento
           </Button>
         </div>

@@ -70,8 +70,7 @@ export function ApiStatusBanner({ className }: ApiStatusBannerProps) {
       <div className="flex items-center gap-2">
         <div className="w-2 h-2 rounded-full bg-yellow-500" />
         <span>
-          Backend API is currently unavailable. Some features may not work properly.
-          {health.error && ` (${health.error})`}
+          No podemos conectar con EventNow. Algunas funciones pueden tardar en estar disponibles.
         </span>
       </div>
     </div>

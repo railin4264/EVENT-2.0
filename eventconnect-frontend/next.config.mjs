@@ -1,20 +1,26 @@
+import { fileURLToPath } from 'node:url';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   reactStrictMode: false, // Disabled to prevent Leaflet map double initialization
-  // Skip type checking during build (types are checked separately)
+  outputFileTracingRoot: fileURLToPath(new URL('.', import.meta.url)),
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   experimental: {
+    cpus: 2,
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
   // Performance optimizations
   compress: true,
   poweredByHeader: false,
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'http',
@@ -60,6 +66,8 @@ const nextConfig = {
     NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
   },
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    config.plugins.push(new webpack.DefinePlugin({ 'process.env.NEXT_PUBLIC_APP_BUILD_ID': JSON.stringify(buildId) }));
+
     // Handle Leaflet for SSR
     if (isServer) {
       config.externals = [...config.externals, 'leaflet'];
@@ -73,24 +81,8 @@ const nextConfig = {
       };
     }
 
-    // Optimize bundle size
-    if (!dev && !isServer) {
-      config.optimization.splitChunks = {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            chunks: 'all',
-          },
-          common: {
-            minChunks: 2,
-            chunks: 'all',
-            enforce: true
-          }
-        }
-      };
-    }
+    // Preserve Next's route-aware chunks instead of loading every dependency
+    // (maps, charts, editors) in a shared vendor bundle on every page.
 
     return config;
   },

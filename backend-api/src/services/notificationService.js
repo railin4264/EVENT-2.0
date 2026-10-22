@@ -2,6 +2,9 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const firebaseService = require('../config/firebase');
+const { sendPush, isExpoToken } = require('./pushTransport');
+const PushReceipt = require('../models/PushReceipt');
+const { notificationCategory, inAppNotificationFilter } = require('../utils/notificationPreferences');
 
 class NotificationService {
   constructor(io) {
@@ -18,9 +21,10 @@ class NotificationService {
     try {
       // Create notification in database
       const notification = await Notification.createNotification(notificationData);
+      if (!notification) return null;
 
       // Send real-time notification via Socket.IO
-      this.sendRealTimeNotification(notification);
+      await this.sendRealTimeNotification(notification);
 
       // Send push notification if enabled
       if (sendPush && this.shouldSendPushNotification(notification)) {
@@ -39,17 +43,22 @@ class NotificationService {
    * Send real-time notification via Socket.IO
    * @param {Object} notification - Notification document
    */
-  sendRealTimeNotification(notification) {
+  async sendRealTimeNotification(notification) {
     try {
       if (this.io) {
+        const user = await User.findById(notification.recipient?._id || notification.recipient).select('notificationSettings settings.notifications isActive');
+        if (user?.isActive === false) return;
+        if (user && inAppNotificationFilter(user, [notification.type]).type?.$nin?.length) return;
         // Send to specific user
-        this.io.to(`user_${notification.recipient}`).emit('newNotification', {
-          notification: notification.toObject(),
+        const recipientId = String(notification.recipient?._id || notification.recipient);
+        this.io.to(`user_${recipientId}`).emit('newNotification', {
+          ...notification.toObject(),
+          notification: notification.toObject(), // Compatibility with existing web clients.
           timestamp: new Date(),
         });
 
         // Update unread count
-        this.updateUnreadCount(notification.recipient);
+        await this.updateUnreadCount(recipientId);
       }
     } catch (error) {
       logger.error('Error sending real-time notification:', error);
@@ -63,15 +72,15 @@ class NotificationService {
   async sendPushNotification(notification) {
     try {
       // Get user's push tokens
-      const user = await User.findById(notification.recipient).select('pushTokens notificationSettings');
+      const user = await User.findById(notification.recipient).select('pushTokens notificationSettings settings.notifications isActive');
 
-      if (!user || !user.pushTokens || user.pushTokens.length === 0) {
+      if (!user || user.isActive === false || !user.pushTokens || user.pushTokens.length === 0) {
         logger.info(`No push tokens found for user: ${notification.recipient}`);
         return;
       }
 
       // Check user's notification preferences
-      if (!this.shouldSendBasedOnSettings(notification, user.notificationSettings)) {
+      if (!this.shouldSendBasedOnSettings(notification, user.notificationSettings, user.settings?.notifications)) {
         logger.info(`Push notification blocked by user settings: ${notification.recipient}`);
         return;
       }
@@ -100,24 +109,15 @@ class NotificationService {
         return;
       }
 
-      // Send push notification via Firebase
-      const result = await firebaseService.sendToDevices(
-        tokens,
-        {
-          title: pushPayload.title,
-          body: pushPayload.body,
-          image: pushPayload.icon
-        },
-        pushPayload.data
-      );
+      const result = await sendPush(tokens, pushPayload);
+      if (result.tokensToRemove.length) await this.removeInvalidTokens(notification.recipient, result.tokensToRemove);
+      if (result.receipts.length) await PushReceipt.bulkWrite(result.receipts.map(receipt => ({ updateOne: {
+        filter: { ticketId: receipt.ticketId }, update: { $setOnInsert: { ...receipt, recipient: notification.recipient,
+          notification: notification._id, status: 'pending', checkAt: new Date(Date.now() + 900000), expiresAt: new Date(Date.now() + 172800000) } }, upsert: true
+      } })));
 
       if (result.success) {
         logger.info(`Push notification sent to ${result.successCount} devices for user: ${notification.recipient}`);
-
-        // Remove invalid tokens
-        if (result.tokensToRemove && result.tokensToRemove.length > 0) {
-          await this.removeInvalidTokens(notification.recipient, result.tokensToRemove);
-        }
 
         // Mark as push sent
         await notification.markPushSent();
@@ -175,14 +175,18 @@ class NotificationService {
    * @param {Object} settings - User notification settings
    * @returns {boolean} Whether to send notification
    */
-  shouldSendBasedOnSettings(notification, settings = {}) {
+  shouldSendBasedOnSettings(notification, settings = {}, canonical = {}) {
     // Default to true if no settings
-    if (!settings) return true;
+    settings = settings || {};
+    canonical = canonical || {};
 
     // Check global push setting
-    if (settings.pushEnabled === false) {
+    if (settings.pushEnabled === false || canonical.push === false) {
       return false;
     }
+    if (notification.type === 'event_reminder' && canonical.eventReminders === false) return false;
+    if (notificationCategory(notification) === 'messages' && canonical.newMessages === false) return false;
+    if (settings.channelPreferences?.push?.[notificationCategory(notification)] === false) return false;
 
     // Check category-specific settings
     const categorySettings = settings.categories || {};
@@ -196,7 +200,7 @@ class NotificationService {
       achievements: categorySettings.achievements !== false,
     };
 
-    const categoryAllowed = categoryMap[notification.category];
+    const categoryAllowed = categoryMap[notification.data?.action === 'friend_attending' ? 'social' : (notificationCategory(notification) === 'messages' ? 'social' : notificationCategory(notification))];
     if (categoryAllowed === false) {
       return false;
     }
@@ -602,7 +606,7 @@ class NotificationService {
       await user.save();
 
       // Subscribe to general topic for broadcast messages
-      if (firebaseService.isInitialized()) {
+      if (!isExpoToken(token) && firebaseService.isInitialized()) {
         await firebaseService.subscribeToTopic(token, 'general');
         logger.info(`Registered push token for user ${userId} on ${platform}`);
       }
@@ -631,7 +635,7 @@ class NotificationService {
       await user.save();
 
       // Unsubscribe from topics
-      if (firebaseService.isInitialized()) {
+      if (!isExpoToken(token) && firebaseService.isInitialized()) {
         await firebaseService.unsubscribeFromTopic(token, 'general');
         logger.info(`Unregistered push token for user: ${userId}`);
       }

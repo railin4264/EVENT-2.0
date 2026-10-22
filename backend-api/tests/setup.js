@@ -38,8 +38,10 @@ jest.mock('speakeasy', () => ({
 }));
 
 // Blanks so the app runs without external infra (Redis/SMTP optional).
-process.env.REDIS_URL = process.env.REDIS_URL || '';
-process.env.SMTP_HOST = process.env.SMTP_HOST || '';
+process.env.REDIS_URL = '';
+process.env.SMTP_HOST = '';
+process.env.STRIPE_SECRET_KEY = '';
+process.env.SENTRY_DSN = '';
 // Raise the 2FA rate-limit in tests: all requests share 127.0.0.1, so the
 // default max:10/15min would 429 the 2FA route tests. Only the 2FA limiter
 // reads this env; the auth/API limiters (which security/performance assert
@@ -50,18 +52,47 @@ process.env.NODE_ENV = 'test';
 
 beforeAll(async () => {
   if (!globalThis.__MONGO__) {
-    globalThis.__MONGO__ = await MongoMemoryServer.create();
+    let lastErr;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        globalThis.__MONGO__ = await MongoMemoryServer.create({
+          instance: {
+            ip: '127.0.0.1',
+            launchTimeout: 60000
+          }
+        });
+        break;
+      } catch (err) {
+        lastErr = err;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    if (!globalThis.__MONGO__) throw lastErr;
   }
   const uri = globalThis.__MONGO__.getUri();
   process.env.MONGODB_URI = uri;
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(uri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
       serverSelectionTimeoutMS: 5000
     });
   }
+}, 90000);
+
+// Jest creates a separate environment for each file, including globalThis.
+// Release that environment's database and child process after its suite.
+afterAll(async () => {
+  try {
+    await mongoose.disconnect();
+  } catch (_) {}
+  if (globalThis.__MONGO__) {
+    try {
+      await globalThis.__MONGO__.stop();
+    } catch (_) {}
+    globalThis.__MONGO__ = null;
+    await new Promise(r => setTimeout(r, 300));
+  }
 });
 
-// We intentionally do NOT disconnect per-file: the mongod lives for the
-// whole run (single process under maxWorkers:1).
+beforeEach(() => {
+  require('speakeasy').totp.verify.mockReturnValue(true);
+});

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { MapPin, Calendar, Mail, Globe, Instagram, Twitter, Linkedin, Star, Users, Heart, Share, Eye, ChevronLeft, Award } from 'lucide-react'
@@ -19,7 +19,10 @@ import { getImageUrl } from '@/lib/utils'
 interface UserProfile {
   _id: string
   username: string
-  email: string
+  email?: string
+  isPrivate?: boolean
+  isFollowing?: boolean
+  canViewAttendance?: boolean
   firstName: string
   lastName: string
   bio?: string
@@ -50,6 +53,10 @@ export default function UserProfilePage() {
   const [activeTab, setActiveTab] = useState<'events' | 'attended' | 'badges'>('events')
   const router = useRouter()
   const { user: currentUser, isAuthenticated } = useAuthStore()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  const viewerId = currentUser?._id || currentUser?.id || ''
+  const validId = /^[a-f0-9]{24}$/i.test(id || '')
 
   const generateUserBadges = (profile: UserProfile): BadgeType[] => {
     if (!profile || !profile.stats) return [];
@@ -106,37 +113,46 @@ export default function UserProfilePage() {
 
 
   // Fetch user profile
-  const { data: userProfile, isLoading: profileLoading } = useQuery<UserProfile>({
-    queryKey: ['user-profile', id],
+  const { data: userProfile, isLoading: profileLoading, error: profileError, refetch: retryProfile } = useQuery<UserProfile>({
+    queryKey: ['user-profile', id, viewerId],
+    enabled: mounted && isAuthenticated && validId,
+    retry: (count, error: any) => ![400, 401, 403, 404].includes(error.response?.status) && count < 1,
     queryFn: async () => {
-      const response = await apiClient.get(`/users/${id}`)
-      if (!response.data || !response.data.user) throw new Error('User not found'); return response.data.user
+      const response = await apiClient.get(`/users/profile/${id}`)
+      const profile = response.data?.user
+      if (!profile) throw new Error('Perfil no disponible')
+      return { ...profile, stats: { ...profile.stats, followers: profile.followersCount ?? profile.stats?.followers ?? 0, following: profile.followingCount ?? profile.stats?.following ?? 0 } }
     }
   })
 
   // Fetch user's created events
   const { data: createdEvents, isLoading: eventsLoading } = useQuery<Event[]>({
-    queryKey: ['user-events', id],
+    queryKey: ['user-events', id, viewerId],
+    enabled: !!userProfile && isAuthenticated,
     queryFn: async () => {
       const response = await apiClient.get(`/events?createdBy=${id}`)
-      return (response.data && response.data.events) || []
+      const events = response.data?.data?.events || response.data?.events || response.data?.data
+      return Array.isArray(events) ? events : []
     }
   })
 
   // Fetch user's attended events
-  const { data: attendedEvents, isLoading: attendedLoading } = useQuery<Event[]>({
-    queryKey: ['user-attended', id],
+  const { data: attendedEvents = [], isLoading: attendedLoading, isError: attendedError, refetch: retryAttended } = useQuery<Event[]>({
+    queryKey: ['user-attended', id, viewerId],
+    enabled: !!userProfile && isAuthenticated && activeTab === 'attended' && userProfile.canViewAttendance !== false && (!userProfile.isPrivate || userProfile.isFollowing === true || viewerId === id),
+    retry: false,
     queryFn: async () => {
       try {
         const response = await apiClient.get(`/users/${id}/attended-events`)
-        return response.data.events
+        return Array.isArray(response.data?.events) ? response.data.events : []
       } catch (error) {
-        console.warn('Attended events endpoint not available:', error)
-        return []
+        throw error
       }
     }
   })
 
+  if (!mounted) return <p role="status" className="p-8">Preparando el perfil…</p>
+  if (!isAuthenticated) return <div className="mx-auto max-w-lg space-y-4 p-8"><h1 className="text-2xl font-semibold">Conoce a tu comunidad</h1><p className="text-muted-foreground">Inicia sesión para ver perfiles y conectar con otras personas.</p><Link href={`/login?redirect=${encodeURIComponent(`/users/${id}`)}`} className="inline-flex min-h-11 items-center rounded-xl bg-primary px-4 text-primary-foreground">Iniciar sesión</Link></div>
   if (profileLoading) {
     return (
       <div className="min-h-screen bg-transparent">
@@ -164,7 +180,7 @@ export default function UserProfilePage() {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="text-center glass bg-white/10 backdrop-blur-md border border-white/20 p-12 rounded-3xl">
-          <h1 className="text-2xl font-bold text-foreground mb-4">Usuario no encontrado</h1>
+          <h1 className="text-2xl font-semibold text-foreground mb-4">{!validId || [403, 404].includes((profileError as any)?.response?.status) ? 'Perfil no disponible' : 'No pudimos cargar este perfil'}</h1><p className="mb-5 text-muted-foreground">{!validId || [403, 404].includes((profileError as any)?.response?.status) ? 'Puede ser privado o ya no estar disponible.' : 'Revisa tu conexión y vuelve a intentarlo.'}</p>{validId && ![401,403,404].includes((profileError as any)?.response?.status) && <button type="button" onClick={() => void retryProfile()} className="mb-4 min-h-11 rounded-xl border border-border px-5">Reintentar</button>}
           <button
             onClick={() => router.back()}
             className="btn-gradient px-6 py-3 rounded-xl font-semibold"
@@ -185,7 +201,7 @@ export default function UserProfilePage() {
     })
   }
 
-  const isOwnProfile = currentUser?.id === id
+  const isOwnProfile = viewerId === id
 
   return (
     <div className="min-h-screen bg-transparent pb-16">
@@ -194,7 +210,7 @@ export default function UserProfilePage() {
         <div className="max-w-4xl mx-auto">
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-2 px-4 py-2 glass bg-white/10 hover:bg-white/20 text-white rounded-full font-bold transition-all backdrop-blur-md border hover:border-white w-fit mb-6"
+            className="flex items-center gap-2 px-4 py-2 glass bg-white/10 hover:bg-white/20 text-gray-900 dark:text-white rounded-full font-bold transition-all backdrop-blur-md border border-gray-200 dark:border-white/20 hover:border-white w-fit mb-6"
           >
             <ChevronLeft className="w-5 h-5" />
             Volver
@@ -232,7 +248,7 @@ export default function UserProfilePage() {
                       className="w-full h-full rounded-full object-cover"
                     />
                   ) : (
-                    userProfile.firstName[0]
+                    (userProfile.firstName || userProfile.username || '?')[0]
                   )}
                 </div>
               </div>
@@ -309,7 +325,7 @@ export default function UserProfilePage() {
           {/* Tabs */}
           <div className="mb-8 mt-6">
             <div className="glass bg-white/5 border border-white/10 p-2 rounded-2xl max-w-fit mx-auto md:mx-0">
-              <nav className="flex space-x-2">
+              <nav aria-label="Contenido del perfil" className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setActiveTab('events')}
                   className={`py-3 px-6 rounded-xl font-bold text-sm transition-all ${activeTab === 'events'
@@ -425,7 +441,7 @@ export default function UserProfilePage() {
                 )
               ) : (
                 // Attended Events Tab
-                attendedLoading ? (
+                attendedError ? <div role="alert" className="col-span-full rounded-xl border border-border p-6"><p>No pudimos cargar los eventos compartidos.</p><button onClick={() => void retryAttended()} className="mt-3 min-h-11 rounded-xl border border-border px-4">Reintentar</button></div> : attendedLoading ? (
                   [...Array(6)].map((_, i) => (
                     <div key={i} className="animate-pulse glass bg-white/5 border border-white/10 rounded-3xl p-4">
                       <div className="bg-white/10 h-48 rounded-2xl mb-4"></div>
@@ -436,7 +452,7 @@ export default function UserProfilePage() {
                 ) : attendedEvents?.length === 0 ? (
                   <div className="col-span-full text-center py-12">
                     <p className="text-gray-600 dark:text-gray-400">
-                      {isOwnProfile ? 'No has asistido a eventos aún.' : 'Este usuario no ha asistido a eventos aún.'}
+                      {userProfile.canViewAttendance === false || (userProfile.isPrivate && !userProfile.isFollowing && !isOwnProfile) ? 'Esta persona mantiene su asistencia privada.' : isOwnProfile ? 'No has asistido a eventos aún.' : 'No hay eventos compartidos.'}
                     </p>
                   </div>
                 ) : (

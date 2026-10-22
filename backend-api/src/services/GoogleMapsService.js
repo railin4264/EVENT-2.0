@@ -14,35 +14,51 @@ class GoogleMapsService {
    */
   async geocodeAddress(address) {
     try {
-      if (!this.apiKey) {
-        throw new Error('Google Maps API key not configured');
-      }
-
-      const response = await axios.get(`${this.baseURL}/geocode/json`, {
-        params: {
-          address,
-          key: this.apiKey
+      if (this.apiKey) {
+        try {
+          const response = await axios.get(`${this.baseURL}/geocode/json`, {
+            params: { address, key: this.apiKey }
+          });
+          if (response.data.status === 'OK' && response.data.results.length > 0) {
+            const result = response.data.results[0];
+            const { lat, lng } = result.geometry.location;
+            return {
+              coordinates: [lng, lat],
+              formattedAddress: result.formatted_address,
+              placeId: result.place_id,
+              types: result.types,
+              addressComponents: result.address_components
+            };
+          }
+          // Google returned non-OK status → fall through to Nominatim
+          logger.warn('Google geocode non-OK, falling back to Nominatim:', response.data.status);
+        } catch (gErr) {
+          logger.warn('Google geocode error, falling back to Nominatim:', gErr.message);
         }
-      });
-
-      if (response.data.status === 'OK' && response.data.results.length > 0) {
-        const result = response.data.results[0];
-        const { lat, lng } = result.geometry.location;
-        
-        return {
-          coordinates: [lng, lat], // GeoJSON format [longitude, latitude]
-          formattedAddress: result.formatted_address,
-          placeId: result.place_id,
-          types: result.types,
-          addressComponents: result.address_components
-        };
-      } else {
-        throw new Error(`Geocoding failed: ${response.data.status}`);
       }
+      return await this._nominatimGeocode(address);
     } catch (error) {
       logger.error('Error geocoding address:', error);
       throw error;
     }
+  }
+
+  async _nominatimGeocode(address) {
+    const resp = await axios.get('https://nominatim.openstreetmap.org/search', {
+      params: { q: address, format: 'json', limit: 1 },
+      headers: { 'User-Agent': 'EventConnect/2.0 (eventconnect)' }
+    });
+    if (resp.data && resp.data.length > 0) {
+      const r = resp.data[0];
+      return {
+        coordinates: [parseFloat(r.lon), parseFloat(r.lat)],
+        formattedAddress: r.display_name,
+        placeId: r.place_id || r.osm_id,
+        types: r.type ? [r.type] : [],
+        addressComponents: []
+      };
+    }
+    throw new Error('No results from Nominatim');
   }
 
   /**
@@ -53,33 +69,46 @@ class GoogleMapsService {
    */
   async reverseGeocode(lat, lng) {
     try {
-      if (!this.apiKey) {
-        throw new Error('Google Maps API key not configured');
-      }
-
-      const response = await axios.get(`${this.baseURL}/geocode/json`, {
-        params: {
-          latlng: `${lat},${lng}`,
-          key: this.apiKey
+      if (this.apiKey) {
+        try {
+          const response = await axios.get(`${this.baseURL}/geocode/json`, {
+            params: { latlng: `${lat},${lng}`, key: this.apiKey }
+          });
+          if (response.data.status === 'OK' && response.data.results.length > 0) {
+            const result = response.data.results[0];
+            return {
+              formattedAddress: result.formatted_address,
+              placeId: result.place_id,
+              types: result.types,
+              addressComponents: result.address_components
+            };
+          }
+          logger.warn('Google reverse-geocode non-OK, falling back to Nominatim:', response.data.status);
+        } catch (gErr) {
+          logger.warn('Google reverse-geocode error, falling back to Nominatim:', gErr.message);
         }
-      });
-
-      if (response.data.status === 'OK' && response.data.results.length > 0) {
-        const result = response.data.results[0];
-        
-        return {
-          formattedAddress: result.formatted_address,
-          placeId: result.place_id,
-          types: result.types,
-          addressComponents: result.address_components
-        };
-      } else {
-        throw new Error(`Reverse geocoding failed: ${response.data.status}`);
       }
+      return await this._nominatimReverse(lat, lng);
     } catch (error) {
       logger.error('Error reverse geocoding:', error);
       throw error;
     }
+  }
+
+  async _nominatimReverse(lat, lng) {
+    const resp = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+      params: { lat, lon: lng, format: 'json' },
+      headers: { 'User-Agent': 'EventConnect/2.0 (eventconnect)' }
+    });
+    if (resp.data && resp.data.display_name) {
+      return {
+        formattedAddress: resp.data.display_name,
+        placeId: resp.data.place_id || resp.data.osm_id,
+        types: resp.data.type ? [resp.data.type] : [],
+        addressComponents: resp.data.address ? Object.entries(resp.data.address).map(([k, v]) => ({ long_name: v, short_name: v, types: [k] })) : []
+      };
+    }
+    throw new Error('No results from Nominatim');
   }
 
   /**

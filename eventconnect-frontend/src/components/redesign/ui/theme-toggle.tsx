@@ -36,6 +36,8 @@ export function ThemeToggle() {
   return (
     <motion.button
       onClick={toggleTheme}
+      aria-label="Cambiar tema de apariencia"
+      type="button"
       className="relative w-16 h-8 bg-gray-200 dark:bg-gray-700 rounded-full p-1 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
@@ -173,7 +175,7 @@ export function ThemeToggle() {
 // Compact version for mobile
 export function CompactThemeToggle() {
   const [mounted, setMounted] = useState(false)
-  const { theme, setTheme } = useTheme()
+  const { resolvedTheme, setTheme } = useTheme()
 
   useEffect(() => {
     setMounted(true)
@@ -186,18 +188,20 @@ export function CompactThemeToggle() {
   }
 
   const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
   }
 
   return (
     <motion.button
       onClick={toggleTheme}
-      className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center transition-colors duration-300"
+      type="button"
+      aria-label={resolvedTheme === 'dark' ? 'Activar tema claro' : 'Activar tema oscuro'}
+      className="h-11 w-11 shrink-0 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center transition-colors duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       whileHover={{ scale: 1.1 }}
       whileTap={{ scale: 0.9 }}
     >
       <AnimatePresence mode="wait">
-        {theme === 'dark' ? (
+        {resolvedTheme === 'dark' ? (
           <motion.div
             key="sun"
             initial={{ rotate: -180, scale: 0 }}

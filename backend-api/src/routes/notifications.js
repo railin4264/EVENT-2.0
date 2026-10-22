@@ -1,7 +1,10 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { body, param, query, validationResult } = require('express-validator');
 const { protect: authMiddleware } = require('../middleware/auth');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
+const { preferencesFor, preferenceUpdate } = require('../utils/notificationPreferences');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -28,7 +31,7 @@ router.get('/',
     query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
     query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50'),
     query('unreadOnly').optional().isBoolean().withMessage('UnreadOnly must be a boolean'),
-    query('type').optional().isIn(['follow', 'follow_request', 'event_invite', 'event_reminder', 'event_update', 'comment', 'like', 'tribe_invite', 'system', 'welcome']).withMessage('Invalid notification type'),
+    query('type').optional().isIn(['follow', 'follow_request', 'event_invite', 'event_reminder', 'event_update', 'comment', 'like', 'tribe_invite', 'message', 'achievement', 'admin_report', 'system', 'welcome']).withMessage('Invalid notification type'),
   ],
   validateRequest,
   async (req, res) => {
@@ -39,9 +42,15 @@ router.get('/',
       const type = req.query.type;
 
       // Build query
-      const query = { recipient: req.user.id };
+      const visible = Notification.inAppFilter(req.user);
+      const query = { recipient: req.user.id, ...visible };
       if (unreadOnly) query.read = false;
-      if (type) query.type = type;
+      if (type) query.$and = [{ type }];
+      if (req.query.category) {
+        const groups = { events: ['event_invite', 'event_reminder', 'event_update'], tribes: ['tribe_invite', 'tribe_request', 'tribe_approved'], social: ['follow', 'follow_request', 'comment', 'like', 'message'], achievements: ['achievement'], system: ['admin_report', 'system', 'welcome'] };
+        if (!groups[req.query.category]) return res.status(400).json({ success: false, message: 'Categoría inválida' });
+        query.$and = [...(query.$and || []), { type: { $in: groups[req.query.category] } }];
+      }
 
       const skip = (page - 1) * limit;
       
@@ -52,13 +61,11 @@ router.get('/',
         .limit(limit);
 
       const unreadCount = await Notification.countDocuments({ 
-        recipient: req.user.id, 
+        recipient: req.user.id, ...visible,
         read: false 
       });
 
-      const totalCount = await Notification.countDocuments({ 
-        recipient: req.user.id 
-      });
+      const totalCount = await Notification.countDocuments(query);
 
       res.json({
         success: true,
@@ -69,7 +76,7 @@ router.get('/',
           pagination: {
             page,
             limit,
-            hasMore: notifications.length === limit
+            hasMore: skip + notifications.length < totalCount
           }
         }
       });
@@ -198,6 +205,44 @@ router.post('/mark-all-read',
   }
 );
 
+// @route   DELETE /api/notifications/clear-all
+// @desc    Clear all read notifications
+// @access  Private
+router.delete('/clear-all',
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const result = await Notification.deleteMany({
+        recipient: req.user.id,
+        read: true,
+      });
+
+      // Emit real-time update
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${req.user.id}`).emit('notificationsCleared', {
+          userId: req.user.id,
+          deletedCount: result.deletedCount,
+        });
+      }
+
+      logger.info('DELETE', '/api/notifications/clear-all', req.user.id);
+      res.json({
+        success: true,
+        message: 'Notificaciones leídas eliminadas',
+        data: { deletedCount: result.deletedCount },
+      });
+    } catch (error) {
+      logger.error('DELETE', '/api/notifications/clear-all', error, req.user.id);
+      res.status(500).json({
+        success: false,
+        message: 'Error al limpiar las notificaciones',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      });
+    }
+  }
+);
+
 // @route   DELETE /api/notifications/:id
 // @desc    Delete notification
 // @access  Private
@@ -222,10 +267,13 @@ router.delete('/:id',
       }
 
       // Emit real-time update
-      req.app.get('io').to(`user_${req.user.id}`).emit('notificationDeleted', {
-        notificationId: notification._id,
-        userId: req.user.id,
-      });
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user:${req.user.id}`).emit('notificationDeleted', {
+          notificationId: notification._id,
+          userId: req.user.id,
+        });
+      }
 
       logger.info('DELETE', `/api/notifications/${req.params.id}`, req.user.id);
       res.json({
@@ -237,41 +285,6 @@ router.delete('/:id',
       res.status(500).json({
         success: false,
         message: 'Error al eliminar la notificación',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      });
-    }
-  }
-);
-
-// @route   DELETE /api/notifications/clear-all
-// @desc    Clear all read notifications
-// @access  Private
-router.delete('/clear-all',
-  authMiddleware,
-  async (req, res) => {
-    try {
-      const result = await Notification.deleteMany({
-        recipient: req.user.id,
-        isRead: true,
-      });
-
-      // Emit real-time update
-      req.app.get('io').to(`user_${req.user.id}`).emit('notificationsCleared', {
-        userId: req.user.id,
-        deletedCount: result.deletedCount,
-      });
-
-      logger.info('DELETE', '/api/notifications/clear-all', req.user.id);
-      res.json({
-        success: true,
-        message: 'Notificaciones leídas eliminadas',
-        data: { deletedCount: result.deletedCount },
-      });
-    } catch (error) {
-      logger.error('DELETE', '/api/notifications/clear-all', error, req.user.id);
-      res.status(500).json({
-        success: false,
-        message: 'Error al limpiar las notificaciones',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       });
     }
@@ -367,6 +380,7 @@ router.get('/stats',
   authMiddleware,
   async (req, res) => {
     try {
+      const recipientObjectId = new mongoose.Types.ObjectId(req.user.id);
       const [
         totalCount,
         unreadCount,
@@ -374,13 +388,13 @@ router.get('/stats',
         categoryCounts,
       ] = await Promise.all([
         Notification.countDocuments({ recipient: req.user.id }),
-        Notification.countDocuments({ recipient: req.user.id, isRead: false }),
+        Notification.countDocuments({ recipient: req.user.id, read: false }),
         Notification.aggregate([
-          { $match: { recipient: req.user.id } },
+          { $match: { recipient: recipientObjectId } },
           { $group: { _id: '$type', count: { $sum: 1 } } },
         ]),
         Notification.aggregate([
-          { $match: { recipient: req.user.id } },
+          { $match: { recipient: recipientObjectId } },
           { $group: { _id: '$category', count: { $sum: 1 } } },
         ]),
       ]);
@@ -420,30 +434,7 @@ router.get('/stats',
 // @access  Private
 router.get('/preferences', authMiddleware, async (req, res) => {
   try {
-    // Return default preferences for now
-    const preferences = {
-      email: {
-        events: true,
-        messages: true,
-        tribes: true,
-        achievements: true,
-        system: true
-      },
-      push: {
-        events: true,
-        messages: true,
-        tribes: true,
-        achievements: true,
-        system: false
-      },
-      inApp: {
-        events: true,
-        messages: true,
-        tribes: true,
-        achievements: true,
-        system: true
-      }
-    };
+    const preferences = preferencesFor(req.user);
 
     res.json({
       success: true,
@@ -463,12 +454,11 @@ router.get('/preferences', authMiddleware, async (req, res) => {
 // @access  Private
 router.put('/preferences', authMiddleware, async (req, res) => {
   try {
-    // For now, just return success
-    // In the future, this would save to user preferences
-    res.json({
-      success: true,
-      message: 'Notification preferences updated'
-    });
+    let update;
+    try { update = preferenceUpdate(req.body); }
+    catch (error) { return res.status(400).json({ success: false, message: error.message }); }
+    const user = await User.findByIdAndUpdate(req.user._id, { $set: update }, { new: true, runValidators: true });
+    res.json({ success: true, data: preferencesFor(user), message: 'Preferencias guardadas' });
   } catch (error) {
     logger.error('Error updating notification preferences:', error);
     res.status(500).json({
@@ -479,4 +469,3 @@ router.put('/preferences', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-

@@ -74,7 +74,7 @@ const protect = async (req, res, next) => {
     // Token revocation check: if this token has been explicitly revoked
     // (e.g. via logout-all or password change) reject it even if the
     // signature is still valid.
-    if (user.revokedTokens && user.revokedTokens.length > 0 && user.revokedTokens.includes(token)) {
+    if ((decoded.sessionVersion || 0) !== (user.sessionVersion || 0) || (user.revokedTokens && user.revokedTokens.length > 0 && user.revokedTokens.includes(token))) {
       logger.warn(`Rejected revoked access token for user: ${user.username}`);
       return res.status(401).json({
         success: false,
@@ -111,7 +111,7 @@ const optionalAuth = async (req, res, next) => {
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     // Set token from Bearer token in header
     token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies.token) {
+  } else if (req.cookies?.token) {
     // Set token from cookie
     token = req.cookies.token;
   }
@@ -124,6 +124,7 @@ const optionalAuth = async (req, res, next) => {
   try {
     const decoded = jwtService.verifyAccessToken(token);
     req.user = await User.findOne({ _id: decoded.id, isActive: true }).select('-password');
+    if (req.user && ((decoded.sessionVersion || 0) !== (req.user.sessionVersion || 0) || req.user.revokedTokens?.includes(token))) req.user = null;
 
     if (!req.user) {
       logger.warn(`Optional auth - User not found for ID: ${decoded.id}`);

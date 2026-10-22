@@ -94,7 +94,7 @@ export default function EditEventPage() {
         description: data.description,
         category: data.category,
         date: dateTime.toISOString(),
-        location: { address: data.location, venue: data.venue },
+        location: { ...eventData?.location, address: data.location, venue: data.venue },
         maxAttendees: data.maxAttendees,
         price: { amount: data.price, currency: data.currency },
         isPrivate: data.isPrivate,
@@ -132,7 +132,7 @@ export default function EditEventPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -142,7 +142,7 @@ export default function EditEventPage() {
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-center">
           <p className="text-white text-xl mb-4">Evento no encontrado</p>
-          <button onClick={() => router.back()} className="text-emerald-400 hover:text-emerald-300">
+          <button onClick={() => router.back()} className="text-violet-400 hover:text-violet-300">
             Volver
           </button>
         </div>
@@ -163,7 +163,7 @@ export default function EditEventPage() {
           <button
             onClick={handleSubmit(d => updateMutation.mutate(d))}
             disabled={updateMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg transition-colors disabled:opacity-50"
           >
             {updateMutation.isPending ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -180,13 +180,13 @@ export default function EditEventPage() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="bg-gray-900 border border-white/10 rounded-2xl p-6 space-y-4">
           <h2 className="text-white font-semibold flex items-center gap-2">
-            <Settings className="w-5 h-5 text-emerald-400" /> Información básica
+            <Settings className="w-5 h-5 text-violet-400" /> Información básica
           </h2>
 
           <div>
             <label className="text-gray-400 text-sm mb-1 block">Título *</label>
             <input {...register('title')}
-              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors"
               placeholder="Nombre del evento" />
             {errors.title && <p className="text-red-400 text-xs mt-1">{errors.title.message}</p>}
           </div>
@@ -194,7 +194,7 @@ export default function EditEventPage() {
           <div>
             <label className="text-gray-400 text-sm mb-1 block">Descripción *</label>
             <textarea {...register('description')} rows={4}
-              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors resize-none"
               placeholder="Describe tu evento..." />
             {errors.description && <p className="text-red-400 text-xs mt-1">{errors.description.message}</p>}
           </div>
@@ -202,7 +202,7 @@ export default function EditEventPage() {
           <div>
             <label className="text-gray-400 text-sm mb-1 block">Categoría *</label>
             <select {...register('category')}
-              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors">
+              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors">
               <option value="">Selecciona una categoría</option>
               {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -220,13 +220,13 @@ export default function EditEventPage() {
             <div>
               <label className="text-gray-400 text-sm mb-1 block">Fecha *</label>
               <input type="date" {...register('date')}
-                className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors" />
+                className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors" />
               {errors.date && <p className="text-red-400 text-xs mt-1">{errors.date.message}</p>}
             </div>
             <div>
               <label className="text-gray-400 text-sm mb-1 block">Hora *</label>
               <input type="time" {...register('time')}
-                className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors" />
+                className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors" />
               {errors.time && <p className="text-red-400 text-xs mt-1">{errors.time.message}</p>}
             </div>
           </div>
@@ -241,14 +241,14 @@ export default function EditEventPage() {
           <div>
             <label className="text-gray-400 text-sm mb-1 block">Dirección *</label>
             <input {...register('location')}
-              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors"
               placeholder="Dirección del evento" />
             {errors.location && <p className="text-red-400 text-xs mt-1">{errors.location.message}</p>}
           </div>
           <div>
             <label className="text-gray-400 text-sm mb-1 block">Nombre del lugar (opcional)</label>
             <input {...register('venue')}
-              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors"
+              className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors"
               placeholder="Ej: Teatro Municipal" />
           </div>
         </motion.div>
@@ -263,21 +263,21 @@ export default function EditEventPage() {
             <div>
               <label className="text-gray-400 text-sm mb-1 block">Capacidad máxima</label>
               <input type="number" min={1} {...register('maxAttendees', { valueAsNumber: true })}
-                className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors" />
+                className="w-full bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 transition-colors" />
             </div>
             <div>
               <label className="text-gray-400 text-sm mb-1 block">Precio</label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input type="number" min={0} step={0.01} {...register('price', { valueAsNumber: true })}
-                  className="w-full bg-gray-800 border border-white/10 text-white rounded-xl pl-9 pr-4 py-3 focus:outline-none focus:border-emerald-500 transition-colors" />
+                  className="w-full bg-gray-800 border border-white/10 text-white rounded-xl pl-9 pr-4 py-3 focus:outline-none focus:border-violet-500 transition-colors" />
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <input type="checkbox" id="isPrivate" {...register('isPrivate')}
-              className="w-4 h-4 rounded border-white/20 bg-gray-800 text-emerald-500 focus:ring-emerald-500" />
+              className="w-4 h-4 rounded border-white/20 bg-gray-800 text-violet-500 focus:ring-violet-500" />
             <label htmlFor="isPrivate" className="text-gray-300 flex items-center gap-2">
               <Lock className="w-4 h-4" /> Evento privado
             </label>
@@ -295,16 +295,16 @@ export default function EditEventPage() {
               value={tagInput}
               onChange={e => setTagInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())}
-              className="flex-1 bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-2 focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+              className="flex-1 bg-gray-800 border border-white/10 text-white rounded-xl px-4 py-2 focus:outline-none focus:border-violet-500 transition-colors text-sm"
               placeholder="Añadir etiqueta..." />
             <button type="button" onClick={addTag}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-colors">
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl transition-colors">
               <Plus className="w-4 h-4" />
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
             {tags.map(tag => (
-              <span key={tag} className="flex items-center gap-1 bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-sm">
+              <span key={tag} className="flex items-center gap-1 bg-violet-500/20 text-violet-300 px-3 py-1 rounded-full text-sm">
                 #{tag}
                 <button type="button" onClick={() => removeTag(tag)} className="hover:text-white transition-colors">
                   <X className="w-3 h-3" />
@@ -316,7 +316,7 @@ export default function EditEventPage() {
 
         <div className="pb-8">
           <button type="submit" disabled={updateMutation.isPending}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-2xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            className="w-full py-4 bg-violet-600 hover:bg-violet-700 text-white font-semibold rounded-2xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
             {updateMutation.isPending ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (

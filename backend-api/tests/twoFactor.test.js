@@ -261,7 +261,7 @@ describe('Two-Factor Authentication', () => {
         expect(response.body.data.backupCodes).toHaveLength(8);
 
         // Verify user 2FA was enabled
-        const updatedUser = await User.findById(testUser._id);
+        const updatedUser = await User.findById(testUser._id).select('+twoFactor.secret +twoFactor.tempSecret');
         expect(updatedUser.twoFactor.isEnabled).toBe(true);
         expect(updatedUser.twoFactor.secret).toBeDefined();
         expect(updatedUser.twoFactor.backupCodes).toHaveLength(8);
@@ -336,6 +336,7 @@ describe('Two-Factor Authentication', () => {
           .post('/api/2fa/verify')
           .send({
             token: '123456',
+            tempToken: jwtService.generateTempToken(testUser),
             userId: testUser._id.toString()
           });
 
@@ -353,6 +354,7 @@ describe('Two-Factor Authentication', () => {
           .post('/api/2fa/verify')
           .send({
             token: '000000',
+            tempToken: jwtService.generateTempToken(testUser),
             userId: testUser._id.toString()
           });
 
@@ -361,16 +363,16 @@ describe('Two-Factor Authentication', () => {
         expect(response.body.message).toBe('Invalid TOTP token');
       });
 
-      it('should reject request without userId', async () => {
+      it('should reject request without a password-authenticated challenge', async () => {
         const response = await request(app)
           .post('/api/2fa/verify')
           .send({
             token: '123456'
           });
 
-        expect(response.status).toBe(400);
+        expect(response.status).toBe(401);
         expect(response.body.success).toBe(false);
-        expect(response.body.message).toBe('User ID is required');
+        expect(response.body.message).toBe('Valid login challenge required');
       });
 
       it('should reject request for user without 2FA', async () => {
@@ -382,6 +384,7 @@ describe('Two-Factor Authentication', () => {
           .post('/api/2fa/verify')
           .send({
             token: '123456',
+            tempToken: jwtService.generateTempToken(userWithout2FA.user),
             userId: userWithout2FA.user._id.toString()
           });
 
@@ -411,6 +414,7 @@ describe('Two-Factor Authentication', () => {
           .post('/api/2fa/verify-backup')
           .send({
             code: 'ABCD1234',
+            tempToken: jwtService.generateTempToken(testUser),
             userId: testUser._id.toString()
           });
 
@@ -420,7 +424,7 @@ describe('Two-Factor Authentication', () => {
         expect(response.body.remainingBackupCodes).toBe(0); // One was used
 
         // Verify code was marked as used
-        const updatedUser = await User.findById(testUser._id);
+        const updatedUser = await User.findById(testUser._id).select('+twoFactor.secret +twoFactor.tempSecret');
         const usedCode = updatedUser.twoFactor.backupCodes.find(c => c.code === 'ABCD1234');
         expect(usedCode.used).toBe(true);
         expect(usedCode.usedAt).toBeDefined();
@@ -431,6 +435,7 @@ describe('Two-Factor Authentication', () => {
           .post('/api/2fa/verify-backup')
           .send({
             code: 'EFGH5678', // Already used
+            tempToken: jwtService.generateTempToken(testUser),
             userId: testUser._id.toString()
           });
 
@@ -444,6 +449,7 @@ describe('Two-Factor Authentication', () => {
           .post('/api/2fa/verify-backup')
           .send({
             code: 'XXXXXXXX',
+            tempToken: jwtService.generateTempToken(testUser),
             userId: testUser._id.toString()
           });
 
@@ -457,12 +463,38 @@ describe('Two-Factor Authentication', () => {
           .post('/api/2fa/verify-backup')
           .send({
             code: '1234', // Invalid format
+            tempToken: jwtService.generateTempToken(testUser),
             userId: testUser._id.toString()
           });
 
         expect(response.status).toBe(400);
         expect(response.body.success).toBe(false);
         expect(response.body.message).toBe('Validation failed');
+      });
+    });
+
+    describe.each(['/api/2fa/verify', '/api/2fa/verify-backup'])('%s login challenge security', (endpoint) => {
+      const credentials = { token: '123456', code: 'ABCD1234' };
+      it('rejects a user ID and correct factor without a login challenge', async () => {
+        const response = await request(app).post(endpoint).send({ ...credentials, userId: String(testUser._id) });
+        expect(response.status).toBe(401);
+        expect(response.body.code).toBe('TWO_FACTOR_CHALLENGE_REQUIRED');
+      });
+      it('rejects forged challenges and ordinary access tokens', async () => {
+        for (const tempToken of ['forged-token', authToken]) {
+          const response = await request(app).post(endpoint).send({ ...credentials, tempToken });
+          expect(response.status).toBe(401);
+        }
+      });
+      it('rejects a challenge for another account', async () => {
+        const response = await request(app).post(endpoint).send({ ...credentials,
+          tempToken: jwtService.generateTempToken(testUser), userId: String(new mongoose.Types.ObjectId()) });
+        expect(response.status).toBe(401);
+      });
+      it('rejects expired challenges', async () => {
+        const tempToken = jwt.sign({ id: String(testUser._id), type: 'temp' }, process.env.JWT_SECRET,
+          { expiresIn: -1, issuer: 'eventconnect-api', audience: 'eventconnect-clients' });
+        expect((await request(app).post(endpoint).send({ ...credentials, tempToken })).status).toBe(401);
       });
     });
 
@@ -538,7 +570,7 @@ describe('Two-Factor Authentication', () => {
         expect(response.body.message).toBe('2FA disabled successfully');
 
         // Verify 2FA was disabled
-        const updatedUser = await User.findById(testUser._id);
+        const updatedUser = await User.findById(testUser._id).select('+twoFactor.secret +twoFactor.tempSecret');
         expect(updatedUser.twoFactor.isEnabled).toBe(false);
         expect(updatedUser.twoFactor.disabledAt).toBeDefined();
       });

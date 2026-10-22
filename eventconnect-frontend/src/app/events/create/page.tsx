@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, Suspense } from 'react'
 import type { EventImage } from '@/types/api.types'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMutation } from '@tanstack/react-query'
-import { useRouter } from 'next/navigation'
-import { Calendar, Clock, MapPin, Users, Star, Image as ImageIcon, Globe, Lock, Plus, X, Check, ChevronLeft, Camera, CheckCircle, AlertCircle, Info, Settings, Share, ChevronDown, FileText, DollarSign, Tag } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Calendar, Clock, MapPin, Users, Star, Image as ImageIcon, Globe, Lock, Plus, X, Check, ChevronLeft, Camera, CheckCircle, AlertCircle, Info, Settings, Share, ChevronDown, FileText, DollarSign, Tag, Sparkles, Navigation } from 'lucide-react'
 const Save = Check
 const Upload = Camera
 const Ticket = FileText
@@ -13,112 +13,46 @@ import { apiClient } from '@/lib/api/client'
 import toast from 'react-hot-toast'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { eventSchema, createEventPayload, deviceTimeZone, type EventFormData } from './create-event-form'
+import { COUNTRY_OPTIONS, countryName, locationMetadata } from './country-catalog'
+import { useLiveLocation, RD_VENUE_PRESETS, type VenuePreset } from '@/hooks/useLiveLocation'
 
-const eventSchema = z.object({
-  title: z.string()
-    .min(5, 'El título debe tener al menos 5 caracteres')
-    .max(100, 'El título no puede exceder 100 caracteres'),
-  description: z.string()
-    .min(10, 'La descripción debe tener al menos 10 caracteres'),
-  category: z.string()
-    .min(1, 'Selecciona una categoría'),
-  date: z.string()
-    .min(1, 'La fecha es requerida')
-    .refine((date) => {
-      if (!date) return false;
-      const [y, m, d] = date.split('-').map(Number);
-      const selectedDate = new Date(y, m - 1, d);
-      selectedDate.setHours(0, 0, 0, 0)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (isNaN(selectedDate.getTime())) return false
+import { useAuthStore } from '@/stores/authStore'
+import { ImportPlanDraft } from '@/components/planning/ImportPlanDraft'
+import { CATEGORY_LIST } from '@/lib/categories'
+import ConnectAgendaModal from '@/components/events/ConnectAgendaModal'
+import FriendPlanDraftCard, { type FriendPlanDraft } from '@/components/events/FriendPlanDraftCard'
 
-      return selectedDate.getTime() >= today.getTime();
-    }, 'La fecha debe ser hoy o en el futuro'),
-  time: z.string()
-    .min(1, 'La hora es requerida'),
-  endTime: z.string()
-    .optional(),
-  location: z.object({
-    address: z.string()
-      .min(1, 'La ubicación es requerida'),
-    venue: z.string()
-      .optional(),
-    coordinates: z.tuple([z.number(), z.number()])
-      .optional()
-  }),
-  price: z.object({
-    amount: z.number()
-      .min(0, 'El precio no puede ser negativo'),
-    currency: z.string()
-  }),
-  maxAttendees: z.number()
-    .min(1, 'Debe permitir al menos 1 asistente')
-    .max(10000, 'El máximo de asistentes es 10000'),
-  isPrivate: z.boolean(),
-  tags: z.array(z.string()),
-  ageRestriction: z.object({
-    minAge: z.number().min(0).default(0),
-    maxAge: z.number().optional(),
-    isAdultOnly: z.boolean().default(false)
-  }).optional(),
-  isVirtual: z.boolean().default(false),
-  virtualLink: z.string().optional(),
-  accessibility: z.array(z.string()).default([])
-})
-
-type EventFormData = z.infer<typeof eventSchema>
-
-interface EventForm {
-  title: string
-  description: string
-  category: string
-  date: string
-  time: string
-  endTime: string
-  location: {
-    address: string
-    venue?: string
-    coordinates?: [number, number]
-  }
-  price: {
-    amount: number
-    currency: string
-  }
-  maxAttendees: number
-  isPrivate: boolean
-  tags: string[]
-  images: File[]
-  ageRestriction?: {
-    minAge: number
-    maxAge?: number
-    isAdultOnly: boolean
-  }
-  isVirtual: boolean
-  virtualLink?: string
-  accessibility: string[]
-}
-
-const categories = [
-  { id: 'technology', name: 'Tecnología', emoji: '💻', color: 'from-blue-500 to-cyan-500' },
-  { id: 'music', name: 'Música', emoji: '🎵', color: 'from-orange-500 to-red-500' },
-  { id: 'art', name: 'Arte', emoji: '🖼️', color: 'from-pink-500 to-orange-500' },
-  { id: 'food', name: 'Gastronomía', emoji: '🍽️', color: 'from-orange-500 to-yellow-500' },
-  { id: 'sports', name: 'Deportes', emoji: '⚽', color: 'from-blue-500 to-green-500' },
-  { id: 'education', name: 'Educación', emoji: '📚', color: 'from-indigo-500 to-blue-500' },
-  { id: 'business', name: 'Negocios', emoji: '🤝', color: 'from-purple-500 to-blue-500' },
-  { id: 'other', name: 'Otro', emoji: '📋', color: 'from-gray-500 to-slate-500' }
-]
+const categories = CATEGORY_LIST.map(c => ({
+  id: c.slug,
+  name: c.label,
+  emoji: c.emoji,
+  color: c.color
+}))
 
 const currencies = [
+  { code: 'DOP', symbol: 'RD$', name: 'Peso Dominicano' },
   { code: 'MXN', symbol: '$', name: 'Peso Mexicano' },
   { code: 'USD', symbol: '$', name: 'Dólar Americano' },
   { code: 'EUR', symbol: '€', name: 'Euro' }
 ]
 
-export default function CreateEventPage() {
+function CreateEventForm() {
+  const owner = useAuthStore(state => state.user?._id || state.user?.id || '')
+  const formAlive = useRef(true)
+  useEffect(() => { formAlive.current = true; return () => { formAlive.current = false } }, [])
+  const accountIsCurrent = () => {
+    const user = useAuthStore.getState().user
+    return formAlive.current && Boolean(owner) && owner === (user?._id || user?.id || '')
+  }
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const ideaIdParam = searchParams.get('idea')
+  const titleParam = searchParams.get('title')
+  const categoryParam = searchParams.get('category')
+  const activityTypeParam = searchParams.get('activityType')
+  const zoneParam = searchParams.get('zone')
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [currentStep, setCurrentStep] = useState(1)
   const [newTag, setNewTag] = useState('')
@@ -127,8 +61,40 @@ export default function CreateEventPage() {
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false)
   const [isSearchingLocation, setIsSearchingLocation] = useState(false)
   const [images, setImages] = useState<File[]>([])
+  const [isConnectAgendaOpen, setIsConnectAgendaOpen] = useState(false)
+  const [friendDraftApplied, setFriendDraftApplied] = useState(false)
+  const [friendDraftReviewed, setFriendDraftReviewed] = useState(false)
+
+  const handleApplyFriendDraft = (draft: FriendPlanDraft) => {
+    if (!accountIsCurrent()) return
+    setFriendDraftApplied(true); setFriendDraftReviewed(false)
+    if (draft.title) setValue('title', draft.title, { shouldValidate: true })
+    if (draft.description) setValue('description', draft.description, { shouldValidate: true })
+    if (draft.category) setValue('category', draft.category as any, { shouldValidate: true })
+    if (draft.localDate) setValue('date', draft.localDate, { shouldValidate: true })
+    if (draft.localTime) setValue('time', draft.localTime, { shouldValidate: true })
+    if (draft.localDate || draft.localTime || draft.venue) setValue('timeZone', draft.timeZone || '', { shouldValidate: true })
+    if (draft.venue) {
+      selectedGeocode.current = false
+      setValue('location.venue', draft.venue, { shouldValidate: true })
+      setValue('location.address', draft.venue, { shouldValidate: true })
+      setValue('location.coordinates', undefined, { shouldValidate: true })
+      setValue('location.city', ''); setValue('location.country', ''); setValue('location.countryCode', '')
+      setCoordinateDraft({ latitude: '', longitude: '' })
+      setLocationQuery(draft.venue)
+    }
+    if (draft.isPrivate !== undefined) {
+      setValue('isPrivate', draft.isPrivate, { shouldValidate: true })
+    }
+  }
   const [isEnhancing, setIsEnhancing] = useState(false)
-  const [enhancedPreview, setEnhancedPreview] = useState<{ title?: string, description?: string } | null>(null)
+  const [coordinateDraft, setCoordinateDraft] = useState({ latitude: '', longitude: '' })
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  const locationTimer = useRef<ReturnType<typeof setTimeout>>()
+  const locationRequest = useRef<AbortController | null>(null)
+  const locationVersion = useRef(0)
+  const selectedGeocode = useRef(false)
+  const { location: liveLocation, refreshNow, presets } = useLiveLocation(true)
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, trigger, watch, setValue } = useForm<EventFormData>({
     resolver: zodResolver(eventSchema),
@@ -136,21 +102,28 @@ export default function CreateEventPage() {
     shouldUnregister: false,
     defaultValues: {
       title: '',
-      description: 'Únete a este increíble evento en EventConnect.',
+      description: '',
       category: 'technology',
       date: '',
       time: '',
       endTime: '',
+      timeZone: '',
       location: {
         address: '',
-        venue: ''
+        venue: '',
+        city: '', country: '', countryCode: '',
       },
       price: {
         amount: 0,
-        currency: 'MXN'
+        currency: 'DOP'
       },
       maxAttendees: 50,
       isPrivate: false,
+      isUnofficial: false,
+      isSecretLocation: false,
+      ticketUrl: '',
+      activityType: '',
+      sourceIdeaId: '',
       tags: [],
       ageRestriction: {
         minAge: 0,
@@ -162,7 +135,68 @@ export default function CreateEventPage() {
     }
   })
 
+  useEffect(() => {
+    setValue('timeZone', deviceTimeZone())
+  }, [setValue])
+
+  useEffect(() => {
+    if (ideaIdParam) setValue('sourceIdeaId', ideaIdParam)
+    if (titleParam) setValue('title', titleParam, { shouldValidate: true })
+    if (categoryParam) setValue('category', categoryParam as any, { shouldValidate: true })
+    if (activityTypeParam) setValue('activityType', activityTypeParam)
+    if (zoneParam) {
+      setValue('location.venue', zoneParam)
+      setValue('location.address', zoneParam)
+      setLocationQuery(zoneParam)
+    }
+  }, [ideaIdParam, titleParam, categoryParam, activityTypeParam, zoneParam, setValue])
+
+  const applyPresetLocation = useCallback((preset: VenuePreset) => {
+    selectedGeocode.current = true
+    setValue('location.venue', preset.venue || preset.name, { shouldValidate: true })
+    setValue('location.address', preset.address, { shouldValidate: true })
+    setValue('location.coordinates', [preset.lng, preset.lat], { shouldValidate: true })
+    setValue('location.city', preset.city, { shouldValidate: true })
+    setValue('location.country', preset.country, { shouldValidate: true })
+    setValue('location.countryCode', preset.countryCode || 'DO', { shouldValidate: true })
+    setCoordinateDraft({ latitude: String(preset.lat), longitude: String(preset.lng) })
+    setLocationQuery(preset.address)
+    setShowLocationSuggestions(false)
+    setLocationSuggestions([])
+    toast.success(`Ubicación seleccionada: ${preset.name}`)
+  }, [setValue])
+
+  const applyLiveLocationNow = useCallback(async () => {
+    const loc = await refreshNow()
+    selectedGeocode.current = true
+    setValue('location.venue', loc.venue || loc.city, { shouldValidate: true })
+    setValue('location.address', loc.address, { shouldValidate: true })
+    setValue('location.coordinates', [loc.lng, loc.lat], { shouldValidate: true })
+    setValue('location.city', loc.city, { shouldValidate: true })
+    setValue('location.country', loc.country, { shouldValidate: true })
+    setValue('location.countryCode', loc.countryCode || 'DO', { shouldValidate: true })
+    setCoordinateDraft({ latitude: String(loc.lat), longitude: String(loc.lng) })
+    setLocationQuery(loc.address)
+    setShowLocationSuggestions(false)
+    toast.success(`📍 Ubicación GPS activa: ${loc.city}`)
+  }, [refreshNow, setValue])
+
+  useEffect(() => {
+    if (!zoneParam && !locationQuery && liveLocation?.lat && liveLocation?.lng) {
+      setValue('location.venue', liveLocation.venue || liveLocation.city)
+      setValue('location.address', liveLocation.address)
+      setValue('location.coordinates', [liveLocation.lng, liveLocation.lat])
+      setValue('location.city', liveLocation.city)
+      setValue('location.country', liveLocation.country)
+      setValue('location.countryCode', liveLocation.countryCode || 'DO')
+      setCoordinateDraft({ latitude: String(liveLocation.lat), longitude: String(liveLocation.lng) })
+      setLocationQuery(liveLocation.address)
+    }
+  }, [liveLocation, zoneParam, locationQuery, setValue])
+
   const formData = watch()
+  const friendReviewFields = JSON.stringify([formData.date, formData.time, formData.timeZone, formData.location, formData.price, formData.isPrivate])
+  useEffect(() => { setFriendDraftReviewed(false) }, [friendReviewFields])
   const tags = watch('tags')
 
   // Function to upload images to backend
@@ -186,65 +220,44 @@ export default function CreateEventPage() {
       return []
     } catch (error) {
       console.error('Image upload failed:', error)
-      toast.error('Error al subir imágenes, continuando sin ellas')
-      return [] // Return empty array to allow event creation without images
+      throw new Error('No se pudieron subir las imágenes. Inténtalo de nuevo o retíralas antes de publicar.')
     }
   }
 
   // Create event mutation
   const createEventMutation = useMutation({
     mutationFn: async (eventData: EventFormData) => {
-      // Upload images first if any
-      const uploadedImages = await uploadImages(images)
+      if (!accountIsCurrent()) throw new Error('Inicia sesión con la cuenta que está creando el evento.')
+      // Validate schedule before uploading files so invalid dates do not create orphan assets.
+      const eventForBackend = createEventPayload(eventSchema.parse(eventData))
+      eventForBackend.images = await uploadImages(images)
 
-      // Calculate end date/time - if no endTime provided, use same as start time
-      const endTimeToUse = eventData.endTime || eventData.time
-
-      // Ensure endDate is at least equal to or after startDate
-      const startDate = new Date(`${eventData.date}T${eventData.time}`)
-      const endDate = new Date(`${eventData.date}T${endTimeToUse}`)
-
-      if (endDate < startDate) {
-        // If endTime is earlier than startTime, assume it's next day
-        endDate.setDate(endDate.getDate() + 1)
-      }
-
-      // Prepare event data for backend
-      const eventForBackend = {
-        title: eventData.title,
-        description: eventData.description,
-        category: eventData.category,
-        date: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        location: {
-          type: 'Point',
-          coordinates: eventData.location.coordinates || [0, 0], // Default coordinates if none provided
-          address: eventData.location.address || eventData.location.venue || '',
-          venue: eventData.location.venue
-        },
-        images: uploadedImages,
-        maxAttendees: eventData.maxAttendees,
-        isPrivate: eventData.isPrivate,
-        tags: eventData.tags,
-        price: {
-          amount: eventData.price.amount,
-          currency: eventData.price.currency
-        },
-        ageRestriction: eventData.ageRestriction,
-        isVirtual: eventData.isVirtual,
-        virtualLink: eventData.virtualLink,
-        accessibility: eventData.accessibility,
-        createdBy: 'auto' // This will be set by auth middleware in backend
-      }
-
+      if (!accountIsCurrent()) throw new Error('La cuenta cambió. Vuelve a revisar el evento antes de enviarlo.')
       const response = await apiClient.post('/events', eventForBackend)
+      if (response.data.success !== true) throw new Error(response.data.message || 'No se pudo guardar el evento.')
       return response.data
     },
-    onSuccess: (data) => {
-      toast.success('Evento creado exitosamente')
+    onSuccess: async (data, variables) => {
+      if (!accountIsCurrent()) return
+      if (variables.sourceIdeaId) {
+        const eventId = data?._id || data?.event?._id || data?.data?._id
+        if (eventId) {
+          try {
+            await apiClient.post(`/ideas/${variables.sourceIdeaId}/launch`, { eventId })
+            toast.success('¡Idea comunitaria activada! Se notificó a los interesados.')
+          } catch (err) {
+            console.error('Error al activar idea comunitaria:', err)
+          }
+        }
+      }
+      if (data?.isPendingReview) {
+        toast.success(data?.message || '🛡️ ¡Evento recibido! Tu evento está en proceso de revisión por los moderadores antes de ser publicado en el mapa.', { duration: 6500 })
+      } else {
+        toast.success('¡Evento creado y publicado exitosamente!')
+      }
       // Ensure we have a valid ID before navigating
-      if (data?._id || data?.event?._id) {
-        const eventId = data._id || data.event._id
+      if (data?._id || data?.event?._id || data?.data?._id) {
+        const eventId = data._id || data.event?._id || data.data?._id
         router.push(`/events/${eventId}`)
       } else {
         // Fallback to events list if no ID
@@ -252,15 +265,14 @@ export default function CreateEventPage() {
       }
     },
     onError: (error: any) => {
+      if (!accountIsCurrent()) return
       console.error('Create event error:', error)
-      toast.error(error.response?.data?.message || 'Error al crear el evento')
+      toast.error(error.response?.data?.errors?.join('. ') || error.response?.data?.message || error.message || 'Error al crear el evento')
     }
   })
 
   const onSubmit = async (data: EventFormData) => {
-    console.log('📝 Event form submitted:', data)
-    console.log('🖼️ Images to upload:', images)
-    console.log('✅ Form validation passed')
+    if (friendDraftApplied && !friendDraftReviewed) { setCurrentStep(5); toast.error('Revisa y confirma los datos importados antes de publicar.'); return }
     createEventMutation.mutate(data)
   }
 
@@ -281,14 +293,18 @@ export default function CreateEventPage() {
         setValue('description', res.data.data.description, { shouldValidate: true });
         toast.success('¡Contenido mejorado con IA! ✨');
       }
-    } catch (err) {
-      toast.error('Error al conectar con la IA');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'La mejora con IA no está disponible. Tu texto se conserva.');
     } finally {
       setIsEnhancing(false);
     }
   }
 
   const handleAddTag = () => {
+    if (tags.length >= 10 || !/^[a-zA-Z0-9\u00C0-\u017F_-]{1,30}$/.test(newTag.trim())) {
+      toast.error('Máximo 10 etiquetas de 30 caracteres: letras, números, guiones o guiones bajos')
+      return
+    }
     if (newTag.trim() && !tags.includes(newTag.trim())) {
       setValue('tags', [...tags, newTag.trim()], { shouldValidate: true })
       setNewTag('')
@@ -306,103 +322,165 @@ export default function CreateEventPage() {
       return
     }
 
+    if (files.some(file => !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+      toast.error('Usa imágenes JPG, PNG, WebP o GIF de hasta 5 MB')
+      e.target.value = ''
+      return
+    }
     setImages([...images, ...files])
+    e.target.value = ''
   }
 
-  // Search for locations using Google Maps Geocoding API
+  // Search for locations using RD presets, Google Maps (if key configured), and Nominatim fallback
   const searchLocations = useCallback(async (query: string) => {
-    if (query.length < 3) {
+    if (query.length < 2) {
       setLocationSuggestions([])
       return
     }
+
+    const version = ++locationVersion.current
+    locationRequest.current?.abort()
+    const controller = new AbortController()
+    locationRequest.current = controller
+
+    // Instant local matching on Dominican Republic presets
+    const qLower = query.toLowerCase().trim()
+    const presetMatches = RD_VENUE_PRESETS.filter(p =>
+      p.name.toLowerCase().includes(qLower) ||
+      p.venue.toLowerCase().includes(qLower) ||
+      p.address.toLowerCase().includes(qLower) ||
+      p.city.toLowerCase().includes(qLower)
+    ).map(p => ({
+      id: `preset_${p.id}`,
+      name: p.name,
+      address: p.address,
+      city: p.city,
+      country: p.country,
+      countryCode: p.countryCode,
+      coordinates: [p.lng, p.lat],
+      type: 'preset',
+      originalData: p
+    }))
 
     try {
       setIsSearchingLocation(true)
 
       const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-      if (!apiKey || apiKey === 'your_google_maps_api_key') {
-        throw new Error('Google Maps API key not configured')
+
+      // If Google Maps API is configured and valid
+      if (apiKey && apiKey !== 'your_google_maps_api_key') {
+        const response = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`,
+          { signal: controller.signal }
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.status === 'OK') {
+            const googleSuggestions = (data.results || []).map((item: any, index: number) => {
+              let name = item.formatted_address.split(',')[0]
+              const route = item.address_components?.find((c: any) => c.types.includes('route'))?.long_name
+              const streetNumber = item.address_components?.find((c: any) => c.types.includes('street_number'))?.long_name
+              const poi = item.address_components?.find((c: any) => c.types.includes('point_of_interest') || c.types.includes('establishment'))?.long_name
+
+              if (poi) name = poi
+              else if (route && streetNumber) name = `${route} ${streetNumber}`
+              else if (route) name = route
+
+              return {
+                id: item.place_id || `g_${index}`,
+                name: name || 'Ubicación',
+                address: item.formatted_address,
+                ...locationMetadata(item.address_components),
+                coordinates: [item.geometry.location.lng, item.geometry.location.lat],
+                type: item.types?.[0] || 'location',
+                originalData: item
+              }
+            })
+
+            const merged = [...presetMatches, ...googleSuggestions]
+            if (version === locationVersion.current) setLocationSuggestions(merged)
+            return
+          }
+        }
       }
 
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`
+      // Fallback: OpenStreetMap Nominatim Geocoding (works without any API key)
+      const nomRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=do&q=${encodeURIComponent(query)}`,
+        { signal: controller.signal }
       )
 
-      if (!response.ok) {
-        throw new Error('Failed to search locations')
-      }
-
-      const data = await response.json()
-      
-      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Maps API error: ${data.status}`)
-      }
-
-      const suggestions = (data.results || []).map((item: any, index: number) => {
-        // Extract relevant information from Google Geocoding response
-        let name = item.formatted_address.split(',')[0] // Use first part as name fallback
-
-        // Try to find a better name from address_components
-        const route = item.address_components?.find((c: any) => c.types.includes('route'))?.long_name
-        const streetNumber = item.address_components?.find((c: any) => c.types.includes('street_number'))?.long_name
-        const poi = item.address_components?.find((c: any) => c.types.includes('point_of_interest') || c.types.includes('establishment'))?.long_name
-
-        if (poi) {
-          name = poi
-        } else if (route && streetNumber) {
-          name = `${route} ${streetNumber}` // Standard format
-        } else if (route) {
-          name = route
-        }
-
-        return {
-          id: item.place_id || `${index}`,
-          name: name || 'Ubicación',
-          address: item.formatted_address,
-          coordinates: [item.geometry.location.lng, item.geometry.location.lat], // Longitude first
-          type: item.types?.[0] || 'location',
+      if (nomRes.ok) {
+        const nomData = await nomRes.json()
+        const nomSuggestions = (nomData || []).map((item: any) => ({
+          id: `nom_${item.place_id}`,
+          name: item.display_name.split(',')[0],
+          address: item.display_name,
+          city: item.address?.city || item.address?.town || item.address?.state || 'Santo Domingo',
+          country: item.address?.country || 'República Dominicana',
+          countryCode: (item.address?.country_code || 'do').toUpperCase(),
+          coordinates: [parseFloat(item.lon), parseFloat(item.lat)],
+          type: 'location',
           originalData: item
-        }
-      })
+        }))
 
-      setLocationSuggestions(suggestions)
+        const combined = [...presetMatches, ...nomSuggestions]
+        if (version === locationVersion.current) setLocationSuggestions(combined)
+        return
+      }
+
+      if (version === locationVersion.current) setLocationSuggestions(presetMatches)
     } catch (error) {
-      console.error('Error searching locations:', error)
-
-      // Fallback: create a simple suggestion based on user input
-      const fallbackSuggestion = [{
-        id: 'manual_1',
-        name: query,
-        address: query,
-        coordinates: [0, 0],
-        type: 'manual'
-      }]
-
-      setLocationSuggestions(fallbackSuggestion)
+      if (version === locationVersion.current) setLocationSuggestions(presetMatches)
     } finally {
-      setIsSearchingLocation(false)
+      if (version === locationVersion.current) setIsSearchingLocation(false)
     }
   }, [])
 
   const handleLocationSearch = (query: string) => {
+    selectedGeocode.current = false
     setLocationQuery(query)
+    setValue('location.address', query, { shouldValidate: true })
+    setValue('location.venue', '')
+    setValue('location.coordinates', undefined)
+    setValue('location.city', '')
+    setValue('location.country', '')
+    setValue('location.countryCode', '')
+    setCoordinateDraft({ latitude: '', longitude: '' })
+    setLocationSuggestions([])
     setShowLocationSuggestions(true)
-
-    // Debounce the search to avoid too many API calls
-    clearTimeout((window as any).locationSearchTimeout)
-      ; (window as any).locationSearchTimeout = setTimeout(() => {
-        searchLocations(query)
-      }, 500)
+    locationVersion.current += 1
+    locationRequest.current?.abort()
+    setIsSearchingLocation(false)
+    clearTimeout(locationTimer.current)
+    locationTimer.current = setTimeout(() => searchLocations(query), 500)
   }
 
   const selectLocation = (suggestion: any) => {
+    selectedGeocode.current = Boolean(suggestion.originalData)
     setValue('location.venue', suggestion.name, { shouldValidate: true })
     setValue('location.address', suggestion.address, { shouldValidate: true })
     setValue('location.coordinates', suggestion.coordinates, { shouldValidate: true })
-    setLocationQuery(suggestion.name)
+    setValue('location.city', suggestion.city || '', { shouldValidate: true })
+    setValue('location.country', suggestion.country || '', { shouldValidate: true })
+    setValue('location.countryCode', suggestion.countryCode || '', { shouldValidate: true })
+    setCoordinateDraft({ latitude: String(suggestion.coordinates?.[1] ?? ''), longitude: String(suggestion.coordinates?.[0] ?? '') })
+    setLocationQuery(suggestion.address)
     setShowLocationSuggestions(false)
     setLocationSuggestions([])
   }
+
+  useEffect(() => {
+    const urls = images.map(file => URL.createObjectURL(file))
+    setImagePreviews(urls)
+    return () => urls.forEach(url => URL.revokeObjectURL(url))
+  }, [images])
+
+  useEffect(() => () => {
+    clearTimeout(locationTimer.current)
+    locationRequest.current?.abort()
+  }, [])
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -437,11 +515,11 @@ export default function CreateEventPage() {
       case 1:
         return await trigger(['title', 'description', 'category'])
       case 2:
-        return await trigger(['date', 'time'])
+        return await trigger(['date', 'time', 'endTime', 'timeZone', 'tags'])
       case 3:
-        return await trigger(['location.address', 'maxAttendees'])
+        return await trigger(['location', 'maxAttendees', 'virtualLink'])
       case 4:
-        return await trigger(['price.amount'])
+        return await trigger(['price', 'ageRestriction'])
       case 5:
         return true
       default:
@@ -458,6 +536,19 @@ export default function CreateEventPage() {
 
   return (
     <div className="min-h-screen bg-transparent">
+      {searchParams.get('draft') && <ImportPlanDraft id={searchParams.get('draft')!} onApply={fields => {
+        if (fields.title) setValue('title', fields.title, { shouldDirty: true })
+        if (fields.description) setValue('description', fields.description, { shouldDirty: true })
+        if (fields.address) { setValue('location.address', fields.address, { shouldDirty: true }); setLocationQuery(fields.address) }
+        if (fields.city) setValue('location.city', fields.city, { shouldDirty: true })
+        if (fields.amount !== undefined) setValue('price.amount', fields.amount, { shouldDirty: true })
+        if (fields.currency) setValue('price.currency', fields.currency, { shouldDirty: true })
+        if (fields.timeZone) {
+          setValue('timeZone', fields.timeZone, { shouldDirty: true })
+          if (fields.date) setValue('date', fields.date, { shouldDirty: true })
+          if (fields.time) setValue('time', fields.time, { shouldDirty: true })
+        } else { setValue('date', ''); setValue('time', ''); toast('Confirma la zona horaria, fecha y hora del borrador antes de enviar.'); }
+      }} />}
       {/* Header */}
       <motion.div
         initial={{ y: -20, opacity: 0 }}
@@ -495,7 +586,7 @@ export default function CreateEventPage() {
               initial={{ width: '0%' }}
               animate={{ width: `${(currentStep / steps.length) * 100}%` }}
               transition={{ duration: 0.5 }}
-              className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full"
+              className="bg-gradient-to-r from-violet-500 to-cyan-500 h-2 rounded-full"
             />
           </div>
         </div>
@@ -526,7 +617,7 @@ export default function CreateEventPage() {
       </motion.div>
 
       {/* Form Content */}
-      <div className="max-w-4xl mx-auto px-4 py-6 pb-24">
+      <div className="max-w-4xl mx-auto px-4 py-6 pb-48 md:pb-28">
 
         <div className="glass border-white/10 rounded-3xl shadow-2xl p-6 lg:p-8 backdrop-blur-xl bg-white/5">
           <form
@@ -549,12 +640,54 @@ export default function CreateEventPage() {
                   exit={{ opacity: 0, x: -20 }}
                   className="space-y-6"
                 >
+                  {formData.sourceIdeaId && (
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-600/15 to-fuchsia-600/15 border border-violet-500/30 flex items-start gap-3">
+                      <Sparkles className="h-5 w-5 text-violet-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-sm text-foreground">Creando evento desde una idea comunitaria</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Al publicar este plan, todos los ciudadanos que expresaron interés recibirán una notificación automática para sumarse.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Operational Source Ingestion - Tier 4 Friend Coro Drafter */}
+                  <FriendPlanDraftCard onApplyDraft={handleApplyFriendDraft} />
+
+                  {/* Tier 2 Organizer Agenda Connector Banner */}
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Calendar className="h-5 w-5" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm text-foreground">¿Eres organizador con web o calendario?</p>
+                        <p className="text-xs text-muted-foreground">Consulta una agenda iCalendar, JSON o WordPress que ya esté registrada y aprobada. Las fichas nuevas pasan por moderación.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsConnectAgendaOpen(true)}
+                      className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+                    >
+                      <span>Consultar mis agendas</span>
+                    </button>
+                  </div>
+
+                  <ConnectAgendaModal
+                    isOpen={isConnectAgendaOpen}
+                    onClose={() => setIsConnectAgendaOpen(false)}
+                    onSuccess={() => {
+                      toast.success('Consulta terminada. Revisa en el resultado qué fichas se guardaron y cuáles siguen pendientes.')
+                    }}
+                  />
+
                   <div>
-                    <label className="block text-sm font-semibold text-foreground mb-2">
+                    <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="create-event-title">
                       Título del Evento *
                     </label>
                     <input
                       type="text"
+                      id="create-event-title"
                       {...register('title')}
                       placeholder="Ej: Conferencia de Tecnología 2024"
                       className="w-full p-4 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -565,10 +698,11 @@ export default function CreateEventPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-foreground mb-2">
+                    <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="create-event-description">
                       Descripción *
                     </label>
                     <textarea
+                      id="create-event-description"
                       {...register('description')}
                       placeholder="Describe tu evento, qué pueden esperar los asistentes..."
                       className="w-full p-4 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
@@ -584,7 +718,7 @@ export default function CreateEventPage() {
                       type="button"
                       onClick={handleEnhanceWithAI}
                       disabled={isEnhancing}
-                      className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all transform hover:scale-105"
+                      className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-cyan-500 hover:from-purple-600 hover:to-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all transform hover:scale-105"
                     >
                       {isEnhancing ? (
                         <div className="animate-spin w-4 h-4 border-2 border-white rounded-full border-t-transparent" />
@@ -615,7 +749,7 @@ export default function CreateEventPage() {
                           {images.map((file, index) => (
                             <div key={index} className="relative group">
                               <img
-                                src={URL.createObjectURL(file)}
+                                src={imagePreviews[index]}
                                 alt={`Preview ${index + 1}`}
                                 className="w-full h-32 object-cover rounded-xl"
                               />
@@ -678,7 +812,7 @@ export default function CreateEventPage() {
                           type="button"
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          onClick={() => setValue('category', category.id, { shouldValidate: true })}
+                          onClick={() => setValue('category', category.id as any, { shouldValidate: true })}
                           className={`p-3 rounded-xl border transition-all ${formData.category === category.id
                             ? 'border-blue-500 bg-blue-500/10 text-blue-600'
                             : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -692,6 +826,21 @@ export default function CreateEventPage() {
                     {errors.category && (
                       <p className="text-red-500 text-sm mt-1">{errors.category.message}</p>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-1">
+                      Actividad específica de nicho (opcional)
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Ej: Violín en el parque, Pintar al aire libre, Jam session, Torneo de ajedrez, Club de lectura. Conecta con quienes buscan exactamente este plan.
+                    </p>
+                    <input
+                      type="text"
+                      {...register('activityType')}
+                      placeholder="Ej: Violín en el parque, Pintura libre, Jam de piano..."
+                      className="w-full p-4 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-primary-500 text-sm"
+                    />
                   </div>
                 </motion.div>
               )}
@@ -713,15 +862,21 @@ export default function CreateEventPage() {
                   </div>
 
                   {/* Date and Time */}
+                  <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 p-4 text-sm">
+                    <label htmlFor="event-time-zone" className="font-semibold">Zona horaria del evento</label>
+                    <input id="event-time-zone" list="event-time-zones" value={formData.timeZone || ''} onChange={event => setValue('timeZone', event.target.value, { shouldDirty: true })} placeholder="America/Santo_Domingo" className="mt-2" />
+                    <datalist id="event-time-zones">{['America/Santo_Domingo', 'America/New_York', 'America/Mexico_City', 'America/Bogota', 'America/Argentina/Buenos_Aires', 'America/Los_Angeles', 'Europe/Madrid', 'Europe/London', 'Africa/Johannesburg', 'Asia/Tokyo', 'Asia/Kolkata', 'Australia/Sydney', 'Pacific/Auckland', 'UTC'].map(zone => <option key={zone} value={zone} />)}</datalist>
+                    <p className="mt-1 text-muted-foreground">Introduce la hora local del lugar del evento. Puedes elegir cualquier zona IANA; cambiar el país no altera el horario. Las horas ambiguas por cambio de horario requieren otra hora.</p>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-semibold text-foreground mb-2">
+                      <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="create-event-date">
                         Fecha *
                       </label>
                       <input
                         type="date"
-                        {...register('date')}
-                        min={new Date().toISOString().split('T')[0]}
+                        id="create-event-date"
+                      {...register('date')}
                         className="w-full p-4 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                       {errors.date && (
@@ -730,12 +885,13 @@ export default function CreateEventPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-foreground mb-2">
+                      <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="create-event-time">
                         Hora de inicio *
                       </label>
                       <input
                         type="time"
-                        {...register('time')}
+                        id="create-event-time"
+                      {...register('time')}
                         className="w-full p-4 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                       {errors.time && (
@@ -746,17 +902,18 @@ export default function CreateEventPage() {
 
                   {/* End Time */}
                   <div>
-                    <label className="block text-sm font-semibold text-foreground mb-2">
+                    <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="create-event-endTime">
                       Hora de finalización (opcional)
                     </label>
                     <input
                       type="time"
+                      id="create-event-endTime"
                       {...register('endTime')}
                       className="w-full p-4 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Si no se especifica, se usará la hora de inicio"
+                      placeholder="Si no se especifica, durará dos horas"
                     />
                     <p className="text-xs text-muted-foreground mt-2">
-                      Si tu evento dura todo el día o termina a la misma hora, déjalo vacío
+                      Sin hora final se reservarán dos horas. Una hora final igual o anterior al inicio corresponde al día siguiente.
                     </p>
                   </div>
 
@@ -828,10 +985,55 @@ export default function CreateEventPage() {
                     </p>
                   </div>
 
+                  {/* Live GPS Location & Quick Fill */}
+                  {!formData.isVirtual && (
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-2xl border border-blue-500/30 bg-blue-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold">
+                            <Navigation className="w-5 h-5 animate-pulse" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-blue-400">GPS en Tiempo Real</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {liveLocation.address || `${liveLocation.city}, ${liveLocation.country}`}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={applyLiveLocationNow}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-500 transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-md"
+                        >
+                          <MapPin className="w-3.5 h-3.5" /> Usar mi ubicación actual
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1.5">
+                          Destinos y Lugares Populares en RD (1 Clic)
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {presets.slice(0, 6).map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => applyPresetLocation(preset)}
+                              className="px-3 py-1.5 rounded-xl border border-border bg-card hover:border-blue-500/50 hover:bg-blue-500/10 text-xs font-medium text-foreground transition-all flex items-center gap-1.5"
+                            >
+                              <span>📍</span>
+                              <span>{preset.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Location Search */}
-                  <div className="relative">
+                  {!formData.isVirtual && <div className="relative">
                     <label className="block text-sm font-semibold text-foreground mb-2">
-                      Buscar Ubicación *
+                      Dirección del evento presencial *
                     </label>
                     <div className="relative">
                       <input
@@ -914,7 +1116,7 @@ export default function CreateEventPage() {
                                 id: 'manual_input',
                                 name: locationQuery,
                                 address: locationQuery,
-                                coordinates: [0, 0],
+                                coordinates: undefined,
                                 type: 'manual'
                               })}
                               className="text-sm text-blue-500 hover:text-blue-600 underline"
@@ -927,8 +1129,43 @@ export default function CreateEventPage() {
                     )}
                   </div>
 
+                  }
+                  {!formData.isVirtual && <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label htmlFor="event-country" className="mb-2 block text-sm font-semibold">País del evento *</label>
+                      <select id="event-country" value={formData.location.countryCode || ''} onChange={event => {
+                        const code = event.target.value
+                        if (code === formData.location.countryCode) return
+                        if (formData.location.countryCode && formData.location.countryCode !== code) {
+                          setValue('location.coordinates', undefined)
+                          setCoordinateDraft({ latitude: '', longitude: '' })
+                        }
+                        selectedGeocode.current = false
+                        setValue('location.countryCode', code, { shouldValidate: true })
+                        setValue('location.country', countryName(code))
+                        setValue('location.city', '', { shouldValidate: true })
+                      }} aria-invalid={!!errors.location?.countryCode} className="w-full rounded-xl border border-border bg-background p-3 text-foreground">
+                        <option value="">Selecciona un país</option>
+                        {COUNTRY_OPTIONS.map(country => <option key={country.code} value={country.code}>{country.name}</option>)}
+                      </select>
+                      {errors.location?.countryCode && <p role="alert" className="mt-1 text-sm text-red-500">{errors.location.countryCode.message}</p>}
+                    </div>
+                    <div>
+                      <label htmlFor="event-city" className="mb-2 block text-sm font-semibold">Ciudad del evento *</label>
+                      <input id="event-city" value={formData.location.city || ''} onChange={event => {
+                        if (selectedGeocode.current) {
+                          selectedGeocode.current = false
+                          setValue('location.coordinates', undefined)
+                          setCoordinateDraft({ latitude: '', longitude: '' })
+                        }
+                        setValue('location.city', event.target.value, { shouldValidate: true })
+                      }} maxLength={100} autoComplete="address-level2" placeholder="Escribe la ciudad" aria-invalid={!!errors.location?.city} className="w-full rounded-xl border border-border bg-background p-3 text-foreground" />
+                      {errors.location?.city && <p role="alert" className="mt-1 text-sm text-red-500">{errors.location.city.message}</p>}
+                    </div>
+                    <p className="text-xs text-muted-foreground sm:col-span-2">Estos datos permiten encontrar tu evento por destino. Confirma que coinciden con la dirección y las coordenadas.</p>
+                  </div>}
                   {/* Selected Location Display */}
-                  {formData.location.venue && (
+                  {!formData.isVirtual && formData.location.venue && (
                     <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
                       <div className="flex items-start gap-3">
                         <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -949,22 +1186,51 @@ export default function CreateEventPage() {
                     </div>
                   )}
 
-                  {/* Additional Notes */}
-                  <div>
-                    <label className="block text-sm font-semibold text-foreground mb-2">
-                      Información adicional (opcional)
-                    </label>
-                    <textarea
-                      value={formData.location.address === formData.location.venue ? '' : formData.location.address}
-                      onChange={(e) => {
-                        const val = e.target.value || formData.location.venue || ''
-                        setValue('location', { ...formData.location, address: val })
-                      }}
-                      placeholder="Referencias adicionales, instrucciones de acceso, notas especiales..."
-                      rows={3}
-                      className="w-full p-4 glass bg-white/5 border border-white/10 rounded-xl resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+                  {!formData.isVirtual && <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">Selecciona una dirección encontrada o agrega las coordenadas reales del lugar. Puedes copiarlas de tu aplicación de mapas.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      {(['latitude', 'longitude'] as const).map(axis => (
+                        <label key={axis} className="block text-sm font-semibold">
+                          {axis === 'latitude' ? 'Latitud' : 'Longitud'}
+                          <input type="number" step="any" min={axis === 'latitude' ? -90 : -180} max={axis === 'latitude' ? 90 : 180}
+                            value={coordinateDraft[axis]} onChange={e => {
+                              selectedGeocode.current = false
+                              const draft = { ...coordinateDraft, [axis]: e.target.value }
+                              setCoordinateDraft(draft)
+                              setValue('location.coordinates', draft.latitude !== '' && draft.longitude !== '' ? [Number(draft.longitude), Number(draft.latitude)] : undefined, { shouldValidate: true })
+                            }} className="mt-2 w-full p-3 bg-background border border-border rounded-xl" />
+                        </label>
+                      ))}
+                    </div>
+                    {errors.location && <p role="alert" className="text-red-500 text-sm">{errors.location.address?.message || errors.location.coordinates?.message || 'La latitud debe estar entre -90 y 90, y la longitud entre -180 y 180.'}</p>}
+                  </div>}
+
+                  {!formData.isVirtual && (
+                    <motion.button
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.99 }}
+                      type="button"
+                      onClick={() => setValue('isSecretLocation', !formData.isSecretLocation)}
+                      className={`w-full p-4 rounded-xl border text-left transition-all ${formData.isSecretLocation
+                        ? 'border-violet-500 bg-violet-500/10'
+                        : 'border-white/10 glass bg-white/5 hover:bg-white/10'
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Lock className="w-5 h-5 text-violet-400" />
+                        <div className="flex-1">
+                          <p className="font-semibold text-foreground">
+                            {formData.isSecretLocation ? '🔒 Ubicación secreta activada' : '📍 Ubicación pública'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {formData.isSecretLocation
+                              ? 'La dirección exacta solo se revelará a quienes confirmen asistencia o adquieran entrada (ideal para eventos clandestinos, sorpresas o privados).'
+                              : 'Cualquiera podrá ver la dirección en el mapa.'}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.button>
+                  )}
 
                   {/* Virtual Event Toggle */}
                   <div className="pt-4 border-t border-white/10">
@@ -977,12 +1243,14 @@ export default function CreateEventPage() {
                         <input
                           type="checkbox"
                           {...register('isVirtual')}
+                          aria-label="Evento virtual"
                           className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
                       </label>
                     </div>
 
+                    {errors.virtualLink && <p role="alert" className="text-red-500 text-sm">{errors.virtualLink.message}</p>}
                     {watch('isVirtual') && (
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
@@ -996,7 +1264,8 @@ export default function CreateEventPage() {
                           <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                           <input
                             type="url"
-                            {...register('virtualLink', { required: watch('isVirtual') })}
+                            {...register('virtualLink')}
+                            aria-label="Enlace de la reunión"
                             placeholder="Ej: https://zoom.us/j/123456"
                             className="w-full pl-12 pr-4 py-4 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500"
                           />
@@ -1054,8 +1323,9 @@ export default function CreateEventPage() {
                     </label>
                     <input
                       type="number"
+                      value={formData.maxAttendees}
                       onChange={(e) => {
-                        const value = e.target.value === '' ? 0 : parseInt(e.target.value);
+                        const value = e.target.value === '' ? 0 : Number(e.target.value);
                         setValue('maxAttendees', value, { shouldValidate: true });
                       }}
                       placeholder="¿Cuántas personas pueden asistir?"
@@ -1068,13 +1338,6 @@ export default function CreateEventPage() {
                     )}
                   </div>
 
-                  {/* Map Preview Placeholder */}
-                  <div className="glass bg-white/10 rounded-xl p-6 text-center">
-                    <MapPin className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                    <p className="text-sm text-muted-foreground">
-                      Vista previa del mapa aparecerá aquí
-                    </p>
-                  </div>
                 </motion.div>
               )}
 
@@ -1106,8 +1369,10 @@ export default function CreateEventPage() {
                               </span>
                               <input
                                 type="number"
+                                min="0" max="1000000" step="0.01"
+                                value={formData.price.amount}
                                 onChange={(e) => {
-                                  const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                  const value = e.target.value === '' ? 0 : Number(e.target.value);
                                   setValue('price.amount', value, { shouldValidate: true });
                                 }}
                                 className="w-full pl-8 pr-4 py-3 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1132,11 +1397,30 @@ export default function CreateEventPage() {
                           </div>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          Deja el precio en 0 si el evento es gratuito
+                          Deja el precio en 0 si el evento es gratuito. Se creará una entrada general con esta capacidad y precio.
                         </p>
+
+                        {formData.price.amount > 0 && (
+                          <div className="pt-3 border-t border-gray-200 dark:border-gray-600">
+                            <label className="block text-sm font-medium text-foreground/90 mb-1">
+                              Enlace externo de compra de entradas (opcional)
+                            </label>
+                            <input
+                              type="url"
+                              {...register('ticketUrl')}
+                              placeholder="Ej: https://tix.do/evento, https://tuboleta.com.do o WhatsApp de reservas"
+                              className="w-full p-3 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Los asistentes podrán comprar sus boletas en este enlace o pagar en taquilla física según indiques.
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
+                    {errors.price?.amount && <p role="alert" className="text-sm text-red-500">{errors.price.amount.message}</p>}
+                    {errors.ageRestriction && <p role="alert" className="text-sm text-red-500">{errors.ageRestriction.maxAge?.message || errors.ageRestriction.minAge?.message}</p>}
                     {/* Age Restrictions */}
                     <div>
                       <h3 className="text-lg font-semibold text-foreground mb-4 mt-8">
@@ -1165,7 +1449,8 @@ export default function CreateEventPage() {
                               <input
                                 type="number"
                                 className="w-full p-3 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                min="0"
+                                min="0" max="120"
+                                value={formData.ageRestriction?.minAge ?? 0}
                                 onChange={(e) => {
                                   const value = e.target.value === '' ? 0 : parseInt(e.target.value);
                                   setValue('ageRestriction.minAge', value, { shouldValidate: true });
@@ -1180,7 +1465,8 @@ export default function CreateEventPage() {
                                 type="number"
                                 placeholder="Sin límite"
                                 className="w-full p-3 glass bg-white/5 border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                min="0"
+                                min="0" max="120"
+                                value={formData.ageRestriction?.maxAge ?? ''}
                                 onChange={(e) => {
                                   const value = e.target.value === '' ? undefined : parseInt(e.target.value);
                                   setValue('ageRestriction.maxAge', value, { shouldValidate: true });
@@ -1231,6 +1517,40 @@ export default function CreateEventPage() {
                         </div>
                       </div>
                     </motion.button>
+
+                    {/* Unofficial / Underground Event Toggle */}
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      type="button"
+                      onClick={() => setValue('isUnofficial', !formData.isUnofficial)}
+                      className={`w-full p-4 rounded-xl border text-left transition-all ${formData.isUnofficial
+                        ? 'border-violet-500 bg-gradient-to-r from-violet-600/15 to-fuchsia-600/15 shadow-[0_0_20px_rgba(139,92,246,0.2)]'
+                        : 'border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl flex-shrink-0">🤫</div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-foreground">
+                              {formData.isUnofficial ? 'Actividad Extra-oficial' : 'Evento Estándar'}
+                            </p>
+                            {formData.isUnofficial && (
+                              <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">
+                                Underground
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            {formData.isUnofficial
+                              ? 'Actividad comunitaria local e independiente, visible en la sección de recomendación clandestina.'
+                              : 'Evento formal o convencional.'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </motion.button>
                   </div>
                 </motion.div>
               )}
@@ -1252,6 +1572,7 @@ export default function CreateEventPage() {
                   </p>
                 </div>
 
+                {friendDraftApplied && <label className="flex items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm leading-6"><input type="checkbox" className="mt-1" checked={friendDraftReviewed} onChange={event => setFriendDraftReviewed(event.target.checked)} />Confirmé fecha, hora, zona horaria, ubicación y precio del texto importado. Si el precio es cero, confirmé que la entrada es gratuita.</label>}
                 {/* Event Preview */}
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-2xl border border-gray-200 dark:border-gray-600 overflow-hidden">
                   <div className="p-4">
@@ -1274,12 +1595,13 @@ export default function CreateEventPage() {
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-blue-500" />
-                        <span>{formData.date} a las {formData.time}</span>
+                        <span>{formData.date} a las {formData.time} ({formData.timeZone || 'zona por confirmar'})</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-red-500" />
-                        <span>{formData.location.venue || formData.location.address}</span>
+                        <span>{formData.isVirtual ? `En línea: ${formData.virtualLink}` : formData.location.venue || formData.location.address}</span>
                       </div>
+                      {!formData.isVirtual && <p className="pl-6 text-muted-foreground">{formData.location.city}, {formData.location.country}</p>}
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-green-500" />
                         <span>Hasta {formData.maxAttendees} personas</span>
@@ -1308,13 +1630,12 @@ export default function CreateEventPage() {
                 </div>
 
                 {/* Important Notes */}
-                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                  <h4 className="font-semibold text-blue-600 mb-2">📋 Antes de publicar</h4>
-                  <ul className="text-sm text-blue-600 space-y-1">
-                    <li>• Asegúrate de que toda la información sea correcta</li>
-                    <li>• Podrás editar algunos detalles después de publicar</li>
-                    <li>• Los asistentes recibirán notificaciones de cambios importantes</li>
-                    <li>• Tu evento aparecerá en búsquedas inmediatamente</li>
+                <div className="p-4 bg-purple-500/10 border border-purple-500/25 rounded-xl">
+                  <h4 className="font-semibold text-purple-400 mb-2">🛡️ Curaduría y Moderación de Eventos RD</h4>
+                  <ul className="text-sm text-gray-300 space-y-1.5">
+                    <li>• Para mantener la comunidad protegida contra eventos ficticios o engañosos, tu evento pasará por el equipo de moderación.</li>
+                    <li>• Si eres Organizador Verificado o Administrador, tu evento se publicará de inmediato.</li>
+                    <li>• Recibirás una notificación en cuanto el evento sea aprobado y se active en el mapa y la búsqueda.</li>
                   </ul>
                 </div>
               </motion.div>
@@ -1323,7 +1644,7 @@ export default function CreateEventPage() {
         </div>
 
         {/* Bottom Actions */}
-        <div className="fixed bottom-0 left-0 right-0 glass bg-white/5 backdrop-blur-xl border-t border-white/10 p-4">
+        <div className="fixed bottom-[60px] md:bottom-0 left-0 right-0 z-40 glass bg-white/90 dark:bg-gray-950/90 backdrop-blur-xl border-t border-gray-200 dark:border-white/10 p-4">
           <div className="max-w-4xl mx-auto flex gap-3">
             {currentStep > 1 && (
               <motion.button
@@ -1344,7 +1665,7 @@ export default function CreateEventPage() {
               form={currentStep === steps.length ? "create-event-form" : undefined}
               onClick={currentStep === steps.length ? undefined : handleNextStep}
               disabled={isSubmitting || createEventMutation.isPending}
-              className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-cyan-500 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {createEventMutation.isPending ? (
                 <>
@@ -1366,5 +1687,14 @@ export default function CreateEventPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CreateEventPage() {
+  const owner = useAuthStore(state => state.user?._id || state.user?.id || '')
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background p-8 flex items-center justify-center"><div className="h-64 w-full max-w-2xl animate-pulse rounded-3xl bg-muted" /></div>}>
+      <CreateEventForm key={owner} />
+    </Suspense>
   )
 }

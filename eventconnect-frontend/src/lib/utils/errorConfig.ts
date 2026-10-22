@@ -1,8 +1,13 @@
+const readDebugMode = (): boolean => {
+  try { return typeof window !== 'undefined' && window.localStorage.getItem('debug-mode') === 'true' }
+  catch { return false }
+}
+
 // Configuration for error reporting
 export const ERROR_REPORTING_CONFIG = {
   // Only report errors in production or when explicitly enabled
   enabled: process.env.NODE_ENV === 'production' ||
-           (typeof window !== 'undefined' && localStorage.getItem('debug-mode') === 'true'),
+           readDebugMode(),
 
   // Maximum errors to report per session
   maxErrorsPerSession: 50,
@@ -43,7 +48,14 @@ export const ERROR_REPORTING_CONFIG = {
 // Session error counter
 let sessionErrorCount = 0
 
-export const shouldReportError = (message: string, url?: string): boolean => {
+export const shouldReportError = (message: unknown, url?: unknown): boolean => {
+  let messageText = 'Unknown error'
+  let urlText = ''
+  try { messageText = typeof message === 'string' ? message : message == null ? 'Unknown error' : String(message) } catch { /* Ignore hostile string conversion. */ }
+  try {
+    const request = url && typeof url === 'object' ? url as { url?: unknown } : null
+    urlText = typeof url === 'string' ? url : typeof request?.url === 'string' ? request.url : url == null ? '' : String(url)
+  } catch { /* Ignore hostile string conversion. */ }
   // Check if error reporting is enabled
   if (!ERROR_REPORTING_CONFIG.enabled) {
     return false
@@ -55,12 +67,12 @@ export const shouldReportError = (message: string, url?: string): boolean => {
   }
 
   // Check excluded endpoints
-  if (url && ERROR_REPORTING_CONFIG.excludeEndpoints.some(endpoint => url.includes(endpoint))) {
+  if (urlText && ERROR_REPORTING_CONFIG.excludeEndpoints.some(endpoint => urlText.includes(endpoint))) {
     return false
   }
 
   // Check ignored messages
-  if (ERROR_REPORTING_CONFIG.ignoreMessages.some(ignore => message.includes(ignore))) {
+  if (ERROR_REPORTING_CONFIG.ignoreMessages.some(ignore => messageText.includes(ignore))) {
     return false
   }
 
@@ -75,17 +87,13 @@ export const resetSessionErrorCount = () => {
 
 // Enable/disable debug mode
 export const setDebugMode = (enabled: boolean) => {
-  if (typeof window !== 'undefined') {
-    if (enabled) {
-      localStorage.setItem('debug-mode', 'true')
-    } else {
-      localStorage.removeItem('debug-mode')
-    }
-    window.location.reload() // Reload to apply changes
-  }
+  if (typeof window === 'undefined') return
+  try {
+    if (enabled) window.localStorage.setItem('debug-mode', 'true')
+    else window.localStorage.removeItem('debug-mode')
+    window.location.reload()
+  } catch { /* Reporting preferences must not break the app when storage is blocked. */ }
 }
 
-// Get current debug mode status
-export const isDebugMode = (): boolean => {
-  return typeof window !== 'undefined' && localStorage.getItem('debug-mode') === 'true'
-}
+// Get current debug mode status without assuming storage is available.
+export const isDebugMode = readDebugMode

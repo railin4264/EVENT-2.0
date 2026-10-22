@@ -18,7 +18,7 @@ if (!process.env.JWT_SECRET) {
   }
 }
 
-if (!process.env.MONGODB_URI) {
+if (!process.env.MONGODB_URI && !['production', 'staging'].includes(process.env.NODE_ENV)) {
   process.env.MONGODB_URI = 'mongodb://localhost:27017/eventconnect';
   if (process.env.NODE_ENV === 'development') {
     console.log('⚠️  Using default MONGODB_URI for development');
@@ -31,7 +31,7 @@ if (!process.env.PORT) {
 
 // Log critical environment variables for debugging in development only
 if (process.env.NODE_ENV === 'development') {
-  console.log('🗄️  MongoDB URI:', process.env.MONGODB_URI);
+  console.log('🗄️  MongoDB configured:', Boolean(process.env.MONGODB_URI));
   console.log('🌐 CORS Origins:', process.env.CORS_ORIGIN);
 }
 const express = require('express');
@@ -86,6 +86,7 @@ const reportsRoutes = require('./routes/reports'); // ✅ NUEVO: Rutas de wallet
 // Middleware
 const errorHandler = require('./middleware/errorHandler');
 const { i18nMiddleware } = require('./middleware/i18n');
+const { sanitizeBody } = require('./middleware/sanitize');
 const logger = require('./utils/logger');
 
 // Initialize Express
@@ -117,7 +118,24 @@ const startServer = async () => {
   try {
     await connectDB();
     await connectRedis();
+    if (process.env.REDIS_REQUIRED === 'true' && !require('./config/redis').getRedisClient()?.isReady) throw new Error('Required Redis unavailable');
+    if (socketService) await socketService.setupDistributedAdapter();
     logger.info('✅ Database connections established');
+
+    if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEMO_DATA === 'true') {
+      try {
+        const RDEventSeeder = require('./services/rdEventSeeder');
+        await RDEventSeeder.seedAllRDEvents();
+      } catch (seedErr) {
+        logger.warn('Seed dominican ecosystem skipped/error: ' + seedErr.message);
+      }
+      try {
+        const { seedPlanetaryEvents } = require('./services/eventIngestion/planetaryEventHarvester');
+        await seedPlanetaryEvents();
+      } catch (planetErr) {
+        logger.warn('Seed planetary ecosystem skipped/error: ' + planetErr.message);
+      }
+    }
   } catch (error) {
     logger.error('❌ Database connection failed:', error);
     process.exit(1);
@@ -169,6 +187,8 @@ app.use(helmet({
 // CORS - Secure configuration
 app.use(cors({
   origin: (origin, callback) => {
+    // Native clients and signed webhooks do not send a browser Origin.
+    if (!origin) return callback(null, true);
     // In development, allow all localhost origins (for Flutter web, React, etc.)
     if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
       // Allow all localhost ports and undefined origin (for tests)
@@ -179,7 +199,8 @@ app.use(cors({
     }
 
     // Production: use strict allowlist
-    const allowedOrigins = process.env.CORS_ORIGIN?.split(',') || [];
+    const rawOrigins = process.env.CORS_ORIGIN || process.env.CORS_ORIGINS || '';
+    const allowedOrigins = rawOrigins ? rawOrigins.split(',').map(value => value.trim()).filter(Boolean) : [];
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -208,22 +229,33 @@ app.use(cors({
   ]
 }));
 
+app.use(cookieParser());
+
+app.set('trust proxy', process.env.TRUST_PROXY ? process.env.TRUST_PROXY.split(',').map(value => value.trim()) : false);
+const { SharedRateLimitStore } = require('./services/sharedRateLimitStore');
+const sharedLimits = process.env.NODE_ENV !== 'test' && Boolean(process.env.REDIS_URL);
+const { rateLimitIdentity, authRateLimitIdentity, rateBudget } = require('./utils/rateLimitIdentity');
+
 // Global Rate limiting
 const limiter = rateLimit({
+  keyGenerator: rateLimitIdentity,
+  ...(sharedLimits ? { store: new SharedRateLimitStore('global') } : {}),
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: rateBudget(process.env.API_RATE_LIMIT_MAX, 1500),
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many requests from this IP, please try again after 15 minutes' }
+  message: { success: false, message: 'Too many requests, please try again after 15 minutes' }
 });
 app.use(limiter);
 
 // Strict rate limiter for authentication routes
 const authLimiter = rateLimit({
+  keyGenerator: authRateLimitIdentity,
+  ...(sharedLimits ? { store: new SharedRateLimitStore('auth') } : {}),
   windowMs: 15 * 60 * 1000, // 15 minutes
   // Strict in production (real brute-force protection). Relaxed in test/dev so
   // functional suites (which share one IP) are not throttled mid-run.
-  max: process.env.NODE_ENV === 'production' ? 20 : 1000,
+  max: rateBudget(process.env.AUTH_RATE_LIMIT_MAX, process.env.NODE_ENV === 'production' ? 20 : 1000),
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many login attempts, please try again after 15 minutes' }
@@ -231,15 +263,18 @@ const authLimiter = rateLimit({
 
 // General middleware
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb', verify: (req, res, buffer) => {
+  if (/^\/api\/(?:v1\/)?payments\/webhook\/?$/.test(req.path)) req.rawBody = buffer;
+} }));
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
+app.use(sanitizeBody);
 app.use(i18nMiddleware); // i18n support
 app.use(morgan('combined', {
   stream: { write: message => logger.info(message.trim()) }
 }));
 
 // Serve static files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check
@@ -251,6 +286,14 @@ app.get('/health', (req, res) => {
     environment: process.env.NODE_ENV,
     uptime: process.uptime()
   });
+});
+
+// Readiness is separate from process liveness and exposes no credentials.
+app.get(['/ready', '/api/ready'], (req, res) => {
+  const database = require('mongoose').connection.readyState === 1;
+  const redis = Boolean(require('./config/redis').getRedisClient()?.isReady);
+  const ready = database && (process.env.REDIS_REQUIRED !== 'true' || redis);
+  res.status(ready ? 200 : 503).json({ success: ready, checks: { database, redis }, timestamp: new Date().toISOString() });
 });
 
 // API Health check
@@ -268,6 +311,7 @@ app.get('/api/health', (req, res) => {
 const apiV1Router = express.Router();
 apiV1Router.use('/auth', authLimiter, authRoutes);
 apiV1Router.use('/users', userRoutes);
+apiV1Router.use('/events', require('./routes/discovery'));
 apiV1Router.use('/events', eventRoutes);
 apiV1Router.use('/feed', feedRoutes);
 apiV1Router.use('/tribes', tribeRoutes);
@@ -295,6 +339,20 @@ apiV1Router.use('/comments', commentRoutes);
 apiV1Router.use('/wallet', walletRoutes);
 apiV1Router.use('/services', require('./routes/services'));
 apiV1Router.use('/reports', reportsRoutes);
+apiV1Router.use('/audit', require('./routes/audit'));
+apiV1Router.use('/support', require('./routes/support'));
+apiV1Router.use('/ideas', require('./routes/ideas'));
+apiV1Router.use('/event-planning', require('./routes/eventPlanning'));
+apiV1Router.use('/organizer-reputation', require('./routes/organizerReputation'));
+apiV1Router.use('/community-actions', require('./routes/communityActions'));
+apiV1Router.use('/partners', require('./routes/partners'));
+apiV1Router.use('/planning-tools', require('./routes/planningTools'));
+apiV1Router.use('/plans', require('./routes/plans'));
+apiV1Router.use('/serrucho', require('./routes/serrucho'));
+apiV1Router.use('/suppliers', require('./routes/suppliers'));
+apiV1Router.use('/telegram', require('./routes/telegram'));
+apiV1Router.use('/sources', require('./routes/sources'));
+apiV1Router.get('/config', (req, res) => res.json({ success: true, data: require('./config/features').getPublicConfig() }));
 
 // Mount versioned router — /api/v1 is canonical; /api is backward-compatible (deprecated)
 app.use('/api/v1', apiV1Router);
@@ -329,8 +387,8 @@ const PORT = process.env.PORT || 5000;
 
 // Only bind a port when run as the main script (tests use supertest against app).
 if (require.main === module) {
-server.listen(PORT, '0.0.0.0', () => {
-  logger.info(`
+  server.listen(PORT, () => {
+    logger.info(`
 🚀 EventConnect API Server Started!
 📍 Port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV}
@@ -343,24 +401,28 @@ server.listen(PORT, '0.0.0.0', () => {
 📊 Analytics: Ready
 🎮 Gamification: Active
 ⏰ Scheduled Jobs: Ready
-  `);
+    `);
 
-  // Initialize and start scheduled jobs in production
-  if (process.env.NODE_ENV === 'production') {
-    cronService.initialize();
-    cronService.start();
-    logger.info('🕐 Cron jobs started for production environment');
-  } else {
-    cronService.initialize();
-    logger.info('🕐 Cron jobs initialized (not started in development)');
-  }
-});
+    // Initialize and start scheduled jobs in production
+    if (process.env.NODE_ENV === 'production') {
+      cronService.initialize();
+      cronService.start();
+      logger.info('🕐 Cron jobs started for production environment');
+    } else {
+      cronService.initialize();
+      logger.info('🕐 Cron jobs initialized (not started in development)');
+      if (process.env.EVENT_INGESTION_ENABLED === 'true') {
+        cronService.jobs.eventIngestion.start();
+        logger.info('Approved-source ingestion enabled locally; other development jobs remain stopped');
+      }
+    }
+  });
 }
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  cronService.stop();
+  cronService?.stop();
   server.close(() => {
     logger.info('Process terminated');
     process.exit(0);

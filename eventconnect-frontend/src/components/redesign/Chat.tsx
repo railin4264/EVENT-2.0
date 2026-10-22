@@ -173,7 +173,7 @@ export function Chat() {
                   >
                     <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
                           <span className="text-white font-bold text-sm">{getConversationAvatar(conversation)}</span>
                         </div>
                       </div>
@@ -221,7 +221,7 @@ export function Chat() {
             <div className="p-4 border-b border-white/10 flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
                     <span className="text-white font-bold text-sm">{getConversationAvatar(selectedConversation)}</span>
                   </div>
                 </div>
@@ -268,7 +268,7 @@ export function Chat() {
                       >
                         <div className={`flex space-x-3 max-w-md ${isMine ? 'flex-row-reverse space-x-reverse' : ''}`}>
                           {!isMine && (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
                               <span className="text-white font-bold text-xs">{getMessageSenderAvatar(message)}</span>
                             </div>
                           )}
@@ -280,7 +280,7 @@ export function Chat() {
                             <div
                               className={`p-3 rounded-2xl ${
                                 isMine
-                                  ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white'
+                                  ? 'bg-gradient-to-r from-violet-600 to-cyan-600 text-white'
                                   : 'glass-card text-white'
                               }`}
                             >
@@ -329,7 +329,7 @@ export function Chat() {
 
                 <Button
                   size="sm"
-                  className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+                  className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700"
                   onClick={handleSendMessage}
                   disabled={isSending || !messageInput.trim()}
                 >

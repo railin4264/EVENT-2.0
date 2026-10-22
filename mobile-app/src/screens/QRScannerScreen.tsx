@@ -1,324 +1,315 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  Vibration,
-  Dimensions,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Dimensions, StatusBar, AppState, Linking, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { ticketService } from '@/services';
-import { useTheme } from '@/contexts/ThemeContext';
+import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
+import eventService from '@/services/EventService';
+import ticketService, { AdmissionError } from '@/services/TicketService';
+import { useAuth } from '@/contexts/AuthContext';
+import { canScanAdmissions, isAdmissionCode } from '@/utils/admission';
+import { eventParam } from '@/utils/eventAuthReturn';
+import type { Event } from '@/types';
 
-const { width, height } = Dimensions.get('window');
-const SCANNER_SIZE = width * 0.7;
+const { width } = Dimensions.get('window');
+const SCANNER_SIZE = width * 0.72;
 
 export default function QRScannerScreen() {
   const router = useRouter();
-  const { eventId } = useLocalSearchParams<{ eventId?: string }>();
-  const { theme } = useTheme();
+  const params = useLocalSearchParams<{ eventId?: string }>();
+  const eventId = eventParam(params.eventId);
+  const { user } = useAuth();
+  const focused = useIsFocused();
+  const [foreground, setForeground] = useState(AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
   const [permission, requestPermission] = useCameraPermissions();
+  const owner = user?._id || user?.id || null;
+  const scope = `${owner || 'guest'}:${eventId}`;
+  const [access, setAccess] = useState<{ scope: string; event: Event | null; error?: string } | null>(null);
+  const [startedScope, setStartedScope] = useState<string | null>(null);
   const [scanned, setScanned] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const lock = useRef<object | null>(null);
+  const permissionBusy = useRef(false);
+  const alive = useRef(true);
+  const current = useRef({ scope, enabled: false, foreground, focused });
+  const allowed = access?.scope === scope && canScanAdmissions(access.event, user);
+  const enabled = Boolean(allowed && startedScope === scope && permission?.granted && focused && foreground);
+  current.current = { scope, enabled, foreground, focused };
+  const styles = getStyles();
+  const close = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
 
-  const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
-    if (scanned || scanning) return;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; lock.current = null; }; }, []);
+  useEffect(() => {
+    if (!foreground || !focused) {
+      lock.current = null;
+      setScanned(false);
+      setScanning(false);
+      setStartedScope(null);
+    }
+  }, [foreground, focused]);
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', next => {
+      setForeground(next === 'active');
+      if (next !== 'active') setStartedScope(null);
+    });
+    return () => listener.remove();
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    lock.current = null;
+    setScanned(false);
+    setScanning(false);
+    setStartedScope(null);
+    setCameraError('');
+    if (!eventId || !owner) {
+      setAccess({ scope, event: null, error: 'Abre el control de entrada desde el detalle de uno de tus eventos.' });
+      return;
+    }
+    void eventService.getEventById(eventId).then(event => {
+      if (!cancelled) setAccess({ scope, event });
+    }).catch(() => {
+      if (!cancelled) setAccess({ scope, event: null, error: 'No se pudo comprobar tu acceso. Regresa al evento e inténtalo de nuevo.' });
+    });
+    return () => { cancelled = true; };
+  }, [scope, eventId, owner]);
 
-    setScanned(true);
-    setScanning(true);
-    Vibration.vibrate(100);
-
+  const startCamera = async () => {
+    if (current.current.scope !== scope || !allowed || !foreground || !focused || permissionBusy.current) return;
+    permissionBusy.current = true;
+    setCameraError('');
     try {
-      // Validate ticket using the scanned QR code
-      const result = await ticketService.validateTicket(data, eventId || '');
+      if (permission?.canAskAgain === false && !permission.granted) { await Linking.openSettings(); return; }
+      const result = permission?.granted ? permission : await requestPermission();
+      if (!alive.current || current.current.scope !== scope || !current.current.foreground || !current.current.focused) return;
+      if (result.granted) setStartedScope(scope);
+      else setCameraError('La cámara no está habilitada. Puedes conceder permiso cuando quieras o regresar al evento.');
+    } catch {
+      if (alive.current && current.current.scope === scope) setCameraError('No se pudo abrir la cámara. Inténtalo de nuevo.');
+    } finally { permissionBusy.current = false; }
+  };
 
-      if (result.valid) {
-        Alert.alert(
-          '✓ Valid Ticket',
-          `Ticket validated successfully!\n\nTicket ID: ${data.slice(-8).toUpperCase()}\nEvent: ${(result.ticket?.event as any)?.title || 'N/A'}`,
-          [
-            {
-              text: 'Scan Another',
-              onPress: () => {
-                setScanned(false);
-                setScanning(false);
-              },
-            },
-            {
-              text: 'Done',
-              onPress: () => router.back(),
-            },
-          ]
-        );
-      } else {
-        Alert.alert(
-          '✗ Invalid Ticket',
-          result.message || 'This ticket is not valid.',
-          [
-            {
-              text: 'Try Again',
-              onPress: () => {
-                setScanned(false);
-                setScanning(false);
-              },
-            },
-            {
-              text: 'Cancel',
-              onPress: () => router.back(),
-              style: 'cancel',
-            },
-          ]
-        );
-      }
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
+    if (current.current.scope !== scope || !enabled || !current.current.enabled || lock.current) return;
+    const ticket = {};
+    lock.current = ticket;
+    setScanned(true);
+    const valid = () => alive.current && current.current.scope === scope && current.current.enabled && lock.current === ticket;
+    const reset = () => {
+      if (!valid()) return;
+      lock.current = null;
+      setScanned(false);
+      setScanning(false);
+    };
+    if (!isAdmissionCode(data)) {
+      Alert.alert('Código no compatible', 'Escanea una entrada de EventNow. Un enlace u otro código QR no registra asistencia.', [{ text: 'Escanear otro', onPress: reset }], { cancelable: false });
+      return;
+    }
+    setScanning(true);
+    try {
+      const result = await ticketService.validateByQR(data, eventId!);
+      if (!valid()) return;
+      setScanning(false);
+      if (result.valid !== true) throw new Error(result.message || 'El servidor no confirmó la entrada.');
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Alert.alert('Entrada registrada', `${result.message}\nEvento: ${access?.event?.title || 'Evento'}${result.orderNumber ? `\nEntrada: ${result.orderNumber}` : ''}${result.quantity ? `\nCantidad: ${result.quantity}` : ''}`, [
+        { text: 'Escanear siguiente', onPress: reset }, { text: 'Listo', onPress: close },
+      ], { cancelable: false });
     } catch (error: any) {
-      console.error('Error validating ticket:', error);
-      Alert.alert(
-        'Error',
-        error.message || 'Failed to validate ticket. Please try again.',
-        [
-          {
-            text: 'Try Again',
-            onPress: () => {
-              setScanned(false);
-              setScanning(false);
-            },
-          },
-          {
-            text: 'Cancel',
-            onPress: () => router.back(),
-            style: 'cancel',
-          },
-        ]
-      );
+      if (!valid()) return;
+      setScanning(false);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      const title = error instanceof AdmissionError && error.status === 409 ? 'Entrada no registrada de nuevo' : 'No se registró la entrada';
+      Alert.alert(title, error.message || 'Comprueba tu conexión y el estado de la entrada antes de reintentar.', [
+        { text: 'Escanear otro', onPress: reset }, { text: 'Volver', onPress: close },
+      ], { cancelable: false });
     }
   };
 
-  const styles = getStyles(theme);
+  if (access?.scope !== scope) return <View style={styles.centerContainer}><ActivityIndicator color="#8b5cf6" /><Text style={styles.text}>Comprobando acceso al evento…</Text></View>;
+  if (!allowed) return <View style={styles.centerContainer}><Ionicons name="lock-closed-outline" size={56} color="#8b5cf6" /><Text style={styles.text}>Control de entrada restringido</Text><Text style={styles.subText}>{access.error || 'Solo el organizador de este evento puede registrar entradas. El servidor verifica cada registro.'}</Text><TouchableOpacity accessibilityRole="button" style={styles.button} onPress={close}><Text style={styles.buttonText}>Volver al evento</Text></TouchableOpacity></View>;
+  if (!enabled) return <View style={styles.centerContainer}>
+    <Ionicons name="qr-code-outline" size={64} color="#8b5cf6" />
+    <Text style={styles.text}>{access.event?.title}</Text>
+    <Text style={styles.subText}>Cada escaneo registra una entrada en este evento. Activa la cámara para empezar; el servidor comprueba permisos y entradas ya utilizadas.</Text>
+    {cameraError ? <Text accessibilityRole="alert" style={styles.subText}>{cameraError}</Text> : null}
+    <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => void startCamera()}><Text style={styles.buttonText}>{permission?.canAskAgain === false && !permission.granted ? 'Abrir ajustes de cámara' : 'Activar cámara'}</Text></TouchableOpacity>
+    <TouchableOpacity accessibilityRole="button" style={[styles.button, { marginTop: 12 }]} onPress={close}><Text style={styles.buttonText}>Volver al evento</Text></TouchableOpacity>
+  </View>;
 
-  if (!permission) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.text}>Requesting camera permission...</Text>
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.text}>No access to camera</Text>
-        <Text style={styles.subText}>
-          Please enable camera access to scan tickets
-        </Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={requestPermission}
-        >
-          <Text style={styles.buttonText}>Grant Permission</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, { marginTop: 12, backgroundColor: 'transparent' }]}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.buttonText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      <CameraView
-        style={styles.camera}
-        facing="back"
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ['qr'],
-        }}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.closeButtonText}>×</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Scanner overlay */}
-        <View style={styles.overlay}>
-          {/* Top overlay */}
-          <View style={styles.overlayTop} />
-
-          {/* Middle row with scanner window */}
-          <View style={styles.overlayMiddle}>
-            <View style={styles.overlaySide} />
-            <View style={styles.scannerWindow}>
-              {/* Corner borders */}
-              <View style={[styles.corner, styles.cornerTopLeft]} />
-              <View style={[styles.corner, styles.cornerTopRight]} />
-              <View style={[styles.corner, styles.cornerBottomLeft]} />
-              <View style={[styles.corner, styles.cornerBottomRight]} />
-
-              {/* Scanning line animation */}
-              {!scanned && (
-                <View style={styles.scanLine} />
-              )}
-            </View>
-            <View style={styles.overlaySide} />
-          </View>
-
-          {/* Bottom overlay */}
-          <View style={styles.overlayBottom}>
-            <Text style={styles.instructionText}>
-              {scanning
-                ? 'Validating ticket...'
-                : 'Align QR code within the frame'}
-            </Text>
-            <Text style={styles.subInstructionText}>
-              The ticket will be validated automatically
-            </Text>
-          </View>
-        </View>
-      </CameraView>
-    </View>
-  );
+  return <View style={styles.container}>
+    <StatusBar barStyle="light-content" />
+    <CameraView style={styles.camera} facing="back" onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onMountError={() => { setStartedScope(null); setCameraError('La cámara no está disponible. Comprueba sus permisos e inténtalo de nuevo.'); }}>
+      <View style={styles.header}><TouchableOpacity accessibilityRole="button" accessibilityLabel="Cerrar escáner" style={styles.closeButton} onPress={close}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity><View style={styles.headerTitleWrap}><Text style={styles.headerTitle}>Control de entrada</Text><Text style={styles.headerSub}>{access.event?.title}</Text></View></View>
+      <View style={styles.overlay}><View style={styles.overlayTop} /><View style={styles.overlayMiddle}><View style={styles.overlaySide} /><View style={styles.scannerWindow}><View style={[styles.corner, styles.cornerTopLeft]} /><View style={[styles.corner, styles.cornerTopRight]} /><View style={[styles.corner, styles.cornerBottomLeft]} /><View style={[styles.corner, styles.cornerBottomRight]} />{!scanned && <View style={styles.scanLine} />}</View><View style={styles.overlaySide} /></View><View style={styles.overlayBottom}><View style={styles.instructionBadge}><Ionicons name={scanning ? 'sync' : 'qr-code'} size={18} color="#ec4899" /><Text style={styles.instructionText}>{scanning ? 'Registrando entrada en el servidor…' : 'Apunta al QR de la entrada'}</Text></View><Text style={styles.subInstructionText}>Espera la confirmación antes de permitir el acceso.</Text></View></View>
+    </CameraView>
+  </View>;
 }
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = () => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.text,
+    backgroundColor: '#000',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.text,
-    padding: 20,
+    backgroundColor: '#0C0B10',
+    padding: 24,
   },
   text: {
-    color: theme.colors.background,
-    fontSize: 18,
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '800',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   subText: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.6)',
     fontSize: 14,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 28,
+    lineHeight: 20,
   },
   button: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 32,
+    backgroundColor: '#ec4899',
+    paddingHorizontal: 28,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: 14,
+    minWidth: 180,
+    alignItems: 'center',
   },
   buttonText: {
-    color: theme.colors.background,
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   camera: {
     flex: 1,
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 54,
     paddingBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  headerTitleWrap: {
+    alignItems: 'center',
+  },
+  headerTitle: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  headerSub: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    marginTop: 2,
   },
   closeButton: {
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 22,
-  },
-  closeButtonText: {
-    color: theme.colors.background,
-    fontSize: 36,
-    fontWeight: '300',
   },
   overlay: {
     flex: 1,
   },
   overlayTop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   overlayMiddle: {
     flexDirection: 'row',
+    height: SCANNER_SIZE,
   },
   overlaySide: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   scannerWindow: {
     width: SCANNER_SIZE,
     height: SCANNER_SIZE,
     position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   corner: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderColor: theme.colors.background,
+    width: 28,
+    height: 28,
+    borderColor: '#ec4899',
   },
   cornerTopLeft: {
     top: 0,
     left: 0,
     borderTopWidth: 4,
     borderLeftWidth: 4,
+    borderTopLeftRadius: 10,
   },
   cornerTopRight: {
     top: 0,
     right: 0,
     borderTopWidth: 4,
     borderRightWidth: 4,
+    borderTopRightRadius: 10,
   },
   cornerBottomLeft: {
     bottom: 0,
     left: 0,
     borderBottomWidth: 4,
     borderLeftWidth: 4,
+    borderBottomLeftRadius: 10,
   },
   cornerBottomRight: {
     bottom: 0,
     right: 0,
     borderBottomWidth: 4,
     borderRightWidth: 4,
+    borderBottomRightRadius: 10,
   },
   scanLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+    width: SCANNER_SIZE - 20,
     height: 2,
-    backgroundColor: '#00ff00',
-    top: SCANNER_SIZE / 2,
+    backgroundColor: '#8b5cf6',
+    shadowColor: '#ec4899',
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
   },
   overlayBottom: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingTop: 28,
+    paddingHorizontal: 20,
   },
-  instructionText: {
-    color: theme.colors.background,
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
+  instructionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
     marginBottom: 8,
   },
-  subInstructionText: {
-    color: 'rgba(255, 255, 255, 0.7)',
+  instructionText: {
+    color: '#ffffff',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  subInstructionText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 12,
     textAlign: 'center',
   },
 });

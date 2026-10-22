@@ -5,14 +5,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Share,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
-import { ticketService } from '@/services';
-import type { Ticket, Event } from '@/types';
+import { useTicketPasses } from '@/hooks/useTicketPasses';
+import { isAdmissionCode } from '@/utils/ticketPassStore';
 import { useTheme } from '@/contexts/ThemeContext';
 
 export default function TicketDetailScreen() {
@@ -20,75 +19,46 @@ export default function TicketDetailScreen() {
   const { theme } = useTheme();
   const { id: ticketId } = useLocalSearchParams<{ id: string }>();
 
-  const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadTicket();
-  }, [ticketId]);
-
-  const loadTicket = async () => {
-    try {
-      const result = await ticketService.getTicketById(ticketId);
-      setTicket(result);
-    } catch (error: any) {
-      console.error('Error loading ticket:', error);
-      Alert.alert('Error', 'Failed to load ticket');
-      router.back();
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { tickets, loading, offline, savedAt, error, reload } = useTicketPasses();
+  const ticket = tickets.find(item => (item._id || item.id) === ticketId) || null;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(timer); }, []);
 
   const handleShare = async () => {
     if (!ticket) return;
 
     try {
       await Share.share({
-        message: `Check out my ticket for ${ticket.event.title}!`,
-        title: 'Event Ticket',
+        message: `Tengo un plan para ${ticket.event.title} en EventNow.`,
+        title: 'Mi plan en EventNow',
       });
     } catch (error) {
       console.error('Error sharing ticket:', error);
     }
   };
 
-  const handleTransfer = () => {
-    if (!ticket) return;
-
-    Alert.alert(
-      'Transfer Ticket',
-      'Do you want to transfer this ticket to another user?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Transfer',
-          onPress: () => {
-            // Navigate to transfer screen or show transfer dialog
-            Alert.alert('Coming Soon', 'Ticket transfer feature coming soon!');
-          },
-        },
-      ]
-    );
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
-        return '#4CAF50';
+      case 'valid':
+        return '#10b981';
       case 'used':
-        return theme.colors.textSecondary;
+        return '#9ca3af';
       case 'cancelled':
-        return '#f44336';
+        return '#ef4444';
       case 'transferred':
-        return '#FF9800';
+        return '#f59e0b';
       default:
-        return theme.colors.textSecondary;
+        return '#8b5cf6';
     }
   };
 
   const getStatusText = (status: string) => {
-    return status.charAt(0).toUpperCase() + status.slice(1);
+    if (status === 'valid' || status === 'active') return offline ? 'Pase guardado · Pendiente de validar' : 'Asistencia confirmada';
+    if (status === 'used') return 'Usado';
+    if (status === 'cancelled') return 'Cancelado';
+    if (status === 'transferred') return 'Transferido';
+    return status;
   };
 
   const styles = getStyles(theme);
@@ -104,14 +74,14 @@ export default function TicketDetailScreen() {
   if (!ticket) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Ticket not found</Text>
+        <Text style={styles.errorText}>{error || 'No se encontró esta entrada en tu cuenta.'}</Text><TouchableOpacity onPress={reload}><Text style={styles.backButton}>Reintentar</Text></TouchableOpacity>
       </View>
     );
   }
 
   const event = typeof ticket.event === 'object' ? ticket.event : null;
-  const isActive = ticket.status === 'active';
-  const isExpired = new Date(ticket.validUntil).getTime() < new Date().getTime();
+  const isActive = ticket.status === 'active' || (ticket.status as string) === 'valid';
+  const isExpired = !Number.isFinite(Date.parse(ticket.validUntil)) || Date.parse(ticket.validUntil) <= now;
 
   return (
     <View style={styles.container}>
@@ -120,20 +90,22 @@ export default function TicketDetailScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backButton}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Ticket Details</Text>
+        <Text style={styles.title}>Mi pase</Text>
         <TouchableOpacity onPress={handleShare}>
           <Text style={styles.shareButton}>↗</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.qrLabel, { paddingHorizontal: 16 }]}>{offline ? 'Pase guardado · Sin conexión' : !isActive || isExpired || !isAdmissionCode(ticket.qrCode) ? 'Estado actualizado con conexión' : savedAt ? 'Pase guardado en este dispositivo' : 'Pase abierto con conexión. No se pudo guardar una copia'}. {savedAt ? 'Actualizado: ' + new Date(savedAt).toLocaleString('es') + '.' : ''} La admisión y cualquier cambio se comprueban en la puerta con el servidor.</Text>
         {/* QR Code Section */}
         <View style={styles.qrContainer}>
           <View style={styles.qrCodeWrapper}>
-            <QRCode value={ticket.qrCode} size={220} />
+            {isActive && !isExpired && isAdmissionCode(ticket.qrCode) ? <QRCode value={ticket.qrCode} size={220} backgroundColor="#ffffff" color="#000000" /> : <Text style={styles.errorText}>QR no disponible para esta entrada.</Text>}
           </View>
-          <Text style={styles.qrLabel}>Show this QR code at the event</Text>
-          <Text style={styles.ticketNumber}>#{ticket._id.slice(-8).toUpperCase()}</Text>
+          <Text style={styles.qrLabel}>Muestra este QR en la entrada</Text>
+          <Text style={styles.ticketNumber}>#{(ticket._id || ticket.id).slice(-8).toUpperCase()}</Text>
+          <Text style={styles.qrLabel}>{Number((ticket as any).quantity || ticket.data?.quantity || 1)} persona(s) en este pase. El QR se registra una sola vez.</Text>
         </View>
 
         {/* Status Badge */}
@@ -143,19 +115,19 @@ export default function TicketDetailScreen() {
             { backgroundColor: getStatusColor(ticket.status) },
           ]}
         >
-          <Text style={styles.statusText}>{getStatusText(ticket.status)}</Text>
+          <Text style={styles.statusText}>{isExpired ? 'Expirado' : getStatusText(ticket.status)}</Text>
         </View>
 
         {/* Event Details */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Event</Text>
+          <Text style={styles.sectionTitle}>Evento</Text>
           <View style={styles.eventCard}>
-            <Text style={styles.eventName}>{event?.title || 'Event'}</Text>
+            <Text style={styles.eventName}>{event?.title || 'Evento'}</Text>
             <Text style={styles.eventLocation}>
-              📍 {typeof event?.location === 'object' ? event?.location?.address : event?.location || 'Location TBD'}
+              📍 {typeof event?.location === 'object' ? event?.location?.address : event?.location || 'Lugar por confirmar'}
             </Text>
             <Text style={styles.eventDate}>
-              📅 {new Date(event?.date || ticket.validFrom).toLocaleDateString('en-US', {
+              📅 {new Date(event?.date || ticket.validFrom).toLocaleDateString('es-DO', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -163,7 +135,7 @@ export default function TicketDetailScreen() {
               })}
             </Text>
             <Text style={styles.eventTime}>
-              🕐 {new Date(event?.date || ticket.validFrom).toLocaleTimeString('en-US', {
+              🕐 {new Date(event?.date || ticket.validFrom).toLocaleTimeString('es-DO', {
                 hour: '2-digit',
                 minute: '2-digit',
               })}
@@ -173,31 +145,31 @@ export default function TicketDetailScreen() {
 
         {/* Ticket Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ticket Information</Text>
+          <Text style={styles.sectionTitle}>Datos de la entrada</Text>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Type</Text>
-            <Text style={styles.infoValue}>{ticket.ticketType.name}</Text>
+            <Text style={styles.infoLabel}>Tipo</Text>
+            <Text style={styles.infoValue}>{typeof ticket.ticketType === 'object' ? (ticket.ticketType as any)?.name : ((ticket as any).name || ticket.ticketType || 'Entrada General')}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Price</Text>
+            <Text style={styles.infoLabel}>Precio</Text>
             <Text style={styles.infoValue}>
-              {ticket.currency} {ticket.price.toFixed(2)}
+              {ticket.currency || 'DOP'} {Number(ticket.price || 0).toFixed(2)}
             </Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Valid From</Text>
+            <Text style={styles.infoLabel}>Desde</Text>
             <Text style={styles.infoValue}>
-              {new Date(ticket.validFrom).toLocaleDateString()}
+              {new Date(ticket.validFrom || event?.date || ticket.purchaseDate).toLocaleDateString()}
             </Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Valid Until</Text>
+            <Text style={styles.infoLabel}>Hasta</Text>
             <Text style={styles.infoValue}>
               {new Date(ticket.validUntil).toLocaleDateString()}
             </Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Purchase Date</Text>
+            <Text style={styles.infoLabel}>Confirmada el</Text>
             <Text style={styles.infoValue}>
               {new Date(ticket.purchaseDate).toLocaleDateString()}
             </Text>
@@ -207,10 +179,10 @@ export default function TicketDetailScreen() {
         {/* Usage History */}
         {ticket.usedAt && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Usage History</Text>
+            <Text style={styles.sectionTitle}>Registro de acceso</Text>
             <View style={styles.usageCard}>
               <Text style={styles.usageText}>
-                ✓ Used on {new Date(ticket.usedAt).toLocaleString()}
+                ✓ Registrada el {new Date(ticket.usedAt).toLocaleString()}
               </Text>
             </View>
           </View>
@@ -221,18 +193,12 @@ export default function TicketDetailScreen() {
           <View style={styles.actionsSection}>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => router.push('/event/' + event?._id)}
+              disabled={!event?._id}
+              onPress={() => event?._id && router.push('/event/' + event._id)}
             >
-              <Text style={styles.actionButtonText}>View Event Details</Text>
+              <Text style={styles.actionButtonText}>Ver evento</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.actionButtonOutline]}
-              onPress={handleTransfer}
-            >
-              <Text style={[styles.actionButtonText, styles.actionButtonOutlineText]}>
-                Transfer Ticket
-              </Text>
-            </TouchableOpacity>
+
           </View>
         )}
 
@@ -241,21 +207,20 @@ export default function TicketDetailScreen() {
           <View style={styles.warningCard}>
             <Text style={styles.warningText}>
               {isExpired
-                ? '⚠️ This ticket has expired'
-                : '⚠️ This ticket has already been used'}
+                ? '⚠️ Esta entrada expiró'
+                : '⚠️ Esta entrada ya fue utilizada'}
             </Text>
           </View>
         )}
 
         {/* Terms */}
         <View style={styles.termsSection}>
-          <Text style={styles.termsTitle}>Terms & Conditions</Text>
+          <Text style={styles.termsTitle}>Tu pase y el acceso</Text>
           <Text style={styles.termsText}>
-            • This ticket is non-refundable{'\n'}
-            • Valid for one-time entry only{'\n'}
-            • ID verification may be required at the venue{'\n'}
-            • Screenshots are not accepted - show the original QR code{'\n'}
-            • Event organizers reserve the right to refuse entry
+            • Conserva tu QR privado: permite identificar tu entrada.{'\n'}
+            • Abre este pase con internet antes de salir para guardarlo.{'\n'}
+            • Un pase guardado no refleja cancelaciones o usos posteriores hasta actualizarlo.{'\n'}
+            • El personal necesita conexión para validar y registrar la admisión.
           </Text>
         </View>
       </ScrollView>
@@ -314,7 +279,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   qrCodeWrapper: {
     padding: 20,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#ffffff',
     borderRadius: 12,
     shadowColor: theme.colors.text,
     shadowOffset: { width: 0, height: 2 },

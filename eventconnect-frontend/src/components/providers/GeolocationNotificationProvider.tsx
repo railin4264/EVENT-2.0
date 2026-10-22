@@ -1,44 +1,61 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { geolocationNotifications } from '@/lib/geolocation-notifications'
-import { toast } from 'react-hot-toast'
+import { useLiveLocation } from '@/hooks/useLiveLocation'
+import { useDiscoveryArea } from '@/stores/discoveryAreaStore'
+import { WORLD_AREA } from '@/lib/discovery-area'
 
 export default function GeolocationNotificationProvider() {
   const { user, isAuthenticated } = useAuth()
+  const { location, syncToBackend } = useLiveLocation(true)
+  const { area, initialized, setArea } = useDiscoveryArea()
+  const hasAutoSetDiscoveryRef = useRef(false)
 
+  // Sync live GPS coordinates into discoveryArea when user gets a real GPS fix and hasn't locked another city
   useEffect(() => {
-    // Only initialize if user is authenticated
-    if (!isAuthenticated || !user) return
+    if (!initialized || hasAutoSetDiscoveryRef.current) return
+    if (location.source === 'gps' && area.kind === WORLD_AREA.kind) {
+      hasAutoSetDiscoveryRef.current = true
+      setArea({
+        kind: 'nearby',
+        label: `Cerca de ti · ${location.city}`,
+        lat: location.lat,
+        lng: location.lng,
+        radius: 50,
+        source: 'gps'
+      })
+    }
+  }, [initialized, location, area.kind, setArea])
 
-    // Initialize geolocation notifications
+  // Sync confirmed location separately from notification lifecycle.
+  useEffect(() => { if (isAuthenticated && user) void syncToBackend(location) }, [isAuthenticated, user?.id, location, syncToBackend])
+
+  const pushEnabled = (user as any)?.settings?.notifications?.push === true
+  // Background initialization never opens permission prompts.
+  useEffect(() => {
+    if (!isAuthenticated || !user || !pushEnabled) { geolocationNotifications.stopWatching(); return }
+
     const initializeNotifications = async () => {
       try {
-        const initialized = await geolocationNotifications.initialize({
+        await geolocationNotifications.initialize({
           enabled: true,
-          radiusKm: 2, // 2km radius
-          checkIntervalMinutes: 30, // Check every 30 minutes
-          categories: [] // All categories
+          radiusKm: 10,
+          checkIntervalMinutes: 20,
+          categories: []
         })
-
-        if (initialized) {
-          console.log('Geolocation notifications initialized')
-        } else {
-          console.warn('Could not initialize geolocation notifications')
-        }
       } catch (error) {
-        console.error('Error initializing geolocation notifications:', error)
+        console.warn('Error initializing geolocation notifications:', error)
       }
     }
 
-    initializeNotifications()
+    void initializeNotifications()
 
-    // Cleanup on unmount
     return () => {
       geolocationNotifications.stopWatching()
     }
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, user?.id, user?._id, pushEnabled])
 
-  return null // This is a provider component, no UI
+  return null
 }

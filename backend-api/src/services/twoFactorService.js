@@ -241,7 +241,15 @@ class TwoFactorService {
       const setupData = await cacheService.get(key);
 
       if (!setupData) {
-        return null;
+        // Setup is already persisted on the user; Redis is optional.
+        const user = await require('../models/User').findOne({
+          'twoFactor.setupToken': token,
+          'twoFactor.setupInitiatedAt': { $gt: new Date(Date.now() - 600000) },
+          'twoFactor.isEnabled': false
+        }).select('+twoFactor.tempSecret');
+        if (!user?.twoFactor?.tempSecret) return null;
+        return { userId: String(user._id), tempSecret: user.twoFactor.tempSecret,
+          timestamp: new Date(user.twoFactor.setupInitiatedAt).getTime() };
       }
 
       // Check if token is not older than 10 minutes

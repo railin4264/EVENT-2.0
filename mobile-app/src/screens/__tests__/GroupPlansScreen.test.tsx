@@ -1,0 +1,71 @@
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import { Alert, TouchableOpacity } from 'react-native';
+import GroupPlansScreen, { groupPlanLink } from '../GroupPlansScreen';
+import { apiClient } from '../../services/apiClient';
+import * as Linking from 'expo-linking';
+let mockUser: { id: string } | null = { id: 'account-a' }, mockToken: string | undefined;
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({ useLocalSearchParams: () => ({ token: mockToken }), useRouter: () => ({ back: jest.fn(), push: mockPush }) }));
+jest.mock('expo-linking', () => ({ createURL: jest.fn((path, options) => `eventnow://${path}?token=${options.queryParams.token}`) }));
+jest.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }));
+jest.mock('../../services/apiClient', () => ({ apiClient: { get: jest.fn(), post: jest.fn() } }));
+const get = apiClient.get as jest.Mock, post = apiClient.post as jest.Mock;
+const token = 'a'.repeat(48);
+const option = (id: string, votes = 0) => ({ id, votes, available: true, event: { id, title: `Evento ${id}` } });
+const plan = { title: 'Votación de prueba', shareToken: token, status: 'open', isOwner: true, totalVotes: 1, options: [option('1', 1), option('2')] };
+const event = (id: string, patch = {}) => ({ _id: id, title: `Evento ${id}`, status: 'published', date: new Date(Date.now() + 86400000).toISOString(), ...patch });
+let root: TestRenderer.ReactTestRenderer;
+const create = async () => { await act(async () => { root = TestRenderer.create(<GroupPlansScreen />); }); };
+const buttons = () => root.root.findAllByType(TouchableOpacity);
+const childText = (node: any): string => typeof node === 'string' || typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(childText).join('') : node?.props ? childText(node.props.children) : '';
+const named = (text: string) => buttons().find(button => childText(button.props.children).includes(text))!;
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; jest.clearAllMocks(); mockUser = { id: 'account-a' }; mockToken = undefined; delete process.env.EXPO_PUBLIC_WEB_URL;
+  get.mockImplementation(async (path: string) => ({ data: path === '/events' ? { success: true, events: [event('1'), event('2'), event('3'), event('private', { isPrivate: true }), event('secret', { isSecretLocation: true }), event('past', { date: '2020-01-01' })] } : { success: true, data: path === '/plans/mine' ? [] : plan } }));
+  post.mockResolvedValue({ data: { success: true, data: plan } });
+});
+afterEach(async () => { if (root) await act(async () => root.unmount()); jest.restoreAllMocks(); });
+test('share links use configured web origin or real app linking and reject malformed tokens', () => {
+  process.env.EXPO_PUBLIC_WEB_URL = 'https://example.test/some/path'; expect(groupPlanLink(token)).toBe(`https://example.test/plans/${token}`);
+  process.env.EXPO_PUBLIC_WEB_URL = 'javascript:bad'; expect(groupPlanLink(token)).toBe(`eventnow:///group-plans?token=${token}`); expect(Linking.createURL).toHaveBeenCalled();
+  expect(() => groupPlanLink('../evil')).toThrow();
+});
+test('a guest reads a deep-linked plan without login or automatic vote', async () => {
+  mockUser = null; mockToken = token; await create();
+  expect(get).toHaveBeenCalledWith(`/plans/${token}`); expect(post).not.toHaveBeenCalled();
+  await act(async () => { named('Entrar para votar').props.onPress(); });
+  expect(post).not.toHaveBeenCalled(); expect(mockPush).toHaveBeenCalledWith({ pathname: '/(auth)/login', params: { returnTo: `/group-plans?token=${token}` } });
+});
+test('creation requires two or three public future options and never selects secret events', async () => {
+  await create(); expect(JSON.stringify(root.toJSON())).not.toContain('Evento secret'); expect(JSON.stringify(root.toJSON())).not.toContain('Evento private');
+  expect(named('Crear votación').props.disabled).toBe(true);
+  await act(async () => { named('Evento 1').props.onPress(); }); expect(named('Crear votación').props.disabled).toBe(true);
+  await act(async () => { named('Evento 2').props.onPress(); }); expect(named('Crear votación').props.disabled).toBe(false);
+  await act(async () => { await named('Crear votación').props.onPress(); });
+  expect(post).toHaveBeenCalledWith('/plans', { title: 'Resolvamos el coro', eventIds: ['1', '2'], hours: 72 });
+});
+test('double tap sends one request and closing requires explicit confirmation', async () => {
+  mockToken = token; await create();
+  let finish!: (value: unknown) => void; post.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  await act(async () => { const vote = named('Votar este plan'); vote.props.onPress(); vote.props.onPress(); });
+  expect(post).toHaveBeenCalledTimes(1);
+  await act(async () => { finish({ data: { success: true, data: plan } }); });
+  const alert = jest.spyOn(Alert, 'alert'); await act(async () => { named('Cerrar votación').props.onPress(); });
+  expect(post).toHaveBeenCalledTimes(1); expect(alert).toHaveBeenCalled();
+  const actions = alert.mock.calls[0][2]!; await act(async () => { actions.find(action => action.text === 'Cerrar y elegir')!.onPress!(); });
+  expect(post).toHaveBeenLastCalledWith(`/plans/${token}/decide`, { optionId: '1' });
+});
+test('switching accounts ignores a late vote result and a stale confirmation callback', async () => {
+  mockToken = token; await create(); const alert = jest.spyOn(Alert, 'alert');
+  await act(async () => { named('Cerrar votación').props.onPress(); }); const actions = alert.mock.calls[0][2]!;
+  let finish!: (value: unknown) => void; post.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  await act(async () => { named('Votar este plan').props.onPress(); });
+  mockUser = null; await act(async () => { root.update(<GroupPlansScreen />); });
+  await act(async () => { finish({ data: { success: true, data: { ...plan, title: 'RESPUESTA DE OTRA CUENTA' } } }); actions.find(action => action.text === 'Cerrar y elegir')!.onPress!(); });
+  expect(JSON.stringify(root.toJSON())).not.toContain('RESPUESTA DE OTRA CUENTA'); expect(post).toHaveBeenCalledTimes(1);
+});
+test('an API error does not appear as a saved vote', async () => {
+  mockToken = token; await create(); post.mockRejectedValueOnce(new Error('Sin conexión'));
+  await act(async () => { await named('Votar este plan').props.onPress(); });
+  expect(JSON.stringify(root.toJSON())).toContain('Sin conexión'); expect(JSON.stringify(root.toJSON())).not.toContain('Cambio guardado');
+});

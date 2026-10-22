@@ -124,7 +124,7 @@ export function Profile() {
           <div className="flex flex-col lg:flex-row items-start lg:items-end space-y-4 lg:space-y-0 lg:space-x-6">
             {/* Avatar */}
             <div className="relative">
-              <div className="w-32 h-32 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 p-1">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 p-1">
                 <div className="w-full h-full rounded-full bg-gray-800 flex items-center justify-center">
                   <span className="text-4xl font-bold text-white">R</span>
                 </div>
@@ -226,7 +226,7 @@ export function Profile() {
           <div className="grid gap-6">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-bold text-white">Eventos creados</h3>
-              <Button className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700">
+              <Button className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700">
                 <Plus className="w-4 h-4 mr-2" />
                 Crear evento
               </Button>

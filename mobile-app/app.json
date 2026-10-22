@@ -97,7 +97,9 @@
           "photosPermission": "EventConnect necesita acceso a tus fotos para compartir imágenes de eventos.",
           "cameraPermission": "EventConnect necesita acceso a la cámara para tomar fotos."
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": false,

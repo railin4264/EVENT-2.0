@@ -1,0 +1,31 @@
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import { Text, TouchableOpacity } from 'react-native';
+import MapScreen from '../main/MapScreen';
+import { eventService } from '../../services';
+const mockLocate = jest.fn();
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), canGoBack: () => false }) }));
+jest.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
+jest.mock('../../services', () => ({ eventService: { getEvents: jest.fn(), getNearbyEvents: jest.fn() } }));
+jest.mock('../../hooks/useNearbyEvents', () => ({ ...jest.requireActual('../../hooks/useNearbyEvents'), useNearbyEvents: () => ({ status: 'denied', events: [], coordinates: null, message: 'Ubicación no autorizada', locate: mockLocate }) }));
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('react-native-maps', () => ({ __esModule: true, default: 'NativeMapView', Marker: 'MapMarker' }));
+const valid = { _id: 'public', title: 'Plan público', status: 'published', category: 'music', date: '2026-11-01T20:00:00Z', location: { coordinates: [-69.9, 18.4] } };
+let root: TestRenderer.ReactTestRenderer;
+beforeEach(() => { (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true; jest.clearAllMocks(); (eventService.getEvents as jest.Mock).mockResolvedValue({ success: true, data: [valid, { ...valid, _id: 'secret', isSecretLocation: true }, { ...valid, _id: 'private', isPrivate: true }, { ...valid, _id: 'invalid', location: { coordinates: [500, 100] } }] }); (eventService.getNearbyEvents as jest.Mock).mockResolvedValue([]); });
+afterEach(async () => { if (root) await act(async () => root.unmount()); });
+test('map opens without a GPS request and only pins public, non-secret valid coordinates', async () => {
+  await act(async () => { root = TestRenderer.create(<MapScreen />); });
+  expect(mockLocate).not.toHaveBeenCalled();
+  const markers = root.root.findAllByType('MapMarker' as any);
+  expect(markers).toHaveLength(1); expect(markers[0].props.coordinate).toEqual({ latitude: 18.4, longitude: -69.9 });
+  expect(root.root.findByType('NativeMapView' as any).props.showsUserLocation).toBe(false);
+});
+test('manual area search uses the viewed coordinates rather than pretending it is GPS', async () => {
+  await act(async () => { root = TestRenderer.create(<MapScreen />); });
+  await act(async () => root.root.findByType('NativeMapView' as any).props.onRegionChangeComplete({ latitude: 19, longitude: -70, latitudeDelta: 0.2, longitudeDelta: 0.2 }));
+  const action = root.root.findAllByType(TouchableOpacity).find(node => node.findAllByType(Text).some(text => text.props.children === 'Buscar en esta zona'));
+  await act(async () => action!.props.onPress());
+  expect(eventService.getNearbyEvents).toHaveBeenCalledWith(19, -70, expect.any(Number), 50);
+  expect(mockLocate).not.toHaveBeenCalled();
+});

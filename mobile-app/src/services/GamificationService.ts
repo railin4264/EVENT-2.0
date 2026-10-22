@@ -162,6 +162,43 @@ class GamificationService {
       throw new Error(error.response?.data?.message || 'Error al obtener historial de puntos');
     }
   }
+
+  public async getPassport(): Promise<{
+    passportNumber: string;
+    holderName: string;
+    tier: string;
+    unlockedCount: number;
+    totalStamps: number;
+    progressPercent: number;
+    stamps: Array<{
+      id: string;
+      title: string;
+      description: string;
+      category: string;
+      zone: string;
+      icon: string;
+      unlocked: boolean;
+      pointsReward: number;
+    }>;
+    perks: Array<{
+      id: string;
+      partner: string;
+      offer: string;
+      requiredStamps: number;
+      isClaimed: boolean;
+      isEligible: boolean;
+    }>;
+  }> {
+    try {
+      const response = await apiClient.get('/gamification/passport');
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      throw new Error('Error al obtener pasaporte cultural');
+    } catch (error: any) {
+      throw new Error(error.response?.data?.message || 'Error al obtener pasaporte cultural');
+    }
+  }
 }
 
 export const gamificationService = GamificationService.getInstance();

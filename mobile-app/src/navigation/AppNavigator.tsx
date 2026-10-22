@@ -44,7 +44,7 @@ function MainTabNavigator() {
   const { theme, isDark } = useTheme();
 
   return (
-    <Tab.Navigator
+    <Tab.Navigator id="MainTabs"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap;
@@ -162,7 +162,7 @@ function AuthStack() {
   const { theme } = useTheme();
 
   return (
-    <Stack.Navigator
+    <Stack.Navigator id="AppStack"
       screenOptions={{
         headerStyle: {
           backgroundColor: theme.colors.surface,
@@ -199,7 +199,7 @@ function MainStack() {
   const { theme } = useTheme();
 
   return (
-    <Stack.Navigator
+    <Stack.Navigator id="AppStack"
       screenOptions={{
         headerStyle: {
           backgroundColor: theme.colors.surface,
@@ -315,7 +315,7 @@ export function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator id="AppStack" screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <Stack.Screen name="Main" component={MainStack} />
         ) : (
@@ -325,29 +325,3 @@ export function AppNavigator() {
     </NavigationContainer>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

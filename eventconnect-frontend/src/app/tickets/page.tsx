@@ -10,6 +10,8 @@ import { Ticket as TicketIcon, Calendar, MapPin, Clock, CheckCircle, XCircle, Al
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isOfflineCached, setIsOfflineCached] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'used' | 'expired'>('all');
 
   useEffect(() => {
@@ -17,25 +19,60 @@ export default function TicketsPage() {
   }, []);
 
   const loadTickets = async () => {
+    setLoading(true);
+    setError('');
+    setIsOfflineCached(false);
     try {
       const result = await ticketService.getMyTickets();
-      setTickets(result.data);
-    } catch (error) {
-      console.error('Error loading tickets:', error);
+      if (Array.isArray(result.data) && result.data.length > 0) {
+        setTickets(result.data);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('eventnow_cached_tickets', JSON.stringify(result.data));
+        }
+      } else if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('eventnow_cached_tickets');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setTickets(parsed);
+              setIsOfflineCached(true);
+            }
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem('eventnow_cached_tickets');
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setTickets(parsed);
+              setIsOfflineCached(true);
+              setLoading(false);
+              return;
+            }
+          } catch {}
+        }
+      }
+      setError(err.message || 'No se pudieron cargar tus entradas.');
     } finally {
       setLoading(false);
     }
   };
 
+  const isTicketActive = (s: string) => s === 'active' || s === 'valid';
+
   const filterTickets = () => {
     const now = new Date();
     switch (filter) {
       case 'active':
-        return tickets.filter(t => t.status === 'active' && new Date(t.validUntil) >= now);
+        return tickets.filter(t => isTicketActive(t.status) && new Date(t.validUntil) >= now);
       case 'used':
         return tickets.filter(t => t.status === 'used');
       case 'expired':
-        return tickets.filter(t => t.status === 'active' && new Date(t.validUntil) < now);
+        return tickets.filter(t => t.status === 'expired' || (isTicketActive(t.status) && new Date(t.validUntil) < now));
       default:
         return tickets;
     }
@@ -46,20 +83,20 @@ export default function TicketsPage() {
       return { label: 'Usado', icon: CheckCircle, bg: 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400' };
     if (new Date(ticket.validUntil) < new Date())
       return { label: 'Expirado', icon: XCircle, bg: 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' };
-    if (ticket.status === 'active')
-      return { label: 'Activo', icon: CheckCircle, bg: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+    if (isTicketActive(ticket.status))
+      return { label: 'Activo', icon: CheckCircle, bg: 'bg-violet-50 dark:bg-violet-500/10 text-violet-600 dark:text-violet-400' };
     return { label: ticket.status, icon: AlertCircle, bg: 'bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' };
   };
 
-  const activeCount = tickets.filter(t => t.status === 'active' && new Date(t.validUntil) >= new Date()).length;
+  const activeCount = tickets.filter(t => isTicketActive(t.status) && new Date(t.validUntil) >= new Date()).length;
   const usedCount = tickets.filter(t => t.status === 'used').length;
-  const expiredCount = tickets.filter(t => t.status === 'active' && new Date(t.validUntil) < new Date()).length;
+  const expiredCount = tickets.filter(t => t.status === 'expired' || (isTicketActive(t.status) && new Date(t.validUntil) < new Date())).length;
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
         <div className="space-y-4 text-center">
-          <div className="w-16 h-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin mx-auto" />
+          <div className="w-16 h-16 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin mx-auto" />
           <p className="text-gray-500 dark:text-gray-400 font-medium">Cargando tickets...</p>
         </div>
       </div>
@@ -84,11 +121,24 @@ export default function TicketsPage() {
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
+        {error && <div role="alert" className="rounded-xl border border-red-300 p-4 text-red-600">{error}<button className="ml-4 underline" onClick={loadTickets}>Reintentar</button></div>}
+        <p className="text-sm text-gray-500">Las entradas aparecen cuando se confirma tu reserva. Si acabas de pagar, <button onClick={loadTickets} className="text-violet-500 underline">actualiza la lista</button>.</p>
+
+        {isOfflineCached && (
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-950/40 p-4 text-emerald-200 shadow-md">
+            <CheckCircle className="h-5 w-5 text-emerald-400 shrink-0" />
+            <div className="text-xs">
+              <span className="font-bold block text-white text-sm">📱 Pases Digitales Offline Listos</span>
+              Tus entradas están guardadas de forma segura en este dispositivo y son válidas para escanear en la puerta sin señal ni conexión a internet.
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: 'Total', value: tickets.length, numColor: 'text-violet-600 dark:text-violet-400' },
-            { label: 'Activos', value: activeCount, numColor: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Activos', value: activeCount, numColor: 'text-violet-600 dark:text-violet-400' },
             { label: 'Usados', value: usedCount, numColor: 'text-gray-700 dark:text-gray-300' },
             { label: 'Expirados', value: expiredCount, numColor: 'text-red-600 dark:text-red-400' },
           ].map(({ label, value, numColor }, i) => (
@@ -144,7 +194,7 @@ export default function TicketsPage() {
             {filter === 'all' && (
               <Link
                 href="/events"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-sm transition-colors"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-500 hover:bg-violet-600 text-white rounded-xl font-semibold text-sm transition-colors"
               >
                 Explorar eventos
                 <ChevronRight className="w-4 h-4" />
@@ -166,14 +216,14 @@ export default function TicketsPage() {
                   transition={{ delay: i * 0.04 }}
                 >
                   <Link
-                    href={`/tickets/${ticket._id}`}
+                    href={`/tickets/${encodeURIComponent(ticket._id)}`}
                     className="block bg-white dark:bg-gray-900 border border-gray-100 dark:border-white/5 rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden"
                   >
                     {/* accent stripe */}
                     <div
                       className={`h-1 w-full ${
                         isActive
-                          ? 'bg-gradient-to-r from-emerald-400 to-teal-400'
+                          ? 'bg-gradient-to-r from-violet-400 to-cyan-400'
                           : ticket.status === 'used'
                           ? 'bg-gray-200 dark:bg-white/10'
                           : 'bg-red-300 dark:bg-red-500/30'
@@ -223,7 +273,7 @@ export default function TicketsPage() {
                         </div>
 
                         <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100 dark:border-white/5 text-sm">
-                          <span className="text-gray-500 dark:text-gray-400">{ticket.ticketType.name}</span>
+                          <span className="text-gray-500 dark:text-gray-400">{ticket.ticketType.name}{(ticket.quantity || 1) > 1 ? ` · ${ticket.quantity} personas` : ''}</span>
                           <span className="font-bold text-gray-900 dark:text-white">
                             {ticket.currency} {ticket.price.toFixed(2)}
                           </span>

@@ -24,9 +24,6 @@ class EmailService {
   async send(to, subject, html) {
     if (!this.isConfigured) {
       logger.warn(`[EmailService] SMTP not configured. Would have sent "${subject}" to ${to}`);
-      if (process.env.NODE_ENV !== 'production') {
-        logger.info(`[EmailService DEV] Email body preview:\n${html.replace(/<[^>]+>/g, '')}`);
-      }
       return { messageId: 'dev-no-send', devMode: true };
     }
 

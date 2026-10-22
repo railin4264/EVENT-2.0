@@ -285,7 +285,7 @@ export function Notifications({ isOpen, onClose }: NotificationsProps) {
                                   <Button size="sm" variant="outline" className="h-7 px-3 text-xs border-white/20 text-white hover:bg-white/10">
                                     Declinar
                                   </Button>
-                                  <Button size="sm" className="h-7 px-3 text-xs bg-gradient-to-r from-violet-600 to-blue-600">
+                                  <Button size="sm" className="h-7 px-3 text-xs bg-gradient-to-r from-violet-600 to-cyan-600">
                                     Aceptar
                                   </Button>
                                 </>
@@ -295,7 +295,7 @@ export function Notifications({ isOpen, onClose }: NotificationsProps) {
                                   <Button size="sm" variant="outline" className="h-7 px-3 text-xs border-white/20 text-white hover:bg-white/10">
                                     Ignorar
                                   </Button>
-                                  <Button size="sm" className="h-7 px-3 text-xs bg-gradient-to-r from-violet-600 to-blue-600">
+                                  <Button size="sm" className="h-7 px-3 text-xs bg-gradient-to-r from-violet-600 to-cyan-600">
                                     Unirse
                                   </Button>
                                 </>

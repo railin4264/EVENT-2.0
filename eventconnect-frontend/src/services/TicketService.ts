@@ -1,8 +1,10 @@
-import axios, { AxiosResponse } from 'axios';
+import type { AxiosResponse } from 'axios';
+import axios from '@/lib/api/client';
 import type { ApiResponse, PaginatedResponse, Event } from '../types/api.types';
 
 export interface Ticket {
   _id: string;
+  quantity?: number;
   event: string | Event;
   user: string;
   ticketType: TicketType;
@@ -15,6 +17,19 @@ export interface Ticket {
   validUntil: string;
   usedAt?: string;
   metadata?: Record<string, any>;
+}
+
+// Admissions are issued from paid orders; inventory ticket types are a separate API.
+export function normalizeOwnedTicket(ticket: any): Ticket {
+  return {
+    ...ticket,
+    _id: ticket._id || ticket.id,
+    status: ticket.status === 'valid' ? 'active' : ticket.status,
+    validFrom: ticket.validFrom || ticket.event?.date || ticket.purchaseDate,
+    ticketType: typeof ticket.ticketType === 'object' && ticket.ticketType
+      ? ticket.ticketType
+      : { id: ticket.ticketType || 'general', name: ticket.name || 'Entrada general' },
+  };
 }
 
 export interface TicketType {
@@ -73,7 +88,7 @@ class TicketService {
           params: { page, limit }
         });
 
-      return response.data;
+      return { ...response.data, data: (response.data.data || []).map(normalizeOwnedTicket) };
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Error al obtener tickets');
     }
@@ -82,10 +97,10 @@ class TicketService {
   public async getTicketById(ticketId: string): Promise<Ticket> {
     try {
       const response: AxiosResponse<ApiResponse<Ticket>> =
-        await axios.get(`${this.apiBaseUrl}/tickets/${ticketId}`);
+        await axios.get(`${this.apiBaseUrl}/tickets/owned/${encodeURIComponent(ticketId)}`);
 
       if (response.data.success && response.data.data) {
-        return response.data.data;
+        return normalizeOwnedTicket(response.data.data);
       }
 
       throw new Error('Ticket no encontrado');

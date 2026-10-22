@@ -1,499 +1,493 @@
-'use client';
+'use client'
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, Calendar, MapPin, Ticket, ShieldCheck, ChevronLeft, Plus, Minus, Tag } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  Calendar,
+  MapPin,
+  Ticket,
+  ShieldCheck,
+  ArrowLeft,
+  Loader2,
+  Copy,
+  CheckCircle2,
+  Building2,
+  Send,
+  AlertCircle,
+  MessageCircle,
+} from 'lucide-react'
+import { apiClient } from '@/lib/api/client'
+import { useAuthStore } from '@/stores/authStore'
+import type { Event } from '@/types/api.types'
 
-import { eventService, ticketService, paymentService } from '@/services';
-import type { Event } from '@/types/api.types';
-import type { TicketType } from '@/services/TicketService';
-import toast from 'react-hot-toast';
+interface TicketOption {
+  id: string
+  name: string
+  description?: string
+  price: number
+  currency: string
+  remaining: number
+  minPurchase: number
+  maxPurchase: number
+}
+
+interface Order {
+  _id: string
+  status: string
+  total: number
+  subtotal: number
+  currency: string
+  fees: { processing: number; service: number; tax: number }
+  paymentMethod?: string
+}
+
+const DEFAULT_BANKS = [
+  { bankName: 'Banco Popular Dominicano', accountNumber: '792817291', accountType: 'Corriente', beneficiaryName: 'EventNow RD SRL', rncOrCedula: '132-98421-2' },
+  { bankName: 'Banco BHD', accountNumber: '081294821', accountType: 'Ahorros', beneficiaryName: 'EventNow RD SRL', rncOrCedula: '132-98421-2' },
+  { bankName: 'Banreservas', accountNumber: '960182471', accountType: 'Ahorros', beneficiaryName: 'EventNow RD SRL', rncOrCedula: '132-98421-2' },
+  { bankName: 'Qik Banco Digital', accountNumber: '829491029', accountType: 'Digital', beneficiaryName: 'EventNow RD', rncOrCedula: '132-98421-2' },
+]
+
+const money = (amount: number, currency = 'DOP') =>
+  new Intl.NumberFormat('es-DO', { style: 'currency', currency: currency.toUpperCase() }).format(amount)
 
 export default function CheckoutPage() {
-  const params = useParams();
-  const router = useRouter();
-  const eventId = params.eventId as string;
+  const { eventId } = useParams<{ eventId: string }>()
+  const router = useRouter()
+  const user = useAuthStore(state => state.user)
+  const [event, setEvent] = useState<Event | null>(null)
+  const [options, setOptions] = useState<TicketOption[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [quantity, setQuantity] = useState(1)
+  const [order, setOrder] = useState<Order | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const inFlight = useRef(false)
+  const [error, setError] = useState('')
 
-  const [event, setEvent] = useState<Event | null>(null);
-  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
-  const [selectedTicketType, setSelectedTicketType] = useState<TicketType | null>(null);
-  const [quantity, setQuantity] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
+  // Bank Transfer states
+  const [selectedBankIndex, setSelectedBankIndex] = useState(0)
+  const [referenceNumber, setReferenceNumber] = useState('')
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [transferSubmitted, setTransferSubmitted] = useState(false)
 
-  // Form fields
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvc, setCardCvc] = useState('');
-  const [cardName, setCardName] = useState('');
+  const selected = options.find(option => option.id === selectedId)
+  const maximum = selected ? Math.min(selected.remaining, selected.maxPurchase || 10, 10) : 1
+  const minimum = selected?.minPurchase || 1
+
+  const bankAccounts = (event as any)?.localPaymentConfig?.bankAccounts?.length
+    ? (event as any).localPaymentConfig.bankAccounts
+    : DEFAULT_BANKS
+
+  const currentBank = bankAccounts[selectedBankIndex] || bankAccounts[0]
 
   useEffect(() => {
-    loadEventData();
-  }, [eventId]);
+    let active = true
+    setLoading(true)
+    setError('')
+    Promise.all([apiClient.get(`/events/${eventId}`), apiClient.get(`/payments/events/${eventId}/tickets`)])
+      .then(([eventResponse, ticketResponse]) => {
+        if (!active) return
+        setEvent(eventResponse.data.event ?? eventResponse.data.data)
+        const tickets: TicketOption[] = ticketResponse.data.data?.tickets ?? []
+        setOptions(tickets)
+        const available = tickets.find(ticket => ticket.remaining >= (ticket.minPurchase || 1))
+        setSelectedId(available?.id || '')
+        setQuantity(available?.minPurchase || 1)
+      })
+      .catch(failure => {
+        if (active) setError(failure.response?.data?.message || 'No pudimos cargar las entradas. Vuelve a intentarlo.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [eventId])
 
-  const loadEventData = async () => {
+  const copyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedField(fieldName)
+    setTimeout(() => setCopiedField(null), 2000)
+  }
+
+  const reserve = async () => {
+    if (!selected || inFlight.current || quantity < minimum || quantity > maximum) return
+    if (!user) {
+      router.push(`/login?redirect=${encodeURIComponent(`/checkout/${eventId}`)}`)
+      return
+    }
+    inFlight.current = true
+    setBusy(true)
+    setError('')
     try {
-      const [eventResult, ticketsResult] = await Promise.all([
-        eventService.getEventById(eventId),
-        ticketService.getEventTickets(eventId),
-      ]);
-
-      setEvent(eventResult);
-      setTicketTypes(ticketsResult);
-
-      if (ticketsResult.length > 0) {
-        setSelectedTicketType(ticketsResult[0]);
+      const response = await apiClient.post('/payments/orders', { eventId, items: [{ ticketId: selected.id, quantity }] })
+      const created: Order = response.data.data
+      if (!created?._id) throw new Error('No se pudo crear la reserva')
+      setOrder(created)
+      if (created.status === 'confirmed' || selected.price === 0) {
+        router.replace('/tickets')
       }
-    } catch (error) {
-      console.error('Error loading event data:', error);
-      toast.error('No se pudo cargar la información del evento');
-      router.push('/events');
+    } catch (failure: any) {
+      setError(failure.response?.data?.message || failure.message || 'No se pudo reservar. Inténtalo de nuevo.')
     } finally {
-      setLoading(false);
+      inFlight.current = false
+      setBusy(false)
     }
-  };
+  }
 
-  const calculateSubtotal = () => {
-    if (!selectedTicketType) return 0;
-    return selectedTicketType.price * quantity;
-  };
-
-  const calculateServiceFee = () => {
-    return calculateSubtotal() * 0.1; // 10% de tarifa de servicio
-  };
-
-  const calculateTotal = () => {
-    return calculateSubtotal() + calculateServiceFee();
-  };
-
-  const validateForm = () => {
-    if (!selectedTicketType) {
-      toast.error('Por favor, selecciona un tipo de ticket');
-      return false;
+  const submitBankTransfer = async () => {
+    if (!order || inFlight.current) return
+    if (!referenceNumber.trim()) {
+      setError('Por favor ingresa el número de referencia o confirmación de la transferencia.')
+      return
     }
 
-    if (quantity < 1) {
-      toast.error('Selecciona al menos un ticket');
-      return false;
-    }
-
-    if (!cardNumber || cardNumber.replace(/\s/g, '').length !== 16) {
-      toast.error('Por favor, ingresa un número de tarjeta válido');
-      return false;
-    }
-
-    if (!cardExpiry || !cardExpiry.match(/^\d{2}\/\d{2}$/)) {
-      toast.error('Ingresa una fecha de expiración válida (MM/YY)');
-      return false;
-    }
-
-    if (!cardCvc || cardCvc.length !== 3) {
-      toast.error('Ingresa un CVC válido');
-      return false;
-    }
-
-    if (!cardName) {
-      toast.error('Ingresa el nombre del titular');
-      return false;
-    }
-
-    return true;
-  };
-
-  const handlePurchase = async () => {
-    if (!validateForm()) return;
-
-    setProcessing(true);
+    inFlight.current = true
+    setBusy(true)
+    setError('')
     try {
-      // Create payment intent
-      const paymentResult = await paymentService.createPaymentIntent({
-        amount: Math.round(calculateTotal() * 100), // Convertir a centavos
-        currency: selectedTicketType!.currency || 'USD',
-        metadata: {
-          eventId,
-          ticketTypeId: selectedTicketType!.id,
-          quantity: quantity.toString(),
-        },
-      });
-
-      // Purchase tickets
-      await ticketService.purchaseTickets({
-        eventId,
-        tickets: [
-          {
-            ticketTypeId: selectedTicketType!.id,
-            quantity,
-          },
-        ],
-        paymentMethodId: paymentResult.clientSecret,
-      });
-
-      toast.success('¡Compra realizada con éxito!');
-      router.push('/tickets');
-    } catch (error: any) {
-      console.error('Error al comprar tickets:', error);
-      toast.error(error.message || 'Fallo al procesar la compra. Inténtalo de nuevo.');
+      await apiClient.post(`/payments/orders/${order._id}/bank-transfer`, {
+        bankName: currentBank.bankName,
+        referenceNumber: referenceNumber.trim(),
+      })
+      setTransferSubmitted(true)
+    } catch (failure: any) {
+      setError(failure.response?.data?.message || failure.message || 'No se pudo registrar la transferencia. Inténtalo de nuevo.')
     } finally {
-      setProcessing(false);
+      inFlight.current = false
+      setBusy(false)
     }
-  };
+  }
 
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = (matches && matches[0]) || '';
-    const parts = [];
-
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
+  const changeSelection = async () => {
+    if (!order || inFlight.current) return
+    inFlight.current = true
+    setBusy(true)
+    try {
+      await apiClient.delete(`/payments/orders/${order._id}`)
+      setOrder(null)
+      setTransferSubmitted(false)
+      setReferenceNumber('')
+      setError('')
+    } catch (failure: any) {
+      setError(failure.response?.data?.message || 'No se pudo cancelar la reserva anterior.')
+    } finally {
+      inFlight.current = false
+      setBusy(false)
     }
-
-    return parts.length ? parts.join(' ') : value;
-  };
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0A0A0A] flex items-center justify-center p-4">
-        <div className="flex flex-col items-center">
-          <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-          <p className="mt-4 text-gray-500 dark:text-gray-400">Preparando checkout...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!event) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-[#0A0A0A] flex items-center justify-center p-4">
-        <div className="glass bg-white/60 dark:bg-gray-900/60 p-8 rounded-2xl border border-white/20 dark:border-white/10 text-center max-w-md">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Evento no encontrado</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">El evento que buscas no existe o ha sido eliminado.</p>
-          <button
-            onClick={() => router.push('/events')}
-            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
-          >
-            Explorar Eventos
-          </button>
-        </div>
-      </div>
-    );
+      <main className="min-h-screen grid place-items-center">
+        <Loader2 className="animate-spin text-primary h-8 w-8" aria-label="Cargando entradas" />
+      </main>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#0A0A0A] text-gray-900 dark:text-white pb-24 pt-6">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Header */}
-        <div className="flex items-center mb-8">
-          <button 
-            onClick={() => router.back()} 
-            className="p-2 mr-4 bg-white/50 dark:bg-gray-800/50 hover:bg-white dark:hover:bg-gray-700 rounded-full backdrop-blur-sm border border-gray-200 dark:border-white/10 transition-colors"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-          <div>
-            <h1 className="text-3xl font-bold">Checkout Seguro</h1>
-            <p className="text-gray-500 dark:text-gray-400">Completa tu compra para asegurar tu lugar</p>
+    <main className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white px-4 py-10 pb-28">
+      <div className="max-w-5xl mx-auto">
+        <Link href={`/events/${eventId}`} className="inline-flex gap-2 items-center text-sm text-gray-500 mb-8 hover:text-foreground transition-colors">
+          <ArrowLeft size={16} /> Volver al evento
+        </Link>
+        <p className="text-xs uppercase tracking-widest text-primary font-semibold mb-2">Pase y Admisión</p>
+        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-8">Reserva tus entradas</h1>
+
+        {error && (
+          <div role="alert" className="mb-6 flex items-start gap-3 border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 p-4 rounded-2xl">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div>{error}</div>
           </div>
-        </div>
+        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Main Content (Left Column) */}
-          <div className="lg:col-span-2 space-y-6">
-            
-            {/* Event Info Card */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl p-6 md:p-8"
-            >
-              <h2 className="text-xl font-bold mb-6 flex items-center">
-                <Ticket className="w-5 h-5 mr-3 text-blue-500" />
-                Resumen del Evento
-              </h2>
-              <div className="flex flex-col md:flex-row gap-6">
-                {event.imageUrl && (
-                  <img 
-                    src={event.imageUrl} 
-                    alt={event.title} 
-                    className="w-full md:w-48 h-32 object-cover rounded-2xl shadow-md"
-                  />
-                )}
-                <div className="space-y-4 flex-1">
-                  <h3 className="text-2xl font-bold">{event.title}</h3>
-                  <div className="space-y-2">
-                    <div className="flex items-center text-gray-600 dark:text-gray-300">
-                      <Calendar className="w-4 h-4 mr-3 text-blue-500" />
-                      {new Date(event.date).toLocaleDateString('es-ES', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </div>
-                    <div className="flex items-center text-gray-600 dark:text-gray-300">
-                      <MapPin className="w-4 h-4 mr-3 text-red-500" />
-                      {event.location?.address || 'Ubicación por confirmar'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Ticket Selection */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="glass bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl p-6 md:p-8"
-            >
-              <h2 className="text-xl font-bold mb-6 flex items-center">
-                <Tag className="w-5 h-5 mr-3 text-emerald-500" />
-                Selecciona tu Ticket
-              </h2>
-              
-              <div className="space-y-4">
-                {ticketTypes.map((ticketType) => {
-                  const isSelected = selectedTicketType?.id === ticketType.id;
-                  const isSoldOut = ticketType.available <= 0;
-
-                  return (
-                    <button
-                      key={ticketType.id}
-                      disabled={isSoldOut}
-                      onClick={() => setSelectedTicketType(ticketType)}
-                      className={`w-full text-left p-5 rounded-2xl border-2 transition-all duration-200 relative overflow-hidden group ${
-                        isSelected
-                          ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10'
-                          : isSoldOut 
-                            ? 'border-gray-200 dark:border-gray-800 opacity-60 cursor-not-allowed'
-                            : 'border-gray-200 dark:border-white/10 hover:border-blue-300 dark:hover:border-blue-500/50 hover:bg-white/50 dark:hover:bg-white/5'
-                      }`}
-                    >
-                      {isSelected && (
-                        <div className="absolute top-0 right-0 w-2 h-full bg-blue-500"></div>
-                      )}
-                      
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="font-bold text-lg mb-1">{ticketType.name}</div>
-                          <div className={`text-sm ${isSoldOut ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                            {isSoldOut ? 'Agotado' : `Quedan ${ticketType.available} disponibles`}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-2xl font-black text-gray-900 dark:text-white">
-                            {ticketType.currency === 'USD' ? '$' : '€'}{ticketType.price.toFixed(2)}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-                
-                {ticketTypes.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    No hay tickets disponibles para este evento en este momento.
-                  </div>
-                )}
+        {!event ? (
+          <Link href="/events" className="text-primary underline">
+            Explorar eventos
+          </Link>
+        ) : (
+          <div className="grid lg:grid-cols-[1fr_380px] gap-8">
+            <section className="space-y-6">
+              {/* Event card */}
+              <div className="rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 p-6 md:p-8 shadow-sm">
+                <h2 className="text-2xl font-bold mb-4">{event.title}</h2>
+                <p className="flex items-center gap-3 text-gray-500 dark:text-gray-400 mb-3 text-sm">
+                  <Calendar size={18} className="text-primary" />
+                  {new Date(event.date).toLocaleString('es-DO', { dateStyle: 'long', timeStyle: 'short' })}
+                </p>
+                <p className="flex items-center gap-3 text-gray-500 dark:text-gray-400 text-sm">
+                  <MapPin size={18} className="text-pink-500" />
+                  {event.location?.address || 'Ubicación por confirmar'}
+                </p>
               </div>
 
-              {/* Quantity Selector (Shows only if a ticket is selected) */}
-              <AnimatePresence>
-                {selectedTicketType && (
-                  <motion.div 
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="mt-8 pt-6 border-t border-gray-200 dark:border-white/10 flex items-center justify-between"
-                  >
-                    <span className="font-medium text-lg">Cantidad</span>
-                    <div className="flex items-center gap-4 bg-gray-100 dark:bg-gray-800 rounded-full p-1">
-                      <button
-                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                        className="w-10 h-10 rounded-full bg-white dark:bg-gray-700 shadow flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+              {/* Ticket selection */}
+              {!order ? (
+                <div className="rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 p-6 md:p-8 shadow-sm">
+                  <h2 className="text-lg font-bold flex items-center gap-2 mb-5">
+                    <Ticket size={20} className="text-primary" /> Elige tu entrada
+                  </h2>
+
+                  {(event as any)?.ticketUrl && (
+                    <div className="mb-6 p-5 rounded-2xl bg-gradient-to-r from-violet-600/10 to-fuchsia-600/10 border border-violet-500/30">
+                      <p className="font-semibold text-sm mb-1">🎟️ Entradas disponibles en boletería externa</p>
+                      <p className="text-xs text-muted-foreground mb-4">Este organizador gestiona sus entradas a través de una taquilla autorizada.</p>
+                      <a
+                        href={(event as any).ticketUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-sm px-5 py-3 rounded-xl hover:opacity-95 shadow-md"
                       >
-                        <Minus className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-                      </button>
-                      <span className="text-xl font-bold w-6 text-center">{quantity}</span>
-                      <button
-                        onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                        className="w-10 h-10 rounded-full bg-white dark:bg-gray-700 shadow flex items-center justify-center hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
-                      >
-                        <Plus className="w-5 h-5 text-gray-700 dark:text-gray-200" />
-                      </button>
+                        Comprar en boletería oficial del evento
+                      </a>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
+                  )}
 
-            {/* Payment Details */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="glass bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border border-white/20 dark:border-white/10 rounded-3xl p-6 md:p-8 relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 text-gray-100 dark:text-gray-800/30 transform translate-x-4 -translate-y-4">
-                <CreditCard className="w-48 h-48" />
-              </div>
-              
-              <h2 className="text-xl font-bold mb-6 flex items-center relative z-10">
-                <ShieldCheck className="w-5 h-5 mr-3 text-purple-500" />
-                Pago Seguro
-              </h2>
-              
-              <div className="space-y-5 relative z-10">
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                    Número de Tarjeta
-                  </label>
-                  <div className="relative">
-                    <CreditCard className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                      placeholder="0000 0000 0000 0000"
-                      maxLength={19}
-                      className="w-full pl-12 pr-4 py-3 bg-white/50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900 dark:text-white font-mono placeholder-gray-400 dark:placeholder-gray-600"
-                    />
-                  </div>
-                </div>
+                  {options.length === 0 && <p className="text-gray-500">Este evento aún no tiene entradas a la venta.</p>}
 
-                <div className="grid grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                      Expiración
-                    </label>
-                    <input
-                      type="text"
-                      value={cardExpiry}
-                      onChange={(e) => {
-                        let text = e.target.value.replace(/[^0-9]/g, '');
-                        if (text.length > 2) text = text.substring(0,2) + '/' + text.substring(2,4);
-                        setCardExpiry(text);
-                      }}
-                      placeholder="MM/YY"
-                      maxLength={5}
-                      className="w-full px-4 py-3 bg-white/50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900 dark:text-white font-mono placeholder-gray-400 dark:placeholder-gray-600 text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                      CVC / CVV
-                    </label>
-                    <input
-                      type="text"
-                      value={cardCvc}
-                      onChange={(e) => setCardCvc(e.target.value.replace(/[^0-9]/g, ''))}
-                      placeholder="123"
-                      maxLength={4}
-                      className="w-full px-4 py-3 bg-white/50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900 dark:text-white font-mono placeholder-gray-400 dark:placeholder-gray-600 text-center"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                    Nombre del Titular
-                  </label>
-                  <input
-                    type="text"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value.toUpperCase())}
-                    placeholder="JOHN DOE"
-                    className="w-full px-4 py-3 bg-white/50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 uppercase"
-                  />
-                </div>
-              </div>
-            </motion.div>
-          </div>
-
-          {/* Right Column (Order Summary - Sticky) */}
-          <div className="lg:col-span-1">
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
-              className="glass bg-blue-600/5 dark:bg-blue-900/10 backdrop-blur-xl border border-blue-500/20 dark:border-blue-500/10 rounded-3xl p-6 md:p-8 lg:sticky lg:top-8"
-            >
-              <h2 className="text-xl font-bold mb-6 text-gray-900 dark:text-white">Tu Pedido</h2>
-
-              {selectedTicketType ? (
-                <div className="space-y-6">
-                  {/* Item List */}
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center text-gray-600 dark:text-gray-300">
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white">{selectedTicketType.name}</p>
-                        <p className="text-sm">{quantity}x Ticket{quantity > 1 && 's'}</p>
-                      </div>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {selectedTicketType.currency === 'USD' ? '$' : '€'}{calculateSubtotal().toFixed(2)}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
-                      <span>Tarifas de Servicio (10%)</span>
-                      <span>
-                        {selectedTicketType.currency === 'USD' ? '$' : '€'}{calculateServiceFee().toFixed(2)}
-                      </span>
-                    </div>
+                  <div className="space-y-3">
+                    {options.map(option => {
+                      const soldOut = option.remaining < (option.minPurchase || 1)
+                      return (
+                        <button
+                          key={option.id}
+                          disabled={soldOut || !!order || busy}
+                          aria-pressed={selectedId === option.id}
+                          onClick={() => {
+                            setSelectedId(option.id)
+                            setQuantity(option.minPurchase || 1)
+                          }}
+                          className={`w-full text-left border rounded-2xl p-5 flex items-center justify-between gap-4 disabled:opacity-50 transition-all ${
+                            selectedId === option.id
+                              ? 'border-primary bg-primary/10 shadow-sm'
+                              : 'border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20'
+                          }`}
+                        >
+                          <span>
+                            <span className="font-semibold block text-base">{option.name}</span>
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                              {soldOut ? 'Agotado' : `${option.remaining} disponibles`}
+                            </span>
+                            {option.description && <span className="block text-xs text-gray-400 mt-1">{option.description}</span>}
+                          </span>
+                          <span className="font-bold whitespace-nowrap text-lg text-primary">
+                            {option.price === 0 ? 'Entrada Libre' : money(option.price, option.currency)}
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
 
-                  {/* Total */}
-                  <div className="border-t border-blue-500/20 dark:border-blue-500/10 pt-6 mt-6">
-                    <div className="flex justify-between items-end mb-8">
-                      <span className="text-lg font-medium text-gray-900 dark:text-gray-100">Total a Pagar</span>
-                      <span className="text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tight">
-                        {selectedTicketType.currency === 'USD' ? '$' : '€'}{calculateTotal().toFixed(2)}
-                      </span>
+                  {selected && (
+                    <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-100 dark:border-white/10">
+                      <label htmlFor="quantity" className="font-medium text-sm">
+                        Cantidad de entradas
+                      </label>
+                      <input
+                        id="quantity"
+                        type="number"
+                        min={minimum}
+                        max={maximum}
+                        value={quantity}
+                        disabled={!!order || busy}
+                        onChange={e => setQuantity(Math.max(minimum, Math.min(maximum, Number(e.target.value) || minimum)))}
+                        className="w-24 border border-gray-300 dark:border-white/20 rounded-xl p-3 bg-transparent text-center font-bold"
+                      />
                     </div>
-
-                    <button
-                      onClick={handlePurchase}
-                      disabled={processing || !selectedTicketType}
-                      className="w-full relative group overflow-hidden rounded-2xl disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                      <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 transition-all duration-300" />
-                      <div className="relative px-8 py-4 flex items-center justify-center text-white font-bold text-lg">
-                        {processing ? (
-                          <>
-                            <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin mr-3" />
-                            Procesando Pago...
-                          </>
-                        ) : (
-                          'Comprar Ahora'
-                        )}
-                      </div>
-                    </button>
-
-                    <div className="mt-6 flex flex-col items-center gap-2 opacity-60">
-                      <ShieldCheck className="w-5 h-5" />
-                      <p className="text-xs text-center">
-                        Tus pagos están seguros y encriptados. <br/>
-                        Al continuar aceptas nuestros Términos de Servicio.
-                      </p>
-                    </div>
-                  </div>
+                  )}
                 </div>
               ) : (
-                <div className="text-center py-12 opacity-50 flex flex-col items-center">
-                  <Ticket className="w-12 h-12 mb-4" />
-                  <p>Selecciona un ticket para ver el resumen de tu pedido.</p>
+                /* Bank Transfer Direct instructions */
+                <div className="rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 p-6 md:p-8 shadow-sm">
+                  {transferSubmitted ? (
+                    <div className="text-center py-6">
+                      <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle2 size={36} />
+                      </div>
+                      <h2 className="text-2xl font-bold mb-2">¡Comprobante Enviado!</h2>
+                      <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
+                        Tu transferencia ha sido registrada. El organizador verificará los fondos y tu pase QR se activará en tu perfil.
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Link
+                          href="/tickets"
+                          className="px-6 py-3.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl text-center shadow-lg shadow-primary/20"
+                        >
+                          Ver Mis Entradas
+                        </Link>
+                        <a
+                          href={`https://wa.me/?text=${encodeURIComponent(
+                            `Hola, he realizado la transferencia para el evento "${event.title}". Mi orden es #${order._id.slice(-6).toUpperCase()} y la referencia es ${referenceNumber}.`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-6 py-3.5 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold rounded-xl flex items-center justify-center gap-2"
+                        >
+                          <MessageCircle size={18} /> Avisar al Organizador por WhatsApp
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <Building2 className="text-primary w-5 h-5" />
+                        <h2 className="text-lg font-bold">Datos para Transferencia Bancaria (RD)</h2>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-6">
+                        Transfiere el monto exacto de tu reserva y copia el número de referencia bancaria para validar tu entrada.
+                      </p>
+
+                      {/* Bank Select Tabs */}
+                      <div className="flex flex-wrap gap-2 mb-6">
+                        {bankAccounts.map((b: any, idx: number) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setSelectedBankIndex(idx)}
+                            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                              selectedBankIndex === idx
+                                ? 'bg-primary text-white border-primary shadow-sm'
+                                : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {b.bankName}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Bank Details Card */}
+                      <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5 mb-6 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground font-semibold">Banco:</span>
+                          <span className="text-sm font-bold">{currentBank.bankName}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground font-semibold">Número de Cuenta:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-extrabold text-primary font-mono">{currentBank.accountNumber}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(currentBank.accountNumber, 'acc')}
+                              className="p-1 text-gray-400 hover:text-primary transition-colors"
+                              title="Copiar número de cuenta"
+                            >
+                              {copiedField === 'acc' ? <CheckCircle2 size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground font-semibold">Tipo de Cuenta:</span>
+                          <span className="text-sm capitalize">{currentBank.accountType || 'Ahorros'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground font-semibold">Titular / Beneficiario:</span>
+                          <span className="text-sm font-medium">{currentBank.beneficiaryName}</span>
+                        </div>
+                        {currentBank.rncOrCedula && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground font-semibold">RNC / Cédula:</span>
+                            <span className="text-sm font-mono">{currentBank.rncOrCedula}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Input Reference Number */}
+                      <div className="space-y-2 mb-6">
+                        <label htmlFor="refNum" className="block text-sm font-bold">
+                          Número de Referencia o Comprobante de Pago
+                        </label>
+                        <input
+                          id="refNum"
+                          type="text"
+                          value={referenceNumber}
+                          onChange={e => setReferenceNumber(e.target.value)}
+                          placeholder="Ej. 10928472 o 482910"
+                          className="w-full border border-gray-300 dark:border-white/20 rounded-xl p-3.5 bg-transparent font-mono text-base focus:outline-none focus:border-primary"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Ingresa el código o número de confirmación que aparece al completar la transferencia en tu banco.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          disabled={busy || !referenceNumber.trim()}
+                          onClick={submitBankTransfer}
+                          className="flex-1 bg-primary hover:bg-primary/90 text-white font-bold py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
+                        >
+                          {busy ? <Loader2 className="animate-spin h-5 w-5" /> : <Send size={18} />}
+                          <span>Confirmar Transferencia</span>
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={changeSelection}
+                          className="py-3.5 px-5 rounded-xl border border-gray-300 dark:border-white/15 text-sm text-muted-foreground hover:text-foreground transition-all"
+                        >
+                          Cambiar Selección
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-            </motion.div>
-          </div>
+            </section>
 
-        </div>
+            {/* Sidebar Summary */}
+            <aside className="rounded-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 p-6 md:p-8 h-fit lg:sticky lg:top-24 shadow-sm">
+              <h2 className="text-xl font-bold mb-6">Resumen de Reserva</h2>
+
+              {selected ? (
+                <>
+                  <p className="mb-4 flex justify-between gap-4 text-sm">
+                    <span className="font-medium text-foreground">
+                      {quantity} × {selected.name}
+                    </span>
+                    <span className="font-bold">{money(order?.subtotal ?? selected.price * quantity, selected.currency)}</span>
+                  </p>
+
+                  {order ? (
+                    <>
+                      <p className="flex justify-between text-xs text-muted-foreground mb-4">
+                        <span>Gestión y servicio</span>
+                        <span>{money(order.total - order.subtotal, order.currency)}</span>
+                      </p>
+                      <div className="flex justify-between items-baseline text-2xl font-black border-t border-gray-200 dark:border-white/10 pt-4 mb-6">
+                        <span>Total:</span>
+                        <span className="text-primary">{money(order.total, order.currency)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-muted-foreground mb-6">
+                        {selected.price === 0
+                          ? 'Tu entrada es 100% gratuita. Solo pulsa el botón para asegurar tu cupo.'
+                          : 'Cero cargos sorpresa. Verás las cuentas bancarias para transferir una vez confirmes la reserva.'}
+                      </p>
+                      <button
+                        disabled={busy}
+                        onClick={reserve}
+                        className="w-full bg-primary hover:bg-primary/90 text-white font-bold rounded-2xl py-4 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
+                      >
+                        {busy ? 'Generando reserva…' : selected.price === 0 ? 'Asegurar cupo gratis' : 'Continuar al Pago Directo'}
+                      </button>
+                    </>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Selecciona una entrada disponible para continuar.</p>
+              )}
+
+              <div className="mt-6 pt-5 border-t border-gray-200 dark:border-white/10 text-xs text-muted-foreground flex gap-2 leading-relaxed">
+                <ShieldCheck className="shrink-0 h-4 w-4 text-emerald-400" />
+                <span>Validación directa sin intermediarios. Tu entrada se asocia a tu usuario y se emite con código QR seguro.</span>
+              </div>
+            </aside>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    </main>
+  )
 }

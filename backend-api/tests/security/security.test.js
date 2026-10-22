@@ -230,7 +230,7 @@ describe('Security Tests', () => {
       const response = await request(app)
         .get('/api/users/invalid-id')
         .set('Authorization', `Bearer ${authToken}`)
-        .expect(404);
+        .expect(400);
 
       expect(response.body.success).toBe(false);
     });
@@ -298,7 +298,7 @@ describe('Security Tests', () => {
         .get('/api/users/search')
         .set('Authorization', `Bearer ${authToken}`)
         .query({ q: JSON.stringify(maliciousInput) })
-        .expect(404);
+        .expect(400);
 
       expect(response.body.success).toBe(false);
     });
@@ -410,6 +410,7 @@ describe('Security Tests', () => {
     });
 
     test('should reject invalid 2FA codes', async () => {
+      require('speakeasy').totp.verify.mockReturnValue(false);
       // Enable 2FA for user
       await User.findByIdAndUpdate(testUser._id, {
         'twoFactor.isEnabled': true,

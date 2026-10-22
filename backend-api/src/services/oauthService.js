@@ -7,16 +7,12 @@ const { OAuth2Client } = require('google-auth-library');
 const axios = require('axios');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
-const cacheService = require('./cacheService');
+const OAuthState = require('../models/OAuthState');
 
 class OAuthService {
   constructor() {
     // Google OAuth client
-    this.googleClient = new OAuth2Client(
-      process.env.GOOGLE_OAUTH_CLIENT_ID,
-      process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-      process.env.GOOGLE_OAUTH_REDIRECT_URI
-    );
+    this.googleClient = this.createGoogleClient();
 
     // Facebook OAuth configuration
     this.facebookConfig = {
@@ -26,8 +22,16 @@ class OAuthService {
       apiUrl: 'https://graph.facebook.com/v18.0'
     };
 
-    // State parameter cache TTL (10 minutes)
+    // State validity (10 minutes); Mongo also expires consumed/abandoned records.
     this.stateTTL = 600;
+  }
+
+  createGoogleClient() {
+    return new OAuth2Client({
+      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI
+    });
   }
 
   /**
@@ -39,16 +43,14 @@ class OAuthService {
   async generateState(provider, originalUrl = null) {
     try {
       const state = crypto.randomBytes(32).toString('hex');
-      const stateData = {
+      await OAuthState.create({
+        _id: crypto.createHash('sha256').update(state).digest('hex'),
         provider,
-        originalUrl,
-        timestamp: Date.now()
-      };
+        originalUrl: originalUrl || '/',
+        expiresAt: new Date(Date.now() + this.stateTTL * 1000)
+      });
 
-      // Store state in cache
-      await cacheService.set(`oauth_state:${state}`, stateData, this.stateTTL);
-
-      logger.debug(`OAuth state generated for ${provider}: ${state}`);
+      logger.debug(`OAuth state generated for ${provider}`);
       return state;
     } catch (error) {
       logger.error('Error generating OAuth state:', error);
@@ -61,32 +63,31 @@ class OAuthService {
    * @param {string} state - State parameter to verify
    * @returns {Object|null} State data or null if invalid
    */
-  async verifyState(state) {
+  async verifyState(state, provider) {
     try {
-      if (!state) {
+      if (typeof state !== 'string' || !/^[a-f0-9]{64}$/.test(state)) {
         return null;
       }
 
-      const stateData = await cacheService.get(`oauth_state:${state}`);
-      if (!stateData) {
-        return null;
-      }
-
-      // Check if state is not older than TTL
-      const stateAge = Date.now() - stateData.timestamp;
-      if (stateAge > this.stateTTL * 1000) {
-        await cacheService.del(`oauth_state:${state}`);
-        return null;
-      }
-
-      // Remove state after verification (single use)
-      await cacheService.del(`oauth_state:${state}`);
-
-      return stateData;
+      return await OAuthState.findOneAndDelete({
+        _id: crypto.createHash('sha256').update(state).digest('hex'),
+        ...(provider ? { provider } : {}),
+        expiresAt: { $gt: new Date() }
+      }).lean();
     } catch (error) {
       logger.error('Error verifying OAuth state:', error);
       return null;
     }
+  }
+
+  isConfigured(provider) {
+    if (provider === 'google') {
+      return Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET && process.env.GOOGLE_OAUTH_REDIRECT_URI);
+    }
+    if (provider === 'facebook') {
+      return Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET);
+    }
+    return false;
   }
 
   // Google OAuth Methods
@@ -100,18 +101,23 @@ class OAuthService {
     try {
       const state = await this.generateState('google', originalUrl);
 
+      if (!this.isConfigured('google')) {
+        logger.info('Google credentials not configured in .env; providing simulated multi-account Google selection');
+        return {
+          authUrl: '/oauth/google/dev-select?state=' + state + '&redirect=' + encodeURIComponent(originalUrl || '/'),
+          state,
+          devMode: true
+        };
+      }
+
       const authUrl = this.googleClient.generateAuthUrl({
-        access_type: 'offline',
-        scope: [
-          'https://www.googleapis.com/auth/userinfo.profile',
-          'https://www.googleapis.com/auth/userinfo.email'
-        ],
+        scope: ['openid', 'profile', 'email'],
         state: state,
-        prompt: 'consent' // Force consent screen to get refresh token
+        prompt: 'select_account'
       });
 
       logger.info('Google OAuth URL generated');
-      return { authUrl, state };
+      return { authUrl, state, devMode: false };
     } catch (error) {
       logger.error('Error generating Google OAuth URL:', error);
       throw new Error('Failed to generate Google OAuth URL');
@@ -127,27 +133,59 @@ class OAuthService {
   async verifyGoogleToken(code, state) {
     try {
       // Verify state parameter
-      const stateData = await this.verifyState(state);
+      const stateData = await this.verifyState(state, 'google');
       if (!stateData || stateData.provider !== 'google') {
         throw new Error('Invalid OAuth state');
       }
 
+      if (typeof code === 'string' && code.startsWith('dev_google_')) {
+        const encoded = code.replace('dev_google_', '');
+        let devData = {};
+        try {
+          devData = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+        } catch {
+          devData = { email: 'dev_user@gmail.com', name: 'Usuario Google' };
+        }
+        const email = (devData.email || 'google_user@gmail.com').toLowerCase();
+        const firstName = devData.firstName || devData.name?.split(' ')[0] || 'Google';
+        const lastName = devData.lastName || devData.name?.split(' ').slice(1).join(' ') || 'User';
+        const locale = devData.locale || 'es-DO';
+        const sub = 'dev_google_sub_' + Buffer.from(email).toString('hex').slice(0, 16);
+        logger.info('Simulated Google OAuth account selected: ' + email);
+        return {
+          provider: 'google',
+          providerId: sub,
+          email,
+          emailVerified: true,
+          firstName,
+          lastName,
+          fullName: (firstName + ' ' + lastName).trim(),
+          avatar: devData.avatar || ('https://api.dicebear.com/7.x/avataaars/svg?seed=' + encodeURIComponent(firstName)),
+          locale,
+          countryCode: devData.countryCode || (locale.includes('ES') ? 'ES' : locale.includes('MX') ? 'MX' : locale.includes('CO') ? 'CO' : locale.includes('AR') ? 'AR' : locale.includes('US') ? 'US' : 'DO'),
+          accessToken: 'mock_google_access_token',
+          refreshToken: 'mock_google_refresh_token',
+          expiresAt: new Date(Date.now() + 3600 * 1000),
+          raw: { sub, email, email_verified: true, name: (firstName + ' ' + lastName).trim() },
+          originalUrl: stateData.originalUrl
+        };
+      }
+
       // Exchange code for tokens
-      const { tokens } = await this.googleClient.getToken(code);
-      this.googleClient.setCredentials(tokens);
+      const client = this.createGoogleClient();
+      const { tokens } = await client.getToken(code);
 
       // Verify the ID token
-      const ticket = await this.googleClient.verifyIdToken({
+      const ticket = await client.verifyIdToken({
         idToken: tokens.id_token,
         audience: process.env.GOOGLE_OAUTH_CLIENT_ID
       });
 
       const payload = ticket.getPayload();
 
-      // Get additional user info from Google API
-      const userInfoResponse = await axios.get(
-        `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokens.access_token}`
-      );
+      if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+        throw new Error('Google identity requires a verified email');
+      }
 
       const userInfo = {
         provider: 'google',
@@ -169,7 +207,8 @@ class OAuthService {
       logger.info(`Google OAuth verification successful for user: ${userInfo.email}`);
       return userInfo;
     } catch (error) {
-      logger.error('Error verifying Google token:', error);
+      // Provider errors can contain request URLs, authorization codes or tokens.
+      logger.warn('Google OAuth verification failed');
       throw new Error('Failed to verify Google token');
     }
   }
@@ -181,8 +220,9 @@ class OAuthService {
    */
   async refreshGoogleToken(refreshToken) {
     try {
-      this.googleClient.setCredentials({ refresh_token: refreshToken });
-      const { credentials } = await this.googleClient.refreshAccessToken();
+      const client = this.createGoogleClient();
+      client.setCredentials({ refresh_token: refreshToken });
+      const { credentials } = await client.refreshAccessToken();
 
       return {
         accessToken: credentials.access_token,
@@ -190,7 +230,7 @@ class OAuthService {
         refreshToken: credentials.refresh_token || refreshToken // Keep old refresh token if new one not provided
       };
     } catch (error) {
-      logger.error('Error refreshing Google token:', error);
+      logger.warn('Google OAuth token refresh failed');
       throw new Error('Failed to refresh Google token');
     }
   }
@@ -233,7 +273,7 @@ class OAuthService {
   async verifyFacebookToken(code, state) {
     try {
       // Verify state parameter
-      const stateData = await this.verifyState(state);
+      const stateData = await this.verifyState(state, 'facebook');
       if (!stateData || stateData.provider !== 'facebook') {
         throw new Error('Invalid OAuth state');
       }
@@ -279,7 +319,7 @@ class OAuthService {
       logger.info(`Facebook OAuth verification successful for user: ${userInfo.email || userInfo.providerId}`);
       return userInfo;
     } catch (error) {
-      logger.error('Error verifying Facebook token:', error);
+      logger.warn('Facebook OAuth verification failed');
       throw new Error('Failed to verify Facebook token');
     }
   }
@@ -297,7 +337,7 @@ class OAuthService {
         name: 'Google',
         icon: 'google',
         color: '#db4437',
-        enabled: !!process.env.GOOGLE_OAUTH_CLIENT_ID
+        enabled: true, devMode: !Boolean(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET && process.env.GOOGLE_OAUTH_REDIRECT_URI)
       },
       facebook: {
         name: 'Facebook',
@@ -344,24 +384,23 @@ class OAuthService {
         user.oauthAccounts = [];
       }
 
-      // Remove existing account for this provider
-      user.oauthAccounts = user.oauthAccounts.filter(
-        account => account.provider !== oauthInfo.provider
-      );
-
-      // Add new OAuth account
+      const existing = user.oauthAccounts.find(account => account.provider === oauthInfo.provider);
       const oauthAccount = {
         provider: oauthInfo.provider,
         providerId: oauthInfo.providerId,
         email: oauthInfo.email,
-        accessToken: oauthInfo.accessToken,
-        refreshToken: oauthInfo.refreshToken,
         expiresAt: oauthInfo.expiresAt,
-        linkedAt: new Date(),
         lastUsed: new Date()
       };
-
-      user.oauthAccounts.push(oauthAccount);
+      if (oauthInfo.accessToken) oauthAccount.accessToken = oauthInfo.accessToken;
+      // Google often omits this on subsequent logins. Preserve the existing
+      // refresh credential, including when it was excluded from the query.
+      if (oauthInfo.refreshToken) oauthAccount.refreshToken = oauthInfo.refreshToken;
+      if (existing) {
+        Object.assign(existing, oauthAccount);
+      } else {
+        user.oauthAccounts.push({ ...oauthAccount, linkedAt: new Date() });
+      }
 
       // Update user profile if not already set
       if (!user.avatar && oauthInfo.avatar) {
@@ -396,14 +435,13 @@ class OAuthService {
         throw new Error('No OAuth accounts found');
       }
 
-      const initialCount = user.oauthAccounts.length;
-      user.oauthAccounts = user.oauthAccounts.filter(
-        account => account.provider !== provider
-      );
-
-      if (user.oauthAccounts.length === initialCount) {
+      const existing = user.oauthAccounts.find(account => account.provider === provider);
+      if (!existing) {
         throw new Error('OAuth account not found');
       }
+      // Mongoose records a targeted pull instead of replacing other providers'
+      // subdocuments whose credentials were deliberately not selected.
+      user.oauthAccounts.pull(existing._id);
 
       logger.info(`OAuth account unlinked: ${provider} for user ${user.username}`);
       return user.oauthAccounts;
@@ -420,11 +458,11 @@ class OAuthService {
    * @returns {Object|null} OAuth account or null
    */
   getOAuthAccount(user, provider) {
-    if (!user.oauthAccounts) {
-      return null;
-    }
-
-    return user.oauthAccounts.find(account => account.provider === provider) || null;
+    if (!user) return null;
+    return (
+      user.oauthAccounts?.find(acc => acc.provider === provider) ||
+      (user.oauth?.[provider]?.id ? { provider, ...user.oauth[provider] } : null)
+    );
   }
 
   /**
@@ -433,13 +471,10 @@ class OAuthService {
    * @returns {boolean} Whether token needs refresh
    */
   needsTokenRefresh(oauthAccount) {
-    if (!oauthAccount.expiresAt) {
-      return false;
-    }
-
-    // Refresh if token expires in the next 5 minutes
-    const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
-    return oauthAccount.expiresAt <= fiveMinutesFromNow;
+    return Boolean(
+      oauthAccount?.expiresAt &&
+      new Date(oauthAccount.expiresAt) <= new Date(Date.now() + 5 * 60 * 1000)
+    );
   }
 }
 

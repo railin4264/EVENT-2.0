@@ -28,9 +28,9 @@ export function getImageUrl(imageUrl: string | { url?: string } | undefined | nu
   else if (imageUrl && typeof imageUrl === 'object' && 'url' in imageUrl) url = (imageUrl as { url?: string }).url
   if (!url) return '/default-avatar.png'
 
-  // If already a full URL (http:// or https://), return as is
+  // If already a full URL (http:// or https://), return as is (replacing any retired Unsplash ID)
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
+    return url.replace('photo-1520523839898-5071216a7d33', 'photo-1511671782779-c97d3d27a1d4')
   }
 
   // Remove /api from NEXT_PUBLIC_API_URL if present

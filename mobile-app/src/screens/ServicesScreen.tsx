@@ -65,14 +65,14 @@ export default function ServicesScreen() {
                                 <Ionicons name="sparkles" size={24} color="#fff" />
                             </View>
                             <View style={styles.aiTextContainer}>
-                                <Text style={styles.aiTitle}>AI Concierge</Text>
-                                <Text style={styles.aiDescription}>Planifica tu noche perfecta con IA</Text>
+                                <Text style={styles.aiTitle}>Planifica tu evento</Text>
+                                <Text style={styles.aiDescription}>Horarios, itinerarios y borradores</Text>
                             </View>
                             <TouchableOpacity
                                 style={styles.aiButton}
-                                onPress={() => router.push('/chat/ai-concierge' as any)}
+                                onPress={() => router.push('/planning-tools' as any)}
                             >
-                                <Text style={styles.aiButtonText}>Chat</Text>
+                                <Text style={styles.aiButtonText}>Abrir</Text>
                             </TouchableOpacity>
                         </View>
                     </LinearGradient>

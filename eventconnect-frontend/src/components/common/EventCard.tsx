@@ -136,7 +136,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onEventClick }) => 
                 e.stopPropagation();
                 // Handle attend action
               }}
-              className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+              className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700"
             >
               Asistir
             </Button>

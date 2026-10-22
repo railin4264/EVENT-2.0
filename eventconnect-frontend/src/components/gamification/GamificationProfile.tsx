@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Trophy, Award, Flame, Star, Users, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import {
   gamificationService,
   type GamificationProfile as GamiProfile,
@@ -32,7 +33,8 @@ export default function GamificationProfile() {
         setProfile(p?.data || null)
         setAchievements(Array.isArray(a?.data) ? a.data : [])
         setChallenges(Array.isArray(c?.data) ? c.data : [])
-        setLeaderboard(Array.isArray(l?.data) ? l.data : (Array.isArray(l?.data?.entries) ? l.data.entries : (Array.isArray(l?.data?.leaderboard) ? l.data.leaderboard : [])))
+        const result = l?.data as LeaderboardEntry[] | { entries?: LeaderboardEntry[]; leaderboard?: LeaderboardEntry[] }
+        setLeaderboard(Array.isArray(result) ? result : result?.entries || result?.leaderboard || [])
       })
       .catch((e) => active && setError(e?.message || 'No se pudo cargar la gamificación'))
       .finally(() => active && setLoading(false))
@@ -48,7 +50,7 @@ export default function GamificationProfile() {
         prev.map((ch) => (ch.id === challengeId ? { ...ch, enrolled: true } : ch)),
       )
     } catch {
-      /* ignore */
+      toast.error('No pudimos inscribirte en el desafío. Inténtalo de nuevo.')
     }
   }
 

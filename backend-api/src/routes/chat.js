@@ -228,7 +228,7 @@ router.get('/:chatId/messages',
         });
       }
       
-      const messages = await Message.getChatMessages(chatId, page, limit);
+      const messages = await Message.getChatMessages(chat.chatId, page, limit);
       
       // Update last seen for the user
       await chat.updateLastSeen(req.user.id);
@@ -299,7 +299,7 @@ router.post('/:chatId/messages',
       const message = new Message({
         sender: req.user.id,
         receiver,
-        chatId,
+        chatId: chat.chatId,
         chatType: chat.type,
         content,
         messageType,
@@ -320,12 +320,19 @@ router.post('/:chatId/messages',
       // Update chat's last message
       await chat.updateLastMessage(message);
       
-      // Emit socket event (will be handled by socket service)
-      req.app.get('io').to(chatId).emit('newMessage', {
-        chatId,
-        message: message.toObject(),
-      });
+      // Emit socket event (both snake_case and camelCase, to both chat:<chatId> and <chatId>)
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          chatId: chat.chatId,
+          message: message.toObject(),
+        };
+        io.to(`chat:${chat.chatId}`).to(chat.chatId).to(chatId).emit('newMessage', payload);
+        io.to(`chat:${chat.chatId}`).to(chat.chatId).to(chatId).emit('new_message', payload);
+      }
       
+      await require('../services/socketService').sendPushNotificationToOfflineUsers(chat, message);
+
       logger.info('POST', `/api/chat/${chatId}/messages`, req.user.id);
       res.status(201).json({
         success: true,
@@ -355,8 +362,11 @@ router.put('/:chatId/messages/:messageId/read',
   async (req, res) => {
     try {
       const { chatId, messageId } = req.params;
+      const chat = await getChatById(chatId);
+      if (!chat || !chat.isParticipant(req.user.id)) return res.status(403).json({ success: false, message: 'No tienes acceso a este chat' });
+      const canonicalChatId = chat ? chat.chatId : chatId;
       
-      const message = await Message.findOne({ _id: messageId, chatId });
+      const message = await Message.findOne({ _id: messageId, chatId: { $in: [chatId, canonicalChatId] } });
       if (!message) {
         return res.status(404).json({
           success: false,
@@ -367,11 +377,14 @@ router.put('/:chatId/messages/:messageId/read',
       await message.markAsRead(req.user.id);
       
       // Emit socket event for read receipt
-      req.app.get('io').to(chatId).emit('messageRead', {
-        chatId,
-        messageId,
-        readBy: req.user.id,
-      });
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat:${canonicalChatId}`).to(canonicalChatId).to(chatId).emit('messageRead', {
+          chatId: canonicalChatId,
+          messageId,
+          readBy: req.user.id,
+        });
+      }
       
       logger.info('PUT', `/api/chat/${chatId}/messages/${messageId}/read`, req.user.id);
       res.json({
@@ -404,8 +417,10 @@ router.post('/:chatId/messages/:messageId/react',
     try {
       const { chatId, messageId } = req.params;
       const { emoji } = req.body;
+      const chat = await getChatById(chatId);
+      const canonicalChatId = chat ? chat.chatId : chatId;
       
-      const message = await Message.findOne({ _id: messageId, chatId });
+      const message = await Message.findOne({ _id: messageId, chatId: { $in: [chatId, canonicalChatId] } });
       if (!message) {
         return res.status(404).json({
           success: false,
@@ -416,12 +431,15 @@ router.post('/:chatId/messages/:messageId/react',
       await message.addReaction(req.user.id, emoji);
       
       // Emit socket event
-      req.app.get('io').to(chatId).emit('messageReaction', {
-        chatId,
-        messageId,
-        userId: req.user.id,
-        emoji,
-      });
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat:${canonicalChatId}`).to(canonicalChatId).to(chatId).emit('messageReaction', {
+          chatId: canonicalChatId,
+          messageId,
+          userId: req.user.id,
+          emoji,
+        });
+      }
       
       logger.info('POST', `/api/chat/${chatId}/messages/${messageId}/react`, req.user.id);
       res.json({
@@ -477,10 +495,13 @@ router.put('/:chatId/join',
       await chat.addParticipant(req.user.id);
       
       // Emit socket event
-      req.app.get('io').to(chatId).emit('userJoined', {
-        chatId,
-        user: req.user,
-      });
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat:${chat.chatId}`).to(chat.chatId).to(chatId).emit('userJoined', {
+          chatId: chat.chatId,
+          user: req.user,
+        });
+      }
       
       logger.info('PUT', `/api/chat/${chatId}/join`, req.user.id);
       res.json({
@@ -529,10 +550,13 @@ router.put('/:chatId/leave',
       await chat.removeParticipant(req.user.id);
       
       // Emit socket event
-      req.app.get('io').to(chatId).emit('userLeft', {
-        chatId,
-        userId: req.user.id,
-      });
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat:${chat.chatId}`).to(chat.chatId).to(chatId).emit('userLeft', {
+          chatId: chat.chatId,
+          userId: req.user.id,
+        });
+      }
       
       logger.info('PUT', `/api/chat/${chatId}/leave`, req.user.id);
       res.json({
@@ -641,7 +665,7 @@ router.post('/:chatId/upload',
       const message = new Message({
         sender: req.user.id,
         receiver,
-        chatId,
+        chatId: chat.chatId,
         chatType: chat.type,
         content: content || `Archivo${files.length > 1 ? 's' : ''} compartido${files.length > 1 ? 's' : ''}`,
         messageType,
@@ -658,10 +682,15 @@ router.post('/:chatId/upload',
       await chat.updateLastMessage(message);
 
       // Emit socket event
-      req.app.get('io').to(chatId).emit('newMessage', {
-        chatId,
-        message: message.toObject(),
-      });
+      const io = req.app.get('io');
+      if (io) {
+        const payload = {
+          chatId: chat.chatId,
+          message: message.toObject(),
+        };
+        io.to(`chat:${chat.chatId}`).to(chat.chatId).to(chatId).emit('newMessage', payload);
+        io.to(`chat:${chat.chatId}`).to(chat.chatId).to(chatId).emit('new_message', payload);
+      }
 
       logger.info('POST', `/api/chat/${chatId}/upload`, req.user.id);
       res.status(201).json({
@@ -691,10 +720,11 @@ router.post('/:chatId/upload',
 
 // @route   GET /api/chat/files/:filename
 // @desc    Serve uploaded files
-// @access  Public
-router.get('/files/:filename', (req, res) => {
-  const filename = req.params.filename;
+// @access  Private
+router.get('/files/:filename', authMiddleware, (req, res) => {
+  const filename = path.basename(req.params.filename);
   const filepath = path.join(__dirname, '../../uploads/chat', filename);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   
   if (fs.existsSync(filepath)) {
     res.sendFile(path.resolve(filepath));
@@ -755,12 +785,15 @@ router.put('/:chatId/participants/:userId',
       await chat.save();
 
       // Emit socket event
-      req.app.get('io').to(chatId).emit('participantRoleUpdated', {
-        chatId,
-        userId,
-        role,
-        updatedBy: req.user.id
-      });
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`chat:${chat.chatId}`).to(chat.chatId).to(chatId).emit('participantRoleUpdated', {
+          chatId: chat.chatId,
+          userId,
+          role,
+          updatedBy: req.user.id
+        });
+      }
 
       logger.info('PUT', `/api/chat/${chatId}/participants/${userId}`, req.user.id);
       res.json({
@@ -780,4 +813,3 @@ router.put('/:chatId/participants/:userId',
 );
 
 module.exports = router;
-

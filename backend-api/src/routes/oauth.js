@@ -10,8 +10,24 @@ const { trackSecurityEvent } = require('../middleware/sentryMiddleware');
 const oauthService = require('../services/oauthService');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
+const jwtService = require('../services/jwtService');
 
 const router = express.Router();
+router.use((req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  next();
+});
+
+function publicOAuthAccounts(user) {
+  return (user.oauthAccounts || []).map(account => ({
+    provider: account.provider,
+    email: account.email,
+    linkedAt: account.linkedAt,
+    lastUsed: account.lastUsed,
+    expiresAt: account.expiresAt
+  }));
+}
 
 // Rate limiting for OAuth routes
 const oauthLimiter = rateLimit({
@@ -44,13 +60,39 @@ router.get('/providers', async (req, res) => {
   }
 });
 
+// Validate redirect_url against Open Redirect phishing
+function sanitizeRedirectUrl(url) {
+  if (!url || typeof url !== 'string') return '/';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.startsWith('/\\')) {
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    const allowedOrigins = [
+      process.env.FRONTEND_URL,
+      ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) : []),
+      ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map(s => s.trim()) : []),
+      'http://localhost:3000'
+    ].filter(Boolean).map(o => {
+      try { return new URL(o).origin; } catch { return o; }
+    });
+    if (allowedOrigins.includes(parsed.origin)) {
+      return trimmed;
+    }
+  } catch {
+    // Fallback to '/'
+  }
+  return '/';
+}
+
 // @desc    Initiate OAuth authentication
 // @route   GET /api/oauth/:provider/auth
 // @access  Public
 router.get('/:provider/auth', oauthLimiter, trackSecurityEvent('oauth_initiate'), async (req, res) => {
   try {
     const { provider } = req.params;
-    const { redirect_url } = req.query;
+    const safeRedirectUrl = sanitizeRedirectUrl(req.query.redirect_url);
 
     // Validate provider
     if (!oauthService.isProviderEnabled(provider)) {
@@ -64,10 +106,10 @@ router.get('/:provider/auth', oauthLimiter, trackSecurityEvent('oauth_initiate')
 
     switch (provider) {
     case 'google':
-      authData = await oauthService.getGoogleAuthUrl(redirect_url);
+      authData = await oauthService.getGoogleAuthUrl(safeRedirectUrl);
       break;
     case 'facebook':
-      authData = await oauthService.getFacebookAuthUrl(redirect_url);
+      authData = await oauthService.getFacebookAuthUrl(safeRedirectUrl);
       break;
     default:
       return res.status(400).json({
@@ -147,10 +189,33 @@ router.post('/:provider/callback', oauthLimiter, trackSecurityEvent('oauth_callb
       });
     }
 
-    // Check if user exists by email
-    let user = await User.findOne({ email: oauthInfo.email });
+    if (!oauthInfo.providerId) {
+      return res.status(401).json({ success: false, message: 'Invalid OAuth identity' });
+    }
+    // The linked provider identity takes precedence over an email that may change.
+    let user = await User.findOne({ oauthAccounts: { $elemMatch: {
+      provider, providerId: oauthInfo.providerId
+    } } });
+    if (!user && oauthInfo.email) {
+      if (oauthInfo.emailVerified !== true) {
+        return res.status(403).json({ success: false, code: 'VERIFIED_EMAIL_REQUIRED', message: 'Verify your provider email or link this account after signing in' });
+      }
+      user = await User.findOne({ email: oauthInfo.email.trim().toLowerCase() });
+    }
 
     if (user) {
+      if (!user.isActive) {
+        return res.status(403).json({ success: false, message: 'Account is unavailable' });
+      }
+      if (user.twoFactor?.isEnabled) {
+        return res.json({
+          success: true,
+          requiresTwoFactor: true,
+          tempToken: jwtService.generateTempToken(user),
+          user: { id: user._id, username: user.username, email: user.email },
+          redirectUrl: oauthInfo.originalUrl
+        });
+      }
       // Existing user - link OAuth account and login
       await oauthService.linkOAuthAccount(user, oauthInfo);
 
@@ -174,7 +239,11 @@ router.post('/:provider/callback', oauthLimiter, trackSecurityEvent('oauth_callb
           firstName: user.firstName,
           lastName: user.lastName,
           avatar: user.avatar,
-          oauthAccounts: user.oauthAccounts
+          country: user.country || 'República Dominicana',
+          countryCode: user.countryCode || 'DO',
+          preferredLocale: user.preferredLocale || 'es-DO',
+          preferredCurrency: user.preferredCurrency || 'DOP',
+          oauthAccounts: publicOAuthAccounts(user)
         },
         redirectUrl: oauthInfo.originalUrl
       });
@@ -189,7 +258,8 @@ router.post('/:provider/callback', oauthLimiter, trackSecurityEvent('oauth_callb
       }
 
       // Generate username from email
-      const baseUsername = oauthInfo.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+      const candidate = oauthInfo.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 22);
+      const baseUsername = candidate.length >= 3 ? candidate : `persona${candidate}`;
       let username = baseUsername;
       let counter = 1;
 
@@ -199,15 +269,26 @@ router.post('/:provider/callback', oauthLimiter, trackSecurityEvent('oauth_callb
         counter++;
       }
 
-      // Create new user
+      // Create new user with localized psychology
+      const rawCountryCode = String(req.body?.countryCode || oauthInfo.countryCode || '').toUpperCase();
+      const rawLocale = String(oauthInfo.locale || '').toUpperCase();
+      const countryCode = rawCountryCode || (rawLocale.includes('ES') ? 'ES' : rawLocale.includes('MX') ? 'MX' : rawLocale.includes('US') ? 'US' : rawLocale.includes('CO') ? 'CO' : rawLocale.includes('AR') ? 'AR' : 'DO');
+      const country = countryCode === 'ES' ? 'España' : countryCode === 'MX' ? 'México' : countryCode === 'US' ? 'Estados Unidos' : countryCode === 'CO' ? 'Colombia' : countryCode === 'AR' ? 'Argentina' : 'República Dominicana';
+      const preferredLocale = countryCode === 'ES' ? 'es-ES' : countryCode === 'MX' ? 'es-MX' : countryCode === 'US' ? 'en-US' : countryCode === 'CO' ? 'es-CO' : countryCode === 'AR' ? 'es-AR' : 'es-DO';
+      const preferredCurrency = countryCode === 'ES' ? 'EUR' : countryCode === 'MX' ? 'MXN' : countryCode === 'US' ? 'USD' : countryCode === 'CO' ? 'COP' : countryCode === 'AR' ? 'ARS' : 'DOP';
+
       const userData = {
         username,
         email: oauthInfo.email,
         firstName: oauthInfo.firstName || 'User',
         lastName: oauthInfo.lastName || '',
         avatar: oauthInfo.avatar || 'default-avatar.png',
+        country,
+        countryCode,
+        preferredLocale,
+        preferredCurrency,
         isEmailVerified: oauthInfo.emailVerified || false,
-        password: 'oauth-user-' + Date.now(), // Temporary password (will be hashed)
+        password: crypto.randomBytes(48).toString('base64url'),
         lastLogin: new Date()
       };
 
@@ -234,7 +315,11 @@ router.post('/:provider/callback', oauthLimiter, trackSecurityEvent('oauth_callb
           firstName: user.firstName,
           lastName: user.lastName,
           avatar: user.avatar,
-          oauthAccounts: user.oauthAccounts
+          country: user.country || 'República Dominicana',
+          countryCode: user.countryCode || 'DO',
+          preferredLocale: user.preferredLocale || 'es-DO',
+          preferredCurrency: user.preferredCurrency || 'DOP',
+          oauthAccounts: publicOAuthAccounts(user)
         },
         isNewUser: true,
         redirectUrl: oauthInfo.originalUrl
@@ -301,10 +386,10 @@ router.post('/:provider/link', protect, oauthLimiter, trackSecurityEvent('oauth_
     }
 
     // Check if OAuth account is already linked to another user
-    if (oauthInfo.email && oauthInfo.email !== user.email) {
+    {
       const existingUser = await User.findOne({
-        'oauthAccounts.provider': provider,
-        'oauthAccounts.providerId': oauthInfo.providerId
+        _id: { $ne: user._id },
+        oauthAccounts: { $elemMatch: { provider, providerId: oauthInfo.providerId } }
       });
 
       if (existingUser) {
@@ -325,7 +410,7 @@ router.post('/:provider/link', protect, oauthLimiter, trackSecurityEvent('oauth_
       success: true,
       message: `${provider} account linked successfully`,
       data: {
-        oauthAccounts: user.oauthAccounts
+        oauthAccounts: publicOAuthAccounts(user)
       }
     });
   } catch (error) {
@@ -382,7 +467,7 @@ router.delete('/:provider/unlink', protect, oauthLimiter, trackSecurityEvent('oa
       success: true,
       message: `${provider} account unlinked successfully`,
       data: {
-        oauthAccounts: user.oauthAccounts
+        oauthAccounts: publicOAuthAccounts(user)
       }
     });
   } catch (error) {

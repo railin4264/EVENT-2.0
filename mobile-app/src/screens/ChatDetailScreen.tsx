@@ -15,25 +15,33 @@ export default function ChatDetailScreen(){
   const [messages,setMessages]=useState<any[]>([]),[loading,setLoading]=useState(true),[text,setText]=useState(''),[sending,setSending]=useState(false),[chatName,setChatName]=useState('Chat');
   const flatRef=useRef<any>(null);
   useEffect(()=>{
-    (async()=>{try{const r=await chatService.getMessages(chatId);setMessages((r?.data||[]).reverse());const c=await chatService.getChatById(chatId);setChatName((c as any)?.name||(c as any)?.participants?.[0]?.firstName||'Chat');}catch{}setLoading(false);})();
-    socketService.on('new-message',(msg:any)=>{if(msg.chat===chatId)setMessages(prev=>[...prev,msg]);});
-    return()=>{socketService.off('new-message',()=>{});};
+    let active = true;
+    (async()=>{try{const r=await chatService.getMessages(chatId);if(active)setMessages(r?.data||[]);const c=await chatService.getChatById(chatId);if(active)setChatName((c as any)?.name||(c as any)?.participants?.find((p:any)=>(p._id||p.id)!==(user?._id||user?.id))?.firstName||'Chat');}catch(error:any){if(active)Alert.alert('Conversación',error.message||'No se pudieron cargar los mensajes');}finally{if(active)setLoading(false);}})();
+    const receive = (data:any) => {
+      if (data.chatId !== chatId) return;
+      const msg = data.message || data;
+      setMessages(prev => prev.some(item => (item._id||item.id)===(msg._id||msg.id)) ? prev : [...prev,msg]);
+    };
+    const join = () => socketService.emit('joinChat', { chatId });
+    socketService.on('newMessage',receive);
+    socketService.on('connect',join);
+    join();
+    return()=>{active=false;socketService.off('newMessage',receive);socketService.off('connect',join);socketService.emit('leaveChat',{chatId});};
   },[chatId]);
   useEffect(()=>{if(messages.length)setTimeout(()=>flatRef.current?.scrollToEnd({animated:true}),100);},[messages.length]);
   const send=async()=>{
-    if(!text.trim())return;const t=text.trim();setText('');setSending(true);
-    try{await chatService.sendMessage({chatId: chatId, content: t});Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);}
-    catch{setText(t);}finally{setSending(false);}
+    if(!text.trim()||sending)return;const t=text.trim();setText('');setSending(true);
+    try{const response=await chatService.sendMessage({chatId: chatId, content: t});const msg=response.data;if(msg)setMessages(prev=>prev.some(item=>(item._id||item.id)===((msg as any)._id||msg.id))?prev:[...prev,msg]);Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);}
+    catch(error:any){setText(t);Alert.alert('Mensaje no enviado',error.message||'Revisa tu conexión e inténtalo de nuevo.');}finally{setSending(false);}
   };
-  const isMe=(msg:any)=>msg.sender?._id===user?._id||msg.senderId===user?._id;
+  const isMe=(msg:any)=>(msg.sender?._id||msg.sender?.id||msg.senderId||msg.sender)===(user?._id||user?.id);
   return(
     <View style={{flex:1,backgroundColor:BG}}>
       <StatusBar barStyle="light-content"/>
       <View style={[cd.header,{paddingTop:insets.top+8}]}>
         <TouchableOpacity style={cd.backBtn} onPress={()=>router.back()}><Ionicons name="chevron-back" size={22} color={TXT}/></TouchableOpacity>
         <View style={cd.headerAvatar}><Text style={{fontSize:16,fontWeight:'800',color:TXT}}>{chatName.charAt(0)}</Text></View>
-        <View style={{flex:1}}><Text style={cd.chatName}>{chatName}</Text><Text style={cd.chatSub}>En línea</Text></View>
-        <TouchableOpacity style={cd.backBtn}><Ionicons name="call-outline" size={20} color={TXT}/></TouchableOpacity>
+        <View style={{flex:1}}><Text style={cd.chatName}>{chatName}</Text><Text style={cd.chatSub}>Mensajes</Text></View>
       </View>
       {loading?<ActivityIndicator size="large" color={PINK} style={{marginTop:40}}/>:(
         <FlatList ref={flatRef} data={messages} keyExtractor={i=>i._id||i.id||String(Math.random())} contentContainerStyle={{padding:16,gap:8,paddingBottom:20}}
@@ -51,7 +59,6 @@ export default function ChatDetailScreen(){
       )}
       <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':'height'} keyboardVerticalOffset={Platform.OS==='ios'?0:20}>
         <View style={[cd.inputRow,{paddingBottom:Math.max(insets.bottom,16)}]}>
-          <TouchableOpacity style={cd.attachBtn}><Ionicons name="attach" size={22} color={TXTS}/></TouchableOpacity>
           <View style={cd.inputWrap}>
             <TextInput style={cd.input} placeholder="Escribe un mensaje..." placeholderTextColor={TXTS} value={text} onChangeText={setText} multiline maxLength={1000} returnKeyType="default"/>
           </View>

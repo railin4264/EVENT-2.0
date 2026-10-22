@@ -2,7 +2,7 @@
 # EventConnect 2.0 Frontend - Dockerfile
 # ============================================
 
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Instalar dependencias del sistema
 RUN apk add --no-cache libc6-compat
@@ -14,7 +14,7 @@ WORKDIR /app
 FROM base AS deps
 
 COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps
+RUN npm ci
 
 # ============================================
 # Etapa de build
@@ -26,7 +26,13 @@ COPY . .
 
 # Variables de entorno para el build
 ENV NEXT_TELEMETRY_DISABLED=1
-
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SOCKET_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
+RUN test -n "$NEXT_PUBLIC_APP_URL" && test -n "$NEXT_PUBLIC_API_URL" && test -n "$NEXT_PUBLIC_SOCKET_URL"
 RUN npm run build
 
 # ============================================
@@ -37,6 +43,7 @@ FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
 # Crear usuario no-root
 RUN addgroup --system --gid 1001 nodejs

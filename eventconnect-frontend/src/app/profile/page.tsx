@@ -14,74 +14,54 @@ import { FollowButton } from '@/components/social'
 import { useSearchParams } from 'next/navigation'
 import { getImageUrl } from '@/lib/utils'
 
-interface UserProfile {
-  id: string
-  username: string
-  email: string
-  firstName: string
-  lastName: string
-  bio?: string
-  location?: {
-    address: string
-    coordinates: [number, number]
-  }
-  avatar?: string
-  coverImage?: string
-  interests: string[]
-  socialLinks: {
-    website?: string
-    instagram?: string
-    twitter?: string
-    linkedin?: string
-  }
-  stats: {
-    eventsAttended: number
-    eventsCreated: number
-    tribesJoined: number
-    connections: number
-  }
-  phone?: string
-  birthDate?: string
-  isPrivate: boolean
-}
+import { buildProfileUpdate, normalizeProfile, safeSocialUrl, validateProfileImage, type UserProfile } from './profile-utils'
 
 function ProfileContent() {
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState<Partial<UserProfile>>({})
   const [newInterest, setNewInterest] = useState('')
+  const [twoFactorCode, setTwoFactorCode] = useState('')
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const { user, updateUser } = useAuthStore()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const viewingUserId = searchParams.get('id')
-  const isOwnProfile = !viewingUserId || viewingUserId === user?.id
+  const currentUserId = user?.id || user?._id
+  const isOwnProfile = !viewingUserId || viewingUserId === currentUserId
+  const profileKey = ['profile', viewingUserId || currentUserId]
 
   // Fetch user profile
-  const { data: profile, isLoading } = useQuery({
-    queryKey: ['profile', viewingUserId || user?.id],
+  const { data: profile, isLoading, isError, refetch } = useQuery({
+    queryKey: profileKey,
     queryFn: async () => {
       const endpoint = viewingUserId ? `/users/profile/${viewingUserId}` : '/users/profile'
       const response = await apiClient.get<{ success: boolean; user: UserProfile }>(endpoint)
-      return response.data.user
+      if (!response.data.success) throw new Error('No se pudo cargar el perfil.')
+      return normalizeProfile(response.data.user)
     },
     enabled: !!user
   })
 
   // Update profile mutation
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: Partial<UserProfile>) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       const response = await apiClient.put('/users/profile', data)
       return response.data
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['profile', user?.id] })
-      updateUser(data.user)
+      queryClient.invalidateQueries({ queryKey: profileKey })
+      const saved = normalizeProfile(data.user)
+      updateUser({ firstName: saved.firstName, lastName: saved.lastName, name: `${saved.firstName} ${saved.lastName}`, bio: saved.bio, phone: saved.phone, interests: saved.interests })
+      setTwoFactorCode('')
+      setRequiresTwoFactor(false)
       setIsEditing(false)
       toast.success('Perfil actualizado correctamente')
     },
-    onError: () => {
-      toast.error('Error al actualizar el perfil')
+    onError: (error: any) => {
+      if (error.response?.data?.code === 'REQUIRES_2FA_TOKEN' || error.response?.data?.requiresTwoFactor) setRequiresTwoFactor(true)
+      toast.error(error.response?.data?.message || 'Error al actualizar el perfil')
     }
   })
 
@@ -98,7 +78,8 @@ function ProfileContent() {
       return response.data
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['profile', user?.id] })
+      queryClient.invalidateQueries({ queryKey: profileKey })
+      queryClient.setQueryData<UserProfile>(profileKey, previous => previous ? { ...previous, avatar: data.avatarUrl } : previous)
       updateUser({ avatar: data.avatarUrl })
       toast.success('Avatar actualizado')
     },
@@ -118,7 +99,8 @@ function ProfileContent() {
       return response.data
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['profile', user?.id] })
+      queryClient.invalidateQueries({ queryKey: profileKey })
+      queryClient.setQueryData<UserProfile>(profileKey, previous => previous ? { ...previous, coverImage: data.coverUrl } : previous)
       toast.success('Portada actualizada')
     },
     onError: () => {
@@ -132,7 +114,13 @@ function ProfileContent() {
   }
 
   const handleSave = () => {
-    updateProfileMutation.mutate(formData)
+    if (!profile) return
+    try {
+      const update = buildProfileUpdate(profile, formData)
+      if (!Object.keys(update).length) { setIsEditing(false); return }
+      if (twoFactorCode) update.twoFactorToken = twoFactorCode
+      updateProfileMutation.mutate(update)
+    } catch (error) { toast.error((error as Error).message) }
   }
 
   const handleCancel = () => {
@@ -142,14 +130,20 @@ function ProfileContent() {
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (file) {
+      const error = validateProfileImage(file)
+      if (error) { toast.error(error); return }
       uploadAvatarMutation.mutate(file)
     }
   }
 
   const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (file) {
+      const error = validateProfileImage(file)
+      if (error) { toast.error(error); return }
       // Create FormData for cover image upload
       const formData = new FormData()
       formData.append('cover', file)
@@ -158,10 +152,13 @@ function ProfileContent() {
   }
 
   const handleAddInterest = () => {
-    if (newInterest.trim() && formData.interests) {
+    if (newInterest.trim()) {
+      const interests = formData.interests || []
+      if (interests.length >= 20) { toast.error('Puedes añadir hasta 20 intereses.'); return }
+      if (interests.some(interest => interest.toLowerCase() === newInterest.trim().toLowerCase())) { toast.error('Ya añadiste ese interés.'); return }
       setFormData({
         ...formData,
-        interests: [...formData.interests, newInterest.trim()]
+        interests: [...interests, newInterest.trim()]
       })
       setNewInterest('')
     }
@@ -184,10 +181,10 @@ function ProfileContent() {
     )
   }
 
-  if (!profile) {
+  if (!profile || isError) {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <p className="text-muted-foreground glass px-8 py-4 rounded-3xl border-white/10 font-medium">Error al cargar el perfil</p>
+        <div className="text-center space-y-4" role="alert"><p>No pudimos cargar el perfil.</p><button onClick={() => refetch()} className="rounded-xl bg-primary px-5 py-3 text-white">Reintentar</button></div>
       </div>
     )
   }
@@ -216,8 +213,10 @@ function ProfileContent() {
 
         {isEditing && isOwnProfile && (
           <button
+            aria-label={uploadCoverMutation.isPending ? "Subiendo portada" : "Cambiar portada"}
+            disabled={uploadCoverMutation.isPending || uploadAvatarMutation.isPending}
             onClick={() => coverInputRef.current?.click()}
-            className="absolute top-4 right-4 p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+            className="absolute z-20 top-4 right-4 p-3 disabled:opacity-50 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
           >
             <Camera className="w-5 h-5" />
           </button>
@@ -226,7 +225,7 @@ function ProfileContent() {
         <input
           ref={coverInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/gif"
           className="hidden"
           onChange={handleCoverUpload}
         />
@@ -239,19 +238,21 @@ function ProfileContent() {
             {/* Avatar */}
             <div className="relative group mx-auto md:mx-0">
               <div className="w-32 h-32 md:w-40 md:h-40 bg-primary/20 rounded-full border-4 border-background flex items-center justify-center text-primary-foreground text-4xl font-extrabold shadow-2xl overflow-hidden backdrop-blur-sm">
-                {profile.avatar ? (
+                {profile.avatar && profile.avatar !== 'default-avatar.png' ? (
                   <img
                     src={getImageUrl(profile.avatar)}
                     alt="Avatar"
                     className="w-full h-full rounded-full object-cover"
                   />
                 ) : (
-                  profile.firstName[0]
+                  (profile.firstName || profile.username || '?')[0].toUpperCase()
                 )}
               </div>
 
               {isEditing && isOwnProfile && (
                 <button
+                  aria-label={uploadAvatarMutation.isPending ? "Subiendo foto" : "Cambiar foto de perfil"}
+                  disabled={uploadAvatarMutation.isPending || uploadCoverMutation.isPending}
                   onClick={() => fileInputRef.current?.click()}
                   className="absolute bottom-2 right-2 p-3 bg-primary rounded-full text-white hover:bg-primary/90 transition-all shadow-xl hover:scale-110"
                 >
@@ -262,7 +263,7 @@ function ProfileContent() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,image/gif"
                 className="hidden"
                 onChange={handleAvatarUpload}
               />
@@ -291,7 +292,7 @@ function ProfileContent() {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={handleSave}
-                        disabled={updateProfileMutation.isPending}
+                        disabled={updateProfileMutation.isPending || uploadAvatarMutation.isPending || uploadCoverMutation.isPending}
                         className="flex items-center justify-center gap-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-2xl transition-all disabled:opacity-50 font-bold shadow-lg shadow-green-500/20"
                       >
                         <Save className="w-5 h-5" />
@@ -299,6 +300,7 @@ function ProfileContent() {
                       </button>
                       <button
                         onClick={handleCancel}
+                        disabled={updateProfileMutation.isPending}
                         className="flex items-center justify-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/10 text-foreground rounded-2xl transition-all font-bold"
                       >
                         <X className="w-5 h-5" />
@@ -319,13 +321,19 @@ function ProfileContent() {
                 )}
               </div>
 
-              <p className="text-gray-600 dark:text-gray-400 mb-2">@{profile.username}</p>
+              {isEditing && isOwnProfile && (
+                <div className="grid gap-3 sm:grid-cols-2 my-4">
+                  <label className="text-sm">Nombre<input value={formData.firstName || ''} maxLength={50} onChange={e => setFormData({ ...formData, firstName: e.target.value })} className="block w-full rounded-xl border border-border bg-background px-4 py-3 mt-1" /></label>
+                  <label className="text-sm">Apellido<input value={formData.lastName || ''} maxLength={50} onChange={e => setFormData({ ...formData, lastName: e.target.value })} className="block w-full rounded-xl border border-border bg-background px-4 py-3 mt-1" /></label>
+                  {((user as any)?.twoFactor?.isEnabled || requiresTwoFactor) && <label className="text-sm sm:col-span-2">Código de autenticación<input value={twoFactorCode} inputMode="numeric" autoComplete="one-time-code" maxLength={6} onChange={e => setTwoFactorCode(e.target.value.replace(/\D/g, ''))} className="block w-full rounded-xl border border-border bg-background px-4 py-3 mt-1" /></label>}
+                </div>
+              )}
 
               <div className="flex flex-col md:flex-row items-center md:items-start gap-4 text-sm text-muted-foreground mt-4 glass p-4 rounded-2xl border-white/5">
-                <span className="flex items-center gap-2">
+                {profile.email && <span className="flex items-center gap-2">
                   <Mail className="w-4 h-4 text-primary" />
                   <span className="font-medium">{profile.email}</span>
-                </span>
+                </span>}
                 {profile.location && (
                   <span className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-primary" />
@@ -369,6 +377,8 @@ function ProfileContent() {
 
               {isEditing && isOwnProfile ? (
                 <textarea
+                  aria-label="Biografía"
+                  maxLength={500}
                   value={formData.bio || ''}
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                   placeholder="Cuéntanos sobre ti..."
@@ -400,6 +410,7 @@ function ProfileContent() {
                     <span>{interest}</span>
                     {isEditing && isOwnProfile && (
                       <button
+                        aria-label={`Quitar ${interest}`}
                         onClick={() => handleRemoveInterest(index)}
                         className="hover:bg-red-500 hover:text-white rounded p-1 transition-colors text-muted-foreground"
                       >
@@ -421,6 +432,7 @@ function ProfileContent() {
                     onKeyPress={(e) => e.key === 'Enter' && handleAddInterest()}
                   />
                   <button
+                    aria-label="Añadir interés"
                     onClick={handleAddInterest}
                     className="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold transition-all shadow-lg hover:shadow-primary/30"
                   >
@@ -442,16 +454,7 @@ function ProfileContent() {
                   <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
                     <Mail className="w-5 h-5 text-primary" />
                   </div>
-                  {isEditing && isOwnProfile ? (
-                    <input
-                      type="email"
-                      value={formData.email || ''}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="flex-1 px-4 py-3 border border-white/10 bg-white/5 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder-white/50 transition-all font-medium backdrop-blur-md"
-                    />
-                  ) : (
-                    <span className="text-muted-foreground font-medium text-sm md:text-base break-all">{profile.email}</span>
-                  )}
+                  <span className="text-muted-foreground font-medium text-sm md:text-base break-all">{profile.email || 'No compartido'}</span>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -460,6 +463,7 @@ function ProfileContent() {
                   </div>
                   {isEditing && isOwnProfile ? (
                     <input
+                      aria-label="Teléfono"
                       type="tel"
                       value={formData.phone || ''}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -483,6 +487,7 @@ function ProfileContent() {
                         ...formData,
                         location: { ...formData.location, address: e.target.value } as any
                       })}
+                      aria-label="Ubicación"
                       placeholder="Ubicación"
                       className="flex-1 px-4 py-3 border border-white/10 bg-white/5 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder-white/50 transition-all font-medium backdrop-blur-md"
                     />
@@ -512,6 +517,7 @@ function ProfileContent() {
                     </div>
                     {isEditing && isOwnProfile ? (
                       <input
+                        aria-label={label}
                         type="url"
                         value={(formData.socialLinks as any)?.[key] || ''}
                         onChange={(e) => setFormData({
@@ -525,9 +531,7 @@ function ProfileContent() {
                         className="flex-1 w-full px-4 py-3 border border-white/10 bg-white/5 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent text-foreground placeholder-white/50 transition-all font-medium backdrop-blur-md"
                       />
                     ) : (
-                      <span className="text-muted-foreground font-medium text-sm md:text-base truncate">
-                        {(profile.socialLinks as any)?.[key] || 'No vinculado'}
-                      </span>
+                      safeSocialUrl(profile.socialLinks[key as keyof UserProfile['socialLinks']]) ? <a href={safeSocialUrl(profile.socialLinks[key as keyof UserProfile['socialLinks']])!} target="_blank" rel="noopener noreferrer" className="text-primary font-medium text-sm md:text-base truncate hover:underline">{profile.socialLinks[key as keyof UserProfile['socialLinks']]}</a> : <span className="text-muted-foreground text-sm">No vinculado</span>
                     )}
                   </div>
                 ))}

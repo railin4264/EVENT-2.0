@@ -115,7 +115,7 @@ const CommentItem: React.FC<CommentItemProps> = ({
             className="w-8 h-8 rounded-full object-cover"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-semibold text-sm">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-cyan-400 flex items-center justify-center text-white font-semibold text-sm">
             {getAuthorName().charAt(0).toUpperCase()}
           </div>
         )}

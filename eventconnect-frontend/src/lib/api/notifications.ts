@@ -199,7 +199,7 @@ export const getNotificationColor = (type: NotificationData['type']): string => 
     event_update: 'text-yellow-600 bg-yellow-50',
     comment: 'text-indigo-600 bg-indigo-50',
     like: 'text-red-600 bg-red-50',
-    tribe_invite: 'text-teal-600 bg-teal-50',
+    tribe_invite: 'text-cyan-600 bg-cyan-50',
     system: 'text-gray-600 bg-gray-50',
     welcome: 'text-pink-600 bg-pink-50'
   }

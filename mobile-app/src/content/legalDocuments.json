@@ -1,0 +1,106 @@
+{
+  "terms": {
+    "title": "Términos de servicio",
+    "source": "eventconnect-frontend/src/app/terms/page.tsx",
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "text": "Legal"
+      },
+      {
+        "kind": "heading",
+        "text": "1 Aceptación de los términos"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Al acceder y usar EventConnect, aceptas estar vinculado por estos Términos de Servicio. Si no estás de acuerdo con alguno de estos términos, no debes usar la plataforma."
+      },
+      {
+        "kind": "heading",
+        "text": "2 Descripción del servicio"
+      },
+      {
+        "kind": "paragraph",
+        "text": "EventConnect es una plataforma social para descubrir, crear y gestionar eventos. Nos reservamos el derecho de modificar o descontinuar temporalmente el servicio."
+      },
+      {
+        "kind": "heading",
+        "text": "3 Cuentas de usuario"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Eres completamente responsable de mantener la confidencialidad de tu cuenta y contraseña. Notifícanos inmediatamente sobre cualquier uso no autorizado o violación de seguridad."
+      },
+      {
+        "kind": "heading",
+        "text": "4 Contenido del usuario"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Eres el único responsable del contenido visual y textual que publicas. Queda estrictamente prohibido publicar contenido ilegal, ofensivo, discriminatorio o que viole la propiedad intelectual."
+      },
+      {
+        "kind": "heading",
+        "text": "5 Contacto legal"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Para consultas legales, notificaciones DMCA o para aclarar dudas sobre estos términos, por favor dirígite a:"
+      },
+      {
+        "kind": "paragraph",
+        "text": "legal@eventconnect.app"
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Política de privacidad",
+    "source": "eventconnect-frontend/src/app/privacy/page.tsx",
+    "blocks": [
+      {
+        "kind": "heading",
+        "text": "1 Información que recopilamos"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Recopilamos información que nos proporcionas directamente, como nombre, correo electrónico y preferencias de eventos, así como datos de uso de la plataforma."
+      },
+      {
+        "kind": "heading",
+        "text": "2 Uso de la información"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Utilizamos tu información para personalizar tu experiencia, enviarte notificaciones relevantes sobre eventos y mejorar nuestros servicios."
+      },
+      {
+        "kind": "heading",
+        "text": "3 Compartición de datos"
+      },
+      {
+        "kind": "paragraph",
+        "text": "No vendemos tu información personal a terceros. Solo compartimos datos con proveedores de servicios necesarios para operar la plataforma de manera eficiente."
+      },
+      {
+        "kind": "heading",
+        "text": "4 Cookies y Rastreos"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Utilizamos cookies para mantener tu sesión activa y mejorar la experiencia. Puedes desactivar las cookies en la configuración de tu navegador."
+      },
+      {
+        "kind": "heading",
+        "text": "5 Tus derechos"
+      },
+      {
+        "kind": "paragraph",
+        "text": "Tienes derecho a acceder, corregir o eliminar tus datos personales en cualquier momento. Para ejercer estos derechos, contáctanos en nuestro correo oficial de soporte:"
+      },
+      {
+        "kind": "paragraph",
+        "text": "privacy@eventconnect.app"
+      }
+    ]
+  }
+}

@@ -44,8 +44,8 @@ const categoryIcons = {
 
 const rarityColors = {
   common: 'from-gray-400 to-gray-600',
-  rare: 'from-blue-400 to-blue-600',
-  epic: 'from-purple-400 to-purple-600',
+  rare: 'from-violet-400 to-violet-600',
+  epic: 'from-violet-400 to-violet-600',
   legendary: 'from-yellow-400 to-orange-600'
 }
 

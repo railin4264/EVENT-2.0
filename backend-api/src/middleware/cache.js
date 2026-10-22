@@ -12,12 +12,26 @@ function makeCache(ttlSeconds = 30) {
       return next();
     }
 
-    const key = req.originalUrl || req.url;
+    // Attendance, orders and permissions can change between two reads.
+    // A user-specific cache key alone does not make stale permissions safe.
+    if (req.user) {
+      res.vary('Authorization');
+      res.set('Cache-Control', 'private, no-store');
+      res.set('x-cache', 'BYPASS');
+      return next();
+    }
+
+    // Event responses include attendance/favorites and age-restricted content.
+    // Never reuse one user's response for a different user or a public visitor.
+    const identity = req.user ? `${req.user._id || req.user.id}:${req.user.age ?? 'unknown'}` : 'anonymous';
+    const key = `${identity}:${req.originalUrl || req.url}:u=${req.user?.id || 'anon'}`;
+    const cacheControl = req.user ? 'private, no-store' : `public, max-age=${ttlSeconds}`;
+    res.vary('Authorization');
     const cached = store.get(key);
 
     if (cached && Date.now() - cached.ts < ttl) {
       res.set('x-cache', 'HIT');
-      res.set('Cache-Control', `public, max-age=${ttlSeconds}`);
+      res.set('Cache-Control', cacheControl);
       return res.status(cached.status).json(cached.body);
     }
 
@@ -27,7 +41,7 @@ function makeCache(ttlSeconds = 30) {
         store.set(key, { ts: Date.now(), status: res.statusCode, body });
       }
       res.set('x-cache', 'MISS');
-      res.set('Cache-Control', `public, max-age=${ttlSeconds}`);
+      res.set('Cache-Control', cacheControl);
       return originalJson(body);
     };
 

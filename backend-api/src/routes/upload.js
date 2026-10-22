@@ -365,15 +365,22 @@ router.delete('/cloudinary/:publicId',
     try {
       const { publicId } = req.params;
 
+      // Decode the public ID (it might be URL encoded)
+      const decodedPublicId = decodeURIComponent(publicId);
+
+      if (req.user.role !== 'admin' && !decodedPublicId.includes(req.user.id)) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para eliminar este archivo',
+        });
+      }
+
       if (!cloudinaryService.isConfiguredProperly()) {
         return res.status(400).json({
           success: false,
           message: 'Cloudinary no está configurado',
         });
       }
-
-      // Decode the public ID (it might be URL encoded)
-      const decodedPublicId = decodeURIComponent(publicId);
       
       const result = await cloudinaryService.deleteImage(decodedPublicId);
 
@@ -401,8 +408,8 @@ router.get('/stats',
   authMiddleware,
   async (req, res) => {
     try {
-      // Check if user is admin (you might want to implement proper role checking)
-      if (!req.user.isAdmin) {
+      // Check if user is admin
+      if (req.user.role !== 'admin') {
         return res.status(403).json({
           success: false,
           message: 'Acceso denegado',

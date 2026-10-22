@@ -1,83 +1,121 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, ScrollView, Animated, Image } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Image, Platform } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNearbyEvents, hasPublicMapLocation } from '@/hooks/useNearbyEvents';
+import { discoveryAppearance } from '@/constants/discoveryAppearance';
+import { MAP_CONFIG, EVENT_CATEGORIES } from '@/constants';
 import { eventService } from '@/services';
-import { Event } from '@/types';
-import * as Haptics from 'expo-haptics';
-const PINK='#ec4899',VIOLET='#8b5cf6',BLUE='#3b82f6',BG='#0C0B10',SURF='rgba(255,255,255,0.05)',BORDER='rgba(255,255,255,0.08)',TXT='#ffffff',TXTS='rgba(255,255,255,0.5)';
-const DARK_MAP=[{elementType:'geometry',stylers:[{color:'#0c0b10'}]},{elementType:'labels.text.fill',stylers:[{color:'#9ca3af'}]},{elementType:'labels.text.stroke',stylers:[{color:'#0c0b10'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#1f1d2b'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#0d1b2a'}]},{featureType:'poi',elementType:'geometry',stylers:[{color:'#131220'}]}];
-const FILTERS=[{id:'all',label:'Todos',icon:'apps',colors:[PINK,VIOLET]},{id:'music',label:'Música',icon:'musical-notes',colors:['#f97316','#ef4444']},{id:'tech',label:'Tech',icon:'code-slash',colors:[BLUE,VIOLET]},{id:'food',label:'Food',icon:'restaurant',colors:['#10b981','#059669']}];
-function PulseMarker({color=PINK}:{color?:string}){
-  const p=useRef(new Animated.Value(1)).current;
-  useEffect(()=>{Animated.loop(Animated.sequence([Animated.timing(p,{toValue:1.7,duration:1000,useNativeDriver:true}),Animated.timing(p,{toValue:1,duration:1000,useNativeDriver:true})])).start();},[]);
-  return(<View style={{width:44,height:44,alignItems:'center',justifyContent:'center'}}><Animated.View style={{position:'absolute',width:34,height:34,borderRadius:17,backgroundColor:color+'28',transform:[{scale:p}]}}/><LinearGradient colors={[color,VIOLET] as any} style={ms.pin}><Ionicons name="flash" size={13} color="#fff"/></LinearGradient></View>);
-}
-export default function MapScreen(){
-  const router=useRouter(),insets=useSafeAreaInsets(),mapRef=useRef<MapView>(null);
-  const [events,setEvents]=useState<Event[]>([]),[loading,setLoading]=useState(true),[selected,setSelected]=useState<Event|null>(null),[filter,setFilter]=useState('all');
-  const cardY=useRef(new Animated.Value(220)).current,cardO=useRef(new Animated.Value(0)).current;
-  useEffect(()=>{(async()=>{const{status}=await Location.requestForegroundPermissionsAsync();if(status==='granted'){const loc=await Location.getCurrentPositionAsync({});mapRef.current?.animateToRegion({latitude:loc.coords.latitude,longitude:loc.coords.longitude,latitudeDelta:0.05,longitudeDelta:0.05},800);}try{const r=await eventService.getEvents({limit:40});setEvents((r?.data||[]).filter((e:Event)=>typeof e.location !== 'string' && e.location?.coordinates));}catch{}setLoading(false);})();},[]);
-  const show=(e:Event)=>{setSelected(e);Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);Animated.parallel([Animated.spring(cardY,{toValue:0,useNativeDriver:true,tension:70}),Animated.timing(cardO,{toValue:1,duration:220,useNativeDriver:true})]).start();};
-  const hide=()=>{Animated.parallel([Animated.timing(cardY,{toValue:220,duration:230,useNativeDriver:true}),Animated.timing(cardO,{toValue:0,duration:200,useNativeDriver:true})]).start(()=>setSelected(null));};
-  const filtered=filter==='all'?events:events.filter(e=>e.category===filter);
-  return(
-    <View style={{flex:1,backgroundColor:BG}}>
-      <MapView ref={mapRef} style={StyleSheet.absoluteFillObject} provider={Platform.OS==='android'?PROVIDER_GOOGLE:undefined} customMapStyle={DARK_MAP} initialRegion={{latitude:4.711,longitude:-74.072,latitudeDelta:0.08,longitudeDelta:0.08}} showsUserLocation showsMyLocationButton={false} onPress={hide}>
-        {filtered.map(ev=>{const c=typeof ev.location !== 'string' ? ev.location?.coordinates : undefined;if(!c||c.length<2)return null;return <Marker key={ev._id} coordinate={{latitude:c[1],longitude:c[0]}} onPress={()=>show(ev)}><PulseMarker color={ev.category==='music'?'#f97316':ev.category==='food'?'#10b981':PINK}/></Marker>;})}
-      </MapView>
-      <View style={[ms.header,{paddingTop:insets.top+8}]}>
-        <TouchableOpacity style={ms.hBtn} onPress={()=>router.back()}><Ionicons name="chevron-back" size={22} color="#fff"/></TouchableOpacity>
-        <View style={{flex:1}}><Text style={ms.hTitle}>Mapa de eventos</Text>{!loading&&<Text style={ms.hSub}>{filtered.length} cerca de ti</Text>}</View>
-        <TouchableOpacity style={ms.hBtn} onPress={()=>router.push('/(tabs)/discover' as any)}><Ionicons name="list" size={20} color="#fff"/></TouchableOpacity>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[{position:'absolute',left:0,right:0,zIndex:10},{ top:insets.top+68}]} contentContainerStyle={{paddingHorizontal:16,gap:8}}>
-        {FILTERS.map(f=>{const a=filter===f.id;return a
-          ?<TouchableOpacity key={f.id} onPress={()=>{setFilter(f.id);Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);}}><LinearGradient colors={f.colors as any} style={ms.chipA} start={{x:0,y:0}} end={{x:1,y:0}}><Ionicons name={f.icon as any} size={13} color="#fff"/><Text style={[ms.chipTxt,{color:'#fff'}]}>{f.label}</Text></LinearGradient></TouchableOpacity>
-          :<TouchableOpacity key={f.id} onPress={()=>{setFilter(f.id);Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);}}><View style={ms.chip}><Ionicons name={f.icon as any} size={13} color={TXTS}/><Text style={ms.chipTxt}>{f.label}</Text></View></TouchableOpacity>;})}
-      </ScrollView>
-      <View style={[{position:'absolute',right:16,zIndex:10,gap:10},{bottom:selected?210:90}]}>
-        <TouchableOpacity style={ms.ctrl} onPress={async()=>{const l=await Location.getCurrentPositionAsync({});mapRef.current?.animateToRegion({latitude:l.coords.latitude,longitude:l.coords.longitude,latitudeDelta:0.03,longitudeDelta:0.03},600);}}><Ionicons name="locate" size={22} color="#fff"/></TouchableOpacity>
-      </View>
-      {loading&&<View style={{...StyleSheet.absoluteFillObject,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(12,11,16,0.7)'}}><ActivityIndicator size="large" color={PINK}/></View>}
-      {selected&&(
-        <Animated.View style={[ms.card,{bottom:insets.bottom+72,opacity:cardO,transform:[{translateY:cardY}]}]}>
-          <LinearGradient colors={['rgba(26,24,37,0.99)','rgba(12,11,16,0.99)']} style={ms.cardInner}>
-            <View style={ms.cardHandle}/><TouchableOpacity style={{position:'absolute',top:16,right:16,zIndex:1}} onPress={hide}><Ionicons name="close" size={18} color={TXTS}/></TouchableOpacity>
-            <View style={{flexDirection:'row',gap:14}}>
-              {selected.image&&<Image source={{uri:selected.image}} style={ms.cardImg}/>}
-              <View style={{flex:1}}>
-                <View style={ms.cardBadge}><Text style={ms.cardBadgeTxt}>{selected.category||'Evento'}</Text></View>
-                <Text style={ms.cardTitle} numberOfLines={2}>{selected.title}</Text>
-                <View style={{flexDirection:'row',alignItems:'center',gap:4,marginBottom:10}}><Ionicons name="location-outline" size={12} color={TXTS}/><Text style={{fontSize:12,color:TXTS,flex:1}} numberOfLines={1}>{(selected.location as any)?.address||'Ver ubicación'}</Text></View>
-                <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}>
-                  <Text style={{fontSize:16,fontWeight:'800',color:TXT}}>{selected.price?'$'+selected.price.toLocaleString():'GRATIS'}</Text>
-                  <TouchableOpacity onPress={()=>{Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);router.push('/event/'+selected._id as any);}}><LinearGradient colors={[PINK,VIOLET]} style={{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:14,paddingVertical:8,borderRadius:10}} start={{x:0,y:0}} end={{x:1,y:0}}><Text style={{fontSize:13,fontWeight:'700',color:'#fff'}}>Ver evento</Text><Ionicons name="arrow-forward" size={13} color="#fff"/></LinearGradient></TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </LinearGradient>
-        </Animated.View>
-      )}
-      {!loading&&!selected&&<View style={{position:'absolute',bottom:insets.bottom+80,alignSelf:'center',zIndex:5}}><LinearGradient colors={[PINK,VIOLET]} style={{flexDirection:'row',alignItems:'center',gap:6,paddingHorizontal:18,paddingVertical:10,borderRadius:24}} start={{x:0,y:0}} end={{x:1,y:0}}><Ionicons name="flash" size={14} color="#fff"/><Text style={{fontSize:14,fontWeight:'700',color:'#fff'}}>{filtered.length} eventos</Text></LinearGradient></View>}
+import { homeEventImage, homeEventPrice, homeEventTiming } from '@/utils/homeToday';
+import type { Event } from '@/types';
+
+export default function MapScreen() {
+  const router = useRouter();
+  const { isDark } = useTheme();
+  const { user } = useAuth();
+  const p = useMemo(() => discoveryAppearance(isDark), [isDark]);
+  const owner = String(user?._id || user?.id || 'guest');
+  const nearby = useNearbyEvents(owner);
+  const map = useRef<MapView>(null);
+  const viewport = useRef<Region>({ ...MAP_CONFIG.DEFAULT_REGION });
+  const requests = useRef({ value: 0 });
+  const [mapReady, setMapReady] = useState(false);
+  const [catalog, setCatalog] = useState<Event[]>([]);
+  const [mode, setMode] = useState<'catalog' | 'nearby'>('catalog');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [clock, setClock] = useState(Date.now());
+  const load = useCallback(async (region?: Region) => {
+    const ticket = ++requests.current.value;
+    setMode('catalog'); setSelectedId(null); setLoading(true); setError('');
+    try {
+      const data = region
+        ? await eventService.getNearbyEvents(region.latitude, region.longitude, Math.min(250, Math.max(5, region.latitudeDelta * 111 / 2)), 50)
+        : await eventService.getEvents({ limit: 50 }).then(response => {
+          if (!response.success || !Array.isArray(response.data)) throw new Error('Invalid catalog');
+          return response.data;
+        });
+      if (ticket !== requests.current.value) return;
+      if (!Array.isArray(data)) throw new Error('Invalid map response');
+      setCatalog(data.filter(event => event && event._id && event.status === 'published' && !event.isPrivate && hasPublicMapLocation(event)));
+    } catch {
+      if (ticket === requests.current.value) { setCatalog([]); setError('No pudimos cargar el mapa de eventos. Comprueba tu conexión y vuelve a intentarlo.'); }
+    } finally { if (ticket === requests.current.value) setLoading(false); }
+  }, []);
+  useEffect(() => {
+    const scope = requests.current;
+    setMode('catalog'); setCatalog([]); void load();
+    return () => { scope.value++; };
+  }, [load, owner]);
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  const source = mode === 'nearby' ? nearby.events : catalog;
+  const events = source.filter(event => event.status === 'published' && !event.isPrivate && hasPublicMapLocation(event));
+  const filtered = events.filter(event => filter === 'all' || (filter === 'today'
+    ? new Date(event.date).toDateString() === new Date(clock).toDateString() || homeEventTiming(event, clock).inProgress
+    : event.category === filter));
+  const selected = filtered.find(event => event._id === selectedId);
+  useEffect(() => {
+    if (!mapReady || mode !== 'nearby' || !nearby.coordinates) return;
+    map.current?.animateToRegion({ ...nearby.coordinates, latitudeDelta: 0.12, longitudeDelta: 0.12 }, 500);
+  }, [mapReady, mode, nearby.coordinates]);
+  useEffect(() => {
+    if (!mapReady || mode !== 'catalog' || !catalog.length) return;
+    map.current?.fitToCoordinates(catalog.map(event => {
+      const point = typeof event.location !== 'string' ? event.location.coordinates! : [0, 0];
+      return { latitude: point[1], longitude: point[0] };
+    }), { edgePadding: { top: 32, right: 32, bottom: 32, left: 32 }, animated: true });
+  }, [mapReady, catalog, mode]);
+  const locate = () => { setSelectedId(null); setMode('nearby'); void nearby.locate(); };
+  const busy = loading || (mode === 'nearby' && nearby.status === 'loading');
+  const message = mode === 'nearby' ? nearby.message : error;
+  const image = selected ? homeEventImage(selected) : undefined;
+  return <SafeAreaView edges={['top', 'bottom', 'left', 'right']} style={[styles.page, { backgroundColor: p.background }]}>
+    <View style={styles.header}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Volver" style={styles.iconButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/discover')}><Ionicons name="chevron-back" size={24} color={p.text} /></TouchableOpacity>
+      <View style={{ flex: 1 }}><Text accessibilityRole="header" style={[styles.title, { color: p.text }]}>Mapa de eventos</Text><Text style={[styles.muted, { color: p.muted }]}>{mode === 'nearby' ? 'A menos de 50 km de tu ubicación' : 'Eventos con ubicación pública'}</Text></View>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ver catálogo de eventos" style={styles.iconButton} onPress={() => router.push('/(tabs)/discover')}><Ionicons name="list-outline" size={23} color={p.text} /></TouchableOpacity>
     </View>
-  );
+    <View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+      {[{ value: 'all', label: 'Todo' }, { value: 'today', label: 'En vivo y hoy' }, ...EVENT_CATEGORIES].map(item => <TouchableOpacity key={item.value} accessibilityRole="button" accessibilityState={{ selected: filter === item.value }}
+        onPress={() => { setFilter(item.value); setSelectedId(null); setClock(Date.now()); }} style={[styles.chip, { backgroundColor: filter === item.value ? p.accent : p.surface }]}><Text style={{ color: filter === item.value ? p.onAccent : p.text, fontSize: 13, fontWeight: '600' }}>{item.label}</Text></TouchableOpacity>)}
+    </ScrollView></View>
+    <View style={styles.mapArea}>
+      <MapView ref={map} style={StyleSheet.absoluteFillObject} provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        userInterfaceStyle={isDark ? 'dark' : 'light'} initialRegion={{ ...MAP_CONFIG.DEFAULT_REGION }} showsUserLocation={false}
+        onMapReady={() => setMapReady(true)} onRegionChangeComplete={region => { viewport.current = region; }} onPress={() => setSelectedId(null)}>
+        {filtered.map(event => {
+          const point = typeof event.location !== 'string' ? event.location.coordinates! : [0, 0];
+          return <Marker key={event._id} title={event.title} coordinate={{ latitude: point[1], longitude: point[0] }} onPress={e => { e.stopPropagation(); setSelectedId(event._id); }}>
+            <View style={[styles.pin, { backgroundColor: p.accent }]}><Ionicons name="ticket-outline" size={20} color={p.onAccent} /></View>
+          </Marker>;
+        })}
+      </MapView>
+      <View style={[styles.mapTools, { backgroundColor: p.elevated }]}>
+        <TouchableOpacity disabled={busy} accessibilityRole="button" style={styles.mapAction} onPress={() => void load(viewport.current)}><Ionicons name="search-outline" size={19} color={p.accent} /><Text style={[styles.actionLabel, { color: p.accent }]}>Buscar en esta zona</Text></TouchableOpacity>
+        <TouchableOpacity disabled={busy} accessibilityRole="button" accessibilityLabel="Usar mi ubicación" style={styles.locate} onPress={locate}><Ionicons name="locate-outline" size={24} color={p.accent} /></TouchableOpacity>
+      </View>
+    </View>
+    <View style={[styles.bottomPanel, { backgroundColor: p.background, maxHeight: '45%' }]}>
+      {busy ? <View style={styles.status}><ActivityIndicator color={p.accent} /><Text style={[styles.muted, { color: p.muted }]}>Buscando eventos…</Text></View>
+        : message ? <View><Text accessibilityRole="alert" style={[styles.muted, { color: p.error }]}>{message}</Text><TouchableOpacity accessibilityRole="button" style={styles.mapAction} onPress={() => void load()}><Text style={{ color: p.accent }}>Explorar sin ubicación</Text></TouchableOpacity></View>
+        : selected ? <ScrollView><View style={styles.cardHeading}>{image && <Image source={{ uri: image }} style={styles.image} />}<View style={{ flex: 1 }}><Text style={[styles.eventTitle, { color: p.text }]}>{selected.title}</Text><Text style={[styles.muted, { color: p.muted }]}>{typeof selected.location === 'string' ? selected.location : selected.location.city || selected.location.address}</Text><Text style={[styles.price, { color: p.text }]}>{homeEventPrice(selected).label}</Text></View><TouchableOpacity accessibilityRole="button" accessibilityLabel="Cerrar evento seleccionado" style={styles.iconButton} onPress={() => setSelectedId(null)}><Ionicons name="close" size={20} color={p.muted} /></TouchableOpacity></View><TouchableOpacity accessibilityRole="button" style={[styles.details, { backgroundColor: p.accent }]} onPress={() => router.push(`/event/${selected._id}` as any)}><Text style={{ color: p.onAccent, fontWeight: '700' }}>Ver evento</Text></TouchableOpacity></ScrollView>
+        : <View><Text style={[styles.eventTitle, { color: p.text }]}>{filtered.length ? `${filtered.length} eventos en el mapa` : 'Sin eventos en esta selección'}</Text><Text style={[styles.muted, { color: p.muted }]}>{mode === 'nearby' ? 'Mueve el mapa para explorar otras zonas.' : 'Mueve el mapa y pulsa «Buscar en esta zona».'}</Text></View>}
+    </View>
+  </SafeAreaView>;
 }
-const ms=StyleSheet.create({
-  pin:{width:30,height:30,borderRadius:10,justifyContent:'center',alignItems:'center'},
-  header:{position:'absolute',top:0,left:0,right:0,zIndex:10,flexDirection:'row',alignItems:'center',paddingHorizontal:16,paddingBottom:12,gap:12},
-  hBtn:{width:40,height:40,borderRadius:13,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(12,11,16,0.88)',borderWidth:1,borderColor:'rgba(255,255,255,0.1)'},
-  hTitle:{fontSize:16,fontWeight:'700',color:'#fff'},hSub:{fontSize:12,color:'rgba(255,255,255,0.45)',marginTop:1},
-  chip:{flexDirection:'row',alignItems:'center',gap:5,backgroundColor:'rgba(12,11,16,0.88)',borderRadius:12,paddingHorizontal:12,paddingVertical:8,borderWidth:1,borderColor:'rgba(255,255,255,0.1)'},
-  chipA:{flexDirection:'row',alignItems:'center',gap:5,borderRadius:12,paddingHorizontal:12,paddingVertical:8},
-  chipTxt:{fontSize:13,color:TXTS,fontWeight:'600'},
-  ctrl:{width:44,height:44,borderRadius:14,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(12,11,16,0.9)',borderWidth:1,borderColor:'rgba(255,255,255,0.1)'},
-  card:{position:'absolute',left:16,right:16,borderRadius:24,overflow:'hidden',borderWidth:1,borderColor:BORDER,elevation:20},
-  cardInner:{padding:16},cardHandle:{width:40,height:4,borderRadius:2,backgroundColor:'rgba(255,255,255,0.15)',alignSelf:'center',marginBottom:14},
-  cardImg:{width:76,height:76,borderRadius:14},cardBadge:{backgroundColor:'rgba(236,72,153,0.15)',borderRadius:8,paddingHorizontal:8,paddingVertical:3,alignSelf:'flex-start',marginBottom:6},
-  cardBadgeTxt:{fontSize:11,color:PINK,fontWeight:'700'},cardTitle:{fontSize:16,fontWeight:'700',color:TXT,marginBottom:5,lineHeight:21},
+const styles = StyleSheet.create({
+  page: { flex: 1 }, header: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 }, title: { fontSize: 18, fontWeight: '700' }, muted: { fontSize: 13, lineHeight: 20, marginTop: 4 },
+  iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }, filters: { paddingHorizontal: 20, paddingBottom: 12, gap: 8 }, chip: { minHeight: 44, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14 },
+  mapArea: { flex: 1, minHeight: 160 }, pin: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }, mapTools: { position: 'absolute', top: 12, alignSelf: 'center', maxWidth: '92%', borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 },
+  mapAction: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, flexShrink: 1 }, actionLabel: { fontSize: 13, fontWeight: '600', flexShrink: 1 }, locate: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  bottomPanel: { padding: 20 }, status: { flexDirection: 'row', alignItems: 'center', gap: 12 }, cardHeading: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, image: { width: 64, height: 72, borderRadius: 12 }, eventTitle: { fontSize: 17, lineHeight: 24, fontWeight: '700' }, price: { fontSize: 15, lineHeight: 23, fontWeight: '600', marginTop: 8 }, details: { minHeight: 48, marginTop: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', padding: 12 },
 });

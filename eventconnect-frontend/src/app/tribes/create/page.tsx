@@ -91,17 +91,17 @@ export default function CreateTribePage() {
   ]
 
   const categories = [
-    { id: 'tech', name: 'Tecnología', emoji: '💻', color: 'from-blue-500 to-cyan-500' },
-    { id: 'business', name: 'Negocios', emoji: '💼', color: 'from-green-500 to-emerald-500' },
-    { id: 'design', name: 'Diseño', emoji: '🎨', color: 'from-purple-500 to-pink-500' },
+    { id: 'tech', name: 'Tecnología', emoji: '💻', color: 'from-violet-500 to-cyan-500' },
+    { id: 'business', name: 'Negocios', emoji: '💼', color: 'from-green-500 to-violet-500' },
+    { id: 'design', name: 'Diseño', emoji: '🎨', color: 'from-violet-500 to-cyan-500' },
     { id: 'music', name: 'Música', emoji: '🎵', color: 'from-orange-500 to-red-500' },
-    { id: 'education', name: 'Educación', emoji: '📚', color: 'from-indigo-500 to-blue-500' },
-    { id: 'health', name: 'Salud y Bienestar', emoji: '🏥', color: 'from-green-500 to-teal-500' },
-    { id: 'sports', name: 'Deportes', emoji: '⚽', color: 'from-blue-500 to-green-500' },
-    { id: 'gaming', name: 'Gaming', emoji: '🎮', color: 'from-purple-500 to-blue-500' },
+    { id: 'education', name: 'Educación', emoji: '📚', color: 'from-violet-500 to-cyan-500' },
+    { id: 'health', name: 'Salud y Bienestar', emoji: '🏥', color: 'from-green-500 to-cyan-500' },
+    { id: 'sports', name: 'Deportes', emoji: '⚽', color: 'from-violet-500 to-cyan-500' },
+    { id: 'gaming', name: 'Gaming', emoji: '🎮', color: 'from-violet-500 to-cyan-500' },
     { id: 'art', name: 'Arte y Cultura', emoji: '🖼️', color: 'from-pink-500 to-orange-500' },
     { id: 'food', name: 'Gastronomía', emoji: '🍽️', color: 'from-orange-500 to-yellow-500' },
-    { id: 'travel', name: 'Viajes', emoji: '✈️', color: 'from-blue-500 to-purple-500' },
+    { id: 'travel', name: 'Viajes', emoji: '✈️', color: 'from-violet-500 to-cyan-500' },
     { id: 'other', name: 'Otro', emoji: '📋', color: 'from-gray-500 to-slate-500' }
   ]
 
@@ -111,31 +111,31 @@ export default function CreateTribePage() {
       name: 'Pública',
       description: 'Cualquiera puede ver y unirse a la tribu',
       icon: Globe,
-      color: 'from-green-500 to-emerald-500'
+      color: 'from-green-500 to-violet-500'
     },
     {
       id: 'private',
       name: 'Privada',
       description: 'Visible en búsquedas, requiere solicitud para unirse',
       icon: Lock,
-      color: 'from-blue-500 to-cyan-500'
+      color: 'from-violet-500 to-cyan-500'
     },
     {
       id: 'secret',
       name: 'Secreta',
       description: 'Solo visible por invitación directa',
       icon: Shield,
-      color: 'from-purple-500 to-pink-500'
+      color: 'from-violet-500 to-cyan-500'
     }
   ]
 
   const colorThemes = [
-    { id: 'blue', name: 'Azul', gradient: 'from-blue-500 to-cyan-500' },
-    { id: 'purple', name: 'Morado', gradient: 'from-purple-500 to-pink-500' },
-    { id: 'green', name: 'Verde', gradient: 'from-green-500 to-emerald-500' },
+    { id: 'blue', name: 'Azul', gradient: 'from-violet-500 to-cyan-500' },
+    { id: 'purple', name: 'Morado', gradient: 'from-violet-500 to-cyan-500' },
+    { id: 'green', name: 'Verde', gradient: 'from-green-500 to-violet-500' },
     { id: 'orange', name: 'Naranja', gradient: 'from-orange-500 to-red-500' },
-    { id: 'indigo', name: 'Índigo', gradient: 'from-indigo-500 to-purple-500' },
-    { id: 'teal', name: 'Teal', gradient: 'from-teal-500 to-cyan-500' }
+    { id: 'indigo', name: 'Índigo', gradient: 'from-violet-500 to-cyan-500' },
+    { id: 'teal', name: 'Teal', gradient: 'from-cyan-500 to-cyan-500' }
   ]
 
   const createTribeMutation = useMutation({
@@ -148,10 +148,11 @@ export default function CreateTribePage() {
     },
     onSuccess: (data) => {
       toast.success('Tribu creada exitosamente')
-      router.push(`/tribes/${data._id}`)
+      const tribeId = data.data?._id || data.tribe?._id || data._id
+      router.push(tribeId ? `/tribes/${tribeId}` : '/tribes')
     },
-    onError: () => {
-      toast.error('Error al crear la tribu')
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Error al crear la tribu')
     }
   })
 
@@ -277,7 +278,7 @@ export default function CreateTribePage() {
               initial={{ width: '0%' }}
               animate={{ width: `${(currentStep / steps.length) * 100}%` }}
               transition={{ duration: 0.5 }}
-              className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
+              className="bg-gradient-to-r from-violet-500 to-cyan-500 h-2 rounded-full"
             />
           </div>
         </div>
@@ -1075,7 +1076,7 @@ export default function CreateTribePage() {
               type={currentStep === steps.length ? "submit" : "button"}
               onClick={currentStep === steps.length ? handleSubmit : nextStep}
               disabled={!isStepValid() || createTribeMutation.isPending}
-              className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 py-3 bg-gradient-to-r from-violet-500 to-cyan-500 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {createTribeMutation.isPending ? (
                 <>

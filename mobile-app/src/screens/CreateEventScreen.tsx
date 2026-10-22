@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,16 +15,19 @@ import { z } from 'zod';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { Input, Button, Card, Badge } from '@/components/ui';
+import { Input, Button, Card } from '@/components/ui';
 import { theme } from '@/theme';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '@/services/api';
+import { buildMobileEventPayload } from '@/utils/planningDraft';
 
 const createEventSchema = z.object({
   title: z.string().min(3, 'El título debe tener al menos 3 caracteres'),
-  description: z.string().min(10, 'La descripción debe tener al menos 10 caracteres'),
+  description: z
+    .string()
+    .min(10, 'La descripción debe tener al menos 10 caracteres'),
   category: z.string().min(1, 'Selecciona una categoría'),
   date: z.string().min(1, 'La fecha es requerida'),
   time: z.string().min(1, 'La hora es requerida'),
@@ -36,22 +39,99 @@ const createEventSchema = z.object({
 type CreateEventForm = z.infer<typeof createEventSchema>;
 
 const CATEGORIES = [
-  { id: 'music', label: 'Música', icon: 'musical-notes', gradient: theme.gradients.music },
-  { id: 'sports', label: 'Deportes', icon: 'football', gradient: theme.gradients.sports },
-  { id: 'technology', label: 'Tecnología', icon: 'laptop', gradient: theme.gradients.technology },
-  { id: 'art', label: 'Arte', icon: 'color-palette', gradient: theme.gradients.art },
-  { id: 'food', label: 'Comida', icon: 'restaurant', gradient: theme.gradients.food },
-  { id: 'business', label: 'Negocios', icon: 'briefcase', gradient: theme.gradients.business },
+  {
+    id: 'music',
+    label: 'Música',
+    icon: 'musical-notes',
+    gradient: theme.gradients.music,
+  },
+  {
+    id: 'sports',
+    label: 'Deportes',
+    icon: 'football',
+    gradient: theme.gradients.sports,
+  },
+  {
+    id: 'technology',
+    label: 'Tecnología',
+    icon: 'laptop',
+    gradient: theme.gradients.technology,
+  },
+  {
+    id: 'art',
+    label: 'Arte',
+    icon: 'color-palette',
+    gradient: theme.gradients.art,
+  },
+  {
+    id: 'food',
+    label: 'Comida',
+    icon: 'restaurant',
+    gradient: theme.gradients.food,
+  },
+  {
+    id: 'business',
+    label: 'Negocios',
+    icon: 'briefcase',
+    gradient: theme.gradients.business,
+  },
 ];
 
 export default function CreateEventScreen() {
+  const { user } = useAuth();
+  return <OwnedCreateEvent key={user?._id || user?.id || ''} />;
+}
+function OwnedCreateEvent() {
   const router = useRouter();
   const { user } = useAuth();
+  const { draft } = useLocalSearchParams<{ draft?: string }>();
+  const owner = user?._id || user?.id || '';
+  const alive = useRef(true),
+    submitLock = useRef(false);
+  const [importFields, setImportFields] = useState<any>(null);
+  const [imported, setImported] = useState(false);
+  const [details, setDetails] = useState({
+    timeZone: '',
+    latitude: '',
+    longitude: '',
+    city: '',
+    country: '',
+    currency: 'DOP',
+  });
+  useEffect(() => {
+    alive.current = true;
+    let current = true;
+    setImportFields(null);
+    setImported(false);
+    if (draft && /^[a-f\d]{24}$/i.test(draft) && owner)
+      api
+        .get(`/planning-tools/drafts/${draft}`)
+        .then(r => {
+          if (current && alive.current && r.data.success)
+            setImportFields(r.data.data.fields);
+        })
+        .catch(() => {
+          if (current && alive.current)
+            Alert.alert(
+              'Borrador no disponible',
+              'Abre un borrador guardado en tu cuenta.'
+            );
+        });
+    return () => {
+      current = false;
+      alive.current = false;
+    };
+  }, [draft, owner]);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [eventImage, setEventImage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [insights, setInsights] = useState<any>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [friendDraftText, setFriendDraftText] = useState('');
+  const [isParsingDraft, setIsParsingDraft] = useState(false);
+  const [draftParsedSuccess, setDraftParsedSuccess] = useState(false);
+  const [textPlanPrivate, setTextPlanPrivate] = useState(true);
+  const friendDraftRequest = useRef(0);
 
   const {
     control,
@@ -84,28 +164,44 @@ export default function CreateEventScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setInsights({ hasData: false, message: 'Activa la ubicación para ver insights de tu zona.' });
+        setInsights({
+          hasData: false,
+          message: 'Activa la ubicación para ver insights de tu zona.',
+        });
         return;
       }
       const loc = await Location.getCurrentPositionAsync({});
       const res = await api.get('/analytics/audience-insights', {
-        params: { lat: loc.coords.latitude, lng: loc.coords.longitude, radius: 25 },
+        params: {
+          lat: loc.coords.latitude,
+          lng: loc.coords.longitude,
+          radius: 25,
+        },
       });
       setInsights(res.data?.data || res.data || null);
-    } catch (e) {
-      setInsights({ hasData: false, message: 'No pudimos cargar insights ahora. Intenta de nuevo.' });
+    } catch {
+      setInsights({
+        hasData: false,
+        message: 'No pudimos cargar insights ahora. Intenta de nuevo.',
+      });
     } finally {
       setInsightsLoading(false);
     }
   };
 
-  useEffect(() => { loadInsights(); }, []);
+  useEffect(() => {
+    loadInsights();
+  }, []);
 
   const handlePickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (permissionResult.granted === false) {
-      Alert.alert('Permiso denegado', 'Necesitas dar permiso para acceder a tus fotos');
+      Alert.alert(
+        'Permiso denegado',
+        'Necesitas dar permiso para acceder a tus fotos'
+      );
       return;
     }
 
@@ -121,53 +217,94 @@ export default function CreateEventScreen() {
     }
   };
 
-  const onSubmit = async (data: CreateEventForm) => {
+  const handleExtractFriendDraft = async () => {
+    const text = friendDraftText.trim();
+    if (!text || text.length > 10000) {
+      Alert.alert('Texto requerido', 'Pega entre 1 y 10.000 caracteres del anuncio.');
+      return;
+    }
+    const ticket = ++friendDraftRequest.current;
+    setIsParsingDraft(true);
     try {
-      setIsSubmitting(true);
-
-      const formData = new FormData();
-      formData.append('title', data.title);
-      formData.append('description', data.description);
-      formData.append('category', data.category);
-      // Construct ISO date from date and time strings if needed, or send as is
-      formData.append('date', `${data.date}T${data.time}:00.000Z`);
-      formData.append('location', data.location);
-      if (data.price) formData.append('price', data.price);
-      if (data.capacity) formData.append('capacity', data.capacity);
-
-      if (eventImage) {
-        const filename = eventImage.split('/').pop();
-        const match = /\.(\w+)$/.exec(filename || '');
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
-
-        formData.append('image', {
-          uri: eventImage,
-          name: filename || 'event.jpg',
-          type,
-        } as any);
-      }
-
-      await api.post('/events', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
+      const res = await api.post('/sources/friend-draft', { text });
+      if (!alive.current || ticket !== friendDraftRequest.current) return;
+      if (!res.data?.success || !res.data.draft) throw Error('No se pudo preparar el borrador.');
+      const d = res.data.draft;
       Alert.alert(
-        'Evento Creado',
-        'Tu evento ha sido creado exitosamente',
-        [
-          {
-            text: 'Ver Evento',
-            onPress: () => router.back(),
-          },
-        ]
+        'Revisa el borrador',
+        `Fecha: ${d.localDate || 'por confirmar'}\nHora: ${d.localTime || 'por confirmar'}\nZona horaria: ${d.timeZone || 'por confirmar'}\nLugar: ${d.venue || 'por confirmar'}\nPrecio: ${d.estimatedBudget || 'por confirmar'}\n\nAplicar reemplaza estos campos. Debes confirmar coordenadas, precio y moneda antes de publicar.`,
+        [{ text: 'Cancelar', style: 'cancel' }, { text: 'Aplicar', onPress: () => {
+          if (!alive.current || ticket !== friendDraftRequest.current) return;
+          if (d.title) setValue('title', d.title);
+          if (d.description) setValue('description', d.description);
+          setValue('date', d.localDate || ''); setValue('time', d.localTime || '');
+          setValue('location', d.venue || ''); setValue('price', '');
+          setDetails(old => ({ ...old, timeZone: d.timeZone || '', latitude: '', longitude: '', city: '', country: '', currency: '' }));
+          if (d.category) { setSelectedCategory(d.category); setValue('category', d.category); }
+          setTextPlanPrivate(true); setDraftParsedSuccess(true);
+        } }]
       );
-    } catch (error: any) {
-      console.error('Create event error:', error);
-      Alert.alert('Error', error.response?.data?.message || 'No se pudo crear el evento');
+    } catch (err: any) {
+      if (alive.current && ticket === friendDraftRequest.current)
+        Alert.alert('Error', err.response?.data?.message || err.message || 'No se pudo preparar el borrador.');
     } finally {
-      setIsSubmitting(false);
+      if (alive.current && ticket === friendDraftRequest.current) setIsParsingDraft(false);
+    }
+  };
+
+  const onSubmit = async (data: CreateEventForm) => {
+    if (!alive.current || !user || submitLock.current) return;
+    submitLock.current = true;
+    setIsSubmitting(true);
+    try {
+      if (draftParsedSuccess && !data.price?.trim()) throw Error('Confirma el precio del anuncio. Escribe 0 únicamente si la entrada es gratuita.');
+      const payload = { ...buildMobileEventPayload(data, details), ...(draftParsedSuccess ? { isPrivate: textPlanPrivate } : {}) };
+      let images: { url: string }[] = [];
+      if (eventImage) {
+        const formData = new FormData();
+        const filename = eventImage.split('/').pop() || 'event.jpg';
+        formData.append('eventImages', {
+          uri: eventImage,
+          name: filename,
+          type: /\.png$/i.test(filename) ? 'image/png' : 'image/jpeg',
+        } as any);
+        const uploaded = await api.post('/upload/event-images', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        if (
+          !uploaded.data.success ||
+          !Array.isArray(uploaded.data.data) ||
+          !uploaded.data.data.length ||
+          !uploaded.data.data.every(
+            (image: any) => typeof image.url === 'string'
+          )
+        )
+          throw Error(
+            'No se pudo subir la imagen. Reintenta o retira la imagen seleccionada.'
+          );
+        images = uploaded.data.data;
+      }
+      if (!alive.current) return;
+      const response = await api.post('/events', { ...payload, images });
+      if (!response.data.success)
+        throw Error(response.data.message || 'No se pudo crear el evento.');
+      if (alive.current)
+        Alert.alert(
+          'Solicitud guardada',
+          'El servidor guardó el evento. Su publicación depende de la revisión y las reglas de la plataforma.',
+          [{ text: 'Continuar', onPress: () => router.back() }]
+        );
+    } catch (error: any) {
+      if (alive.current)
+        Alert.alert(
+          'Revisa tu evento',
+          error.response?.data?.message ||
+            error.message ||
+            'No se pudo crear el evento'
+        );
+    } finally {
+      submitLock.current = false;
+      if (alive.current) setIsSubmitting(false);
     }
   };
 
@@ -198,6 +335,81 @@ export default function CreateEventScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {importFields && !imported && (
+          <Card variant="glass" padding={20} style={styles.formCard}>
+            <Text style={styles.sectionTitle}>
+              Borrador privado: {importFields.title || 'Sin título'}
+            </Text>
+            <Text style={styles.uploadSubtext}>
+              Revisa y aplica los campos. No se publica ni se elimina tu
+              borrador.
+            </Text>
+            <Button
+              onPress={() =>
+                Alert.alert(
+                  '¿Aplicar este borrador?',
+                  'Reemplazará los campos coincidentes que ya hayas escrito.',
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                      text: 'Aplicar',
+                      onPress: () => {
+                        if (!alive.current) return;
+                        if (importFields.title)
+                          setValue('title', importFields.title);
+                        if (importFields.description)
+                          setValue('description', importFields.description);
+                        if (importFields.date)
+                          setValue('date', importFields.date);
+                        if (importFields.time)
+                          setValue('time', importFields.time);
+                        if (importFields.address)
+                          setValue('location', importFields.address);
+                        if (importFields.amount !== undefined)
+                          setValue('price', String(importFields.amount));
+                        setDetails(old => ({
+                          ...old,
+                          timeZone: importFields.timeZone || '',
+                          city: importFields.city || old.city,
+                          country: importFields.country || old.country,
+                          currency: importFields.currency || old.currency,
+                        }));
+                        setImported(true);
+                      },
+                    },
+                  ]
+                )
+              }
+            >
+              Aplicar borrador revisado
+            </Button>
+          </Card>
+        )}
+        <Card variant="glass" padding={20} style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Horario y ubicación reales</Text>
+          <Text style={styles.uploadSubtext}>
+            Confirma zona horaria IANA, ciudad, país y coordenadas del lugar. No
+            usamos ubicación automática ni estimaciones.
+          </Text>
+          {Object.entries({
+            timeZone: 'Zona horaria (ej. America/Santo_Domingo)',
+            latitude: 'Latitud real',
+            longitude: 'Longitud real',
+            city: 'Ciudad',
+            country: 'País',
+            currency: 'Moneda (ej. DOP, USD, EUR, JPY)',
+          }).map(([key, label]) => (
+            <Input
+              key={key}
+              label={label}
+              value={(details as any)[key]}
+              onChangeText={value =>
+                setDetails(old => ({ ...old, [key]: value }))
+              }
+              variant="glass"
+            />
+          ))}
+        </Card>
         {/* Hero Section - Image Upload */}
         <Card variant="glass" glassIntensity="medium" style={styles.imageCard}>
           <TouchableOpacity
@@ -217,7 +429,9 @@ export default function CreateEventScreen() {
                   <Ionicons name="image" size={32} color="#fff" />
                 </LinearGradient>
                 <Text style={styles.uploadText}>Subir imagen del evento</Text>
-                <Text style={styles.uploadSubtext}>Recomendado: 1200x675px</Text>
+                <Text style={styles.uploadSubtext}>
+                  Recomendado: 1200x675px
+                </Text>
               </View>
             )}
             {eventImage && (
@@ -229,10 +443,72 @@ export default function CreateEventScreen() {
           </TouchableOpacity>
         </Card>
 
-        {/* Basic Info */}
-        <Card variant="glass" glassIntensity="medium" padding={20} style={styles.formCard}>
+        {eventImage && (
+          <Button onPress={() => setEventImage(null)}>
+            Retirar imagen seleccionada
+          </Button>
+        )}
+
+        {/* Quick Friend Coro Draft Auto-Fill Card */}
+        <Card
+          variant="glass"
+          glassIntensity="strong"
+          padding={20}
+          style={{ ...styles.formCard, borderColor: 'rgba(99, 102, 241, 0.4)', borderWidth: 1 }}
+        >
           <View style={styles.sectionHeader}>
-            <Ionicons name="information-circle" size={24} color={theme.colors.primary} />
+            <Ionicons
+              name="flash"
+              size={24}
+              color={theme.colors.secondary || '#8B5CF6'}
+            />
+            <Text style={styles.sectionTitle}>Tu anuncio, listo para revisar</Text>
+          </View>
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginBottom: 12, lineHeight: 18 }}>
+            Pega el texto de tu plan. Solo se recuperan datos escritos explícitamente; completa lo que falte. Las imágenes todavía no se procesan aquí.
+          </Text>
+          <Input
+            label="Texto del Anuncio o Coro"
+            placeholder="Ej: Coro este sábado 8pm en Zona Colonial, cerveza fría y buena música..."
+            value={friendDraftText}
+            onChangeText={value => { friendDraftRequest.current++; setFriendDraftText(value); setIsParsingDraft(false); }}
+            maxLength={10000}
+            variant="glass"
+            glassIntensity="light"
+            multiline
+            numberOfLines={3}
+            containerStyle={{ marginBottom: 12 }}
+          />
+          <Button
+            variant="secondary"
+            loading={isParsingDraft}
+            disabled={isParsingDraft || !friendDraftText.trim()}
+            icon="sparkles"
+            onPress={handleExtractFriendDraft}
+          >
+            {draftParsedSuccess ? 'Revisar otro texto' : 'Preparar borrador'}
+          </Button>
+          {draftParsedSuccess && <>
+            <Text style={{ color: theme.colors.textSecondary, marginTop: 12, lineHeight: 20 }}>Confirma fecha, zona horaria, ubicación, precio y moneda en el formulario. No se publica al aplicar.</Text>
+            <TouchableOpacity accessibilityRole="switch" accessibilityLabel="Plan privado" accessibilityState={{ checked: textPlanPrivate }} onPress={() => setTextPlanPrivate(value => !value)} style={{ minHeight: 44, justifyContent: 'center', marginTop: 8 }}>
+              <Text style={{ color: theme.colors.text }}>{textPlanPrivate ? 'Visibilidad: privado' : 'Visibilidad: público, sujeto a revisión'}</Text>
+            </TouchableOpacity>
+          </>}
+        </Card>
+
+        {/* Basic Info */}
+        <Card
+          variant="glass"
+          glassIntensity="medium"
+          padding={20}
+          style={styles.formCard}
+        >
+          <View style={styles.sectionHeader}>
+            <Ionicons
+              name="information-circle"
+              size={24}
+              color={theme.colors.primary}
+            />
             <Text style={styles.sectionTitle}>Información Básica</Text>
           </View>
 
@@ -277,24 +553,37 @@ export default function CreateEventScreen() {
         </Card>
 
         {/* Category Selection */}
-        <Card variant="glass" glassIntensity="medium" padding={20} style={styles.formCard}>
+        <Card
+          variant="glass"
+          glassIntensity="medium"
+          padding={20}
+          style={styles.formCard}
+        >
           <View style={styles.sectionHeader}>
             <Ionicons name="apps" size={24} color={theme.colors.primary} />
             <Text style={styles.sectionTitle}>Categoría</Text>
           </View>
 
           <View style={styles.categoriesGrid}>
-            {CATEGORIES.map((category) => (
+            {CATEGORIES.map(category => (
               <TouchableOpacity
                 key={category.id}
                 style={[
                   styles.categoryItem,
-                  selectedCategory === category.id && styles.categoryItemSelected,
+                  selectedCategory === category.id &&
+                    styles.categoryItemSelected,
                 ]}
                 onPress={() => handleSelectCategory(category.id)}
               >
                 <LinearGradient
-                  colors={(selectedCategory === category.id ? category.gradient : ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.05)']) as any}
+                  colors={
+                    (selectedCategory === category.id
+                      ? category.gradient
+                      : [
+                          'rgba(255,255,255,0.05)',
+                          'rgba(255,255,255,0.05)',
+                        ]) as any
+                  }
                   style={styles.categoryGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
@@ -302,12 +591,19 @@ export default function CreateEventScreen() {
                   <Ionicons
                     name={category.icon as any}
                     size={24}
-                    color={selectedCategory === category.id ? '#fff' : 'rgba(255,255,255,0.6)'}
+                    color={
+                      selectedCategory === category.id
+                        ? '#fff'
+                        : 'rgba(255,255,255,0.6)'
+                    }
                   />
-                  <Text style={[
-                    styles.categoryLabel,
-                    selectedCategory === category.id && styles.categoryLabelSelected
-                  ]}>
+                  <Text
+                    style={[
+                      styles.categoryLabel,
+                      selectedCategory === category.id &&
+                        styles.categoryLabelSelected,
+                    ]}
+                  >
                     {category.label}
                   </Text>
                 </LinearGradient>
@@ -321,10 +617,21 @@ export default function CreateEventScreen() {
           {/* Creator tool: audience insights for the zone */}
           <View style={styles.insightsBox}>
             <View style={styles.insightsHeader}>
-              <Ionicons name="analytics" size={18} color={theme.colors.primary} />
+              <Ionicons
+                name="analytics"
+                size={18}
+                color={theme.colors.primary}
+              />
               <Text style={styles.insightsTitle}>Insights de tu zona</Text>
-              <TouchableOpacity onPress={loadInsights} disabled={insightsLoading}>
-                <Ionicons name="refresh" size={16} color={theme.colors.primary} />
+              <TouchableOpacity
+                onPress={loadInsights}
+                disabled={insightsLoading}
+              >
+                <Ionicons
+                  name="refresh"
+                  size={16}
+                  color={theme.colors.primary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -336,18 +643,24 @@ export default function CreateEventScreen() {
             )}
 
             {!insightsLoading && insights && !insights.hasData && (
-              <Text style={styles.insightsHint}>{insights.message || 'Sin datos en tu zona aún.'}</Text>
+              <Text style={styles.insightsHint}>
+                {insights.message || 'Sin datos en tu zona aún.'}
+              </Text>
             )}
 
             {!insightsLoading && insights && insights.hasData && (
               <View>
                 {insights.topCategories?.length > 0 && (
                   <View style={styles.insightsRow}>
-                    <Text style={styles.insightsLabel}>Categorías que dominan:</Text>
+                    <Text style={styles.insightsLabel}>
+                      Categorías que dominan:
+                    </Text>
                     <View style={styles.chipRow}>
                       {insights.topCategories.map((c: any) => (
                         <View key={c.category} style={styles.insightChip}>
-                          <Text style={styles.insightChipText}>{c.label} {c.share}%</Text>
+                          <Text style={styles.insightChipText}>
+                            {c.label} {c.share}%
+                          </Text>
                         </View>
                       ))}
                     </View>
@@ -356,19 +669,28 @@ export default function CreateEventScreen() {
                 {insights.bestDays?.length > 0 && (
                   <View style={styles.insightsRow}>
                     <Text style={styles.insightsLabel}>Mejores días:</Text>
-                    <Text style={styles.insightsValue}>{insights.bestDays.join(', ')}</Text>
+                    <Text style={styles.insightsValue}>
+                      {insights.bestDays.join(', ')}
+                    </Text>
                   </View>
                 )}
                 {insights.priceBand && (
                   <View style={styles.insightsRow}>
                     <Text style={styles.insightsLabel}>Precio sugerido:</Text>
-                    <Text style={styles.insightsValue}>{insights.priceBand.recommendation}</Text>
+                    <Text style={styles.insightsValue}>
+                      {insights.priceBand.recommendation}
+                    </Text>
                   </View>
                 )}
                 {typeof insights.audienceConcentration === 'number' && (
                   <View style={styles.insightsRow}>
-                    <Text style={styles.insightsLabel}>Audiencia en la zona:</Text>
-                    <Text style={styles.insightsValue}>{insights.audienceConcentration} asistentes · {insights.eventCount} eventos</Text>
+                    <Text style={styles.insightsLabel}>
+                      Audiencia en la zona:
+                    </Text>
+                    <Text style={styles.insightsValue}>
+                      {insights.audienceConcentration} asistentes ·{' '}
+                      {insights.eventCount} eventos
+                    </Text>
                   </View>
                 )}
               </View>
@@ -377,7 +699,12 @@ export default function CreateEventScreen() {
         </Card>
 
         {/* Date & Time */}
-        <Card variant="glass" glassIntensity="medium" padding={20} style={styles.formCard}>
+        <Card
+          variant="glass"
+          glassIntensity="medium"
+          padding={20}
+          style={styles.formCard}
+        >
           <View style={styles.sectionHeader}>
             <Ionicons name="calendar" size={24} color={theme.colors.primary} />
             <Text style={styles.sectionTitle}>Fecha y Hora</Text>
@@ -391,7 +718,7 @@ export default function CreateEventScreen() {
                 render={({ field: { onChange, onBlur, value } }) => (
                   <Input
                     label="Fecha"
-                    placeholder="DD/MM/AAAA"
+                    placeholder="AAAA-MM-DD"
                     value={value}
                     onChangeText={onChange}
                     onBlur={onBlur}
@@ -426,7 +753,12 @@ export default function CreateEventScreen() {
         </Card>
 
         {/* Location */}
-        <Card variant="glass" glassIntensity="medium" padding={20} style={styles.formCard}>
+        <Card
+          variant="glass"
+          glassIntensity="medium"
+          padding={20}
+          style={styles.formCard}
+        >
           <View style={styles.sectionHeader}>
             <Ionicons name="location" size={24} color={theme.colors.primary} />
             <Text style={styles.sectionTitle}>Ubicación</Text>
@@ -452,7 +784,12 @@ export default function CreateEventScreen() {
         </Card>
 
         {/* Additional Info */}
-        <Card variant="glass" glassIntensity="medium" padding={20} style={styles.formCard}>
+        <Card
+          variant="glass"
+          glassIntensity="medium"
+          padding={20}
+          style={styles.formCard}
+        >
           <View style={styles.sectionHeader}>
             <Ionicons name="settings" size={24} color={theme.colors.primary} />
             <Text style={styles.sectionTitle}>Información Adicional</Text>

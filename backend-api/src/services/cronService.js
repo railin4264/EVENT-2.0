@@ -3,6 +3,7 @@ const ChallengeService = require('./challengeService');
 const GamificationService = require('./gamificationService');
 const logger = require('../utils/logger');
 const Event = require('../models/Event');
+const paymentService = require('./paymentService');
 
 class CronService {
   constructor() {
@@ -14,6 +15,14 @@ class CronService {
   /**
    * Initialize all scheduled jobs
    */
+  createJob(name, expression, task, options) {
+    return cron.createTask(expression, async context => {
+      const slot = new Date(context?.date || Date.now()).toISOString().slice(0, 16);
+      try { await require('./jobLease').withJobLease(name, task, { slot }); }
+      catch { logger.error('Scheduled job failed', { job: name }); }
+    }, { ...options, noOverlap: true });
+  }
+
   initialize() {
     this.setupChallengeJobs();
     this.setupEventJobs();
@@ -26,7 +35,7 @@ class CronService {
    */
   setupChallengeJobs() {
     // Daily challenge cleanup and auto-enrollment - runs at 1:00 AM every day
-    this.jobs.dailyChallengeManagement = cron.schedule('0 1 * * *', async () => {
+    this.jobs.dailyChallengeManagement = this.createJob('dailyChallengeManagement', '0 1 * * *', async () => {
       try {
         logger.info('Running daily challenge management...');
 
@@ -48,7 +57,7 @@ class CronService {
     });
 
     // Weekly challenge reset - runs at 2:00 AM every Monday
-    this.jobs.weeklyChallengeReset = cron.schedule('0 2 * * 1', async () => {
+    this.jobs.weeklyChallengeReset = this.createJob('weeklyChallengeReset', '0 2 * * 1', async () => {
       try {
         logger.info('Running weekly challenge reset...');
 
@@ -68,7 +77,7 @@ class CronService {
     });
 
     // Monthly challenge reset - runs at 3:00 AM on the 1st of each month
-    this.jobs.monthlyChallengeReset = cron.schedule('0 3 1 * *', async () => {
+    this.jobs.monthlyChallengeReset = this.createJob('monthlyChallengeReset', '0 3 1 * *', async () => {
       try {
         logger.info('Running monthly challenge reset...');
 
@@ -88,7 +97,7 @@ class CronService {
     });
 
     // Hourly challenge status check - runs every hour at minute 0
-    this.jobs.hourlyChallengeCheck = cron.schedule('0 * * * *', async () => {
+    this.jobs.hourlyChallengeCheck = this.createJob('hourlyChallengeCheck', '0 * * * *', async () => {
       try {
         logger.info('Running hourly challenge status check...');
 
@@ -112,7 +121,30 @@ class CronService {
    */
   setupEventJobs() {
     // Hourly event expiration check - runs every hour at minute 15
-    this.jobs.hourlyEventExpiration = cron.schedule('15 * * * *', async () => {
+    // Automatic event ingestion (Ticketmaster / ICS feeds / etc.) - every 6 hours
+    this.jobs.eventIngestion = this.createJob('eventIngestion', '5 */6 * * *', async () => {
+      try {
+        if (process.env.EVENT_INGESTION_ENABLED === 'false') return;
+        const registered = await require('./eventIngestion/GlobalPipelineOrchestrator').runGlobalIngestionCycle({ dueOnly: true });
+        logger.info('Registered source ingestion', registered.stats);
+        try {
+          const { seedPlanetaryEvents } = require('./eventIngestion/planetaryEventHarvester');
+          await seedPlanetaryEvents();
+          const { syncVirtualStreams } = require('./eventIngestion/virtualEventHarvester');
+          await syncVirtualStreams();
+          logger.info('Planetary & virtual streams rolling refresh completed');
+        } catch (planErr) {
+          logger.warn('Planetary scheduled refresh warning: ' + planErr.message);
+        }
+      } catch (error) {
+        logger.error('Error in scheduled event ingestion:', error);
+      }
+    }, {
+      scheduled: false,
+      timezone: 'America/Santo_Domingo'
+    });
+
+    this.jobs.hourlyEventExpiration = this.createJob('hourlyEventExpiration', '15 * * * *', async () => {
       try {
         logger.info('Running hourly event expiration check...');
 
@@ -131,7 +163,7 @@ class CronService {
     });
 
     // Daily event cleanup - runs at 2:30 AM every day
-    this.jobs.dailyEventCleanup = cron.schedule('30 2 * * *', async () => {
+    this.jobs.dailyEventCleanup = this.createJob('dailyEventCleanup', '30 2 * * *', async () => {
       try {
         logger.info('Running daily event cleanup...');
 
@@ -139,17 +171,17 @@ class CronService {
         const expireResult = await Event.expirePastEvents();
         logger.info(`Expired ${expireResult.modifiedCount} past events`);
 
-        // Optional: Delete very old expired events (e.g., older than 6 months)
+        // Preserve references to tickets, orders and reviews by archiving old events.
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-        const cleanupResult = await Event.deleteMany({
-          status: 'expired',
+        const cleanupResult = await Event.updateMany({
+          status: 'expired', archivedAt: null,
           updatedAt: { $lt: sixMonthsAgo }
-        });
+        }, { $set: { archivedAt: new Date() } });
 
-        if (cleanupResult.deletedCount > 0) {
-          logger.info(`Cleaned up ${cleanupResult.deletedCount} old expired events`);
+        if (cleanupResult.modifiedCount > 0) {
+          logger.info(`Archived ${cleanupResult.modifiedCount} old expired events`);
         }
 
         logger.info('Daily event cleanup completed');
@@ -166,8 +198,20 @@ class CronService {
    * Setup maintenance-related cron jobs
    */
   setupMaintenanceJobs() {
+    this.jobs.pushReceipts = this.createJob('pushReceipts', '*/5 * * * *', async () => {
+      try { await require('./pushReceipts').checkPushReceipts(); }
+      catch { logger.warn('Push receipt check will retry on the next schedule'); }
+    }, { noOverlap: true, timezone: 'UTC' });
+    this.jobs.orderInventoryRecovery = this.createJob('orderInventoryRecovery', '*/5 * * * *', async () => {
+      try {
+        await paymentService.recoverInventoryReleases();
+        await paymentService.cleanupExpiredOrders();
+      } catch (error) {
+        logger.error('Order maintenance failed:', error);
+      }
+    }, { noOverlap: true, timezone: 'America/Santo_Domingo' });
     // Daily statistics aggregation - runs at 4:00 AM every day
-    this.jobs.dailyStatsAggregation = cron.schedule('0 4 * * *', async () => {
+    this.jobs.dailyStatsAggregation = this.createJob('dailyStatsAggregation', '0 4 * * *', async () => {
       try {
         logger.info('Running daily statistics aggregation...');
 
@@ -183,7 +227,7 @@ class CronService {
     });
 
     // Weekly leaderboard update - runs at 5:00 AM every Sunday
-    this.jobs.weeklyLeaderboardUpdate = cron.schedule('0 5 * * 0', async () => {
+    this.jobs.weeklyLeaderboardUpdate = this.createJob('weeklyLeaderboardUpdate', '0 5 * * 0', async () => {
       try {
         logger.info('Running weekly leaderboard update...');
 
@@ -199,7 +243,7 @@ class CronService {
     });
 
     // Database cleanup - runs at 6:00 AM every Sunday
-    this.jobs.weeklyDatabaseCleanup = cron.schedule('0 6 * * 0', async () => {
+    this.jobs.weeklyDatabaseCleanup = this.createJob('weeklyDatabaseCleanup', '0 6 * * 0', async () => {
       try {
         logger.info('Running weekly database cleanup...');
 
@@ -283,6 +327,11 @@ class CronService {
       logger.info(`Manually triggering cron job: ${jobName}`);
 
       switch (jobName) {
+      case 'orderInventoryRecovery': {
+        const recovery = await paymentService.recoverInventoryReleases();
+        const expiration = await paymentService.cleanupExpiredOrders();
+        return { ...recovery, ...expiration };
+      }
       case 'dailyChallengeManagement': {
         const cleanupResult = await this.challengeService.cleanupExpiredChallenges();
         const enrollResult = await this.challengeService.autoEnrollUsersInChallenges();
@@ -310,14 +359,14 @@ class CronService {
         const expireResult = await Event.expirePastEvents();
         const sixMonthsAgo = new Date();
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        const cleanupResult = await Event.deleteMany({
-          status: 'expired',
+        const cleanupResult = await Event.updateMany({
+          status: 'expired', archivedAt: null,
           updatedAt: { $lt: sixMonthsAgo }
-        });
+        }, { $set: { archivedAt: new Date() } });
         return {
           message: 'Event cleanup completed',
           expiredCount: expireResult.modifiedCount,
-          deletedCount: cleanupResult.deletedCount
+          deletedCount: cleanupResult.modifiedCount
         };
       }
 

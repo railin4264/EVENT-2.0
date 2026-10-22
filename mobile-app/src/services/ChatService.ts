@@ -1,161 +1,51 @@
 import { apiClient } from './apiClient';
-import type { ApiResponse, PaginatedResponse, Message, Chat } from '@/types';
-
-export interface SendMessageData {
-  chatId: string;
-  content: string;
-  messageType?: 'text' | 'image' | 'file' | 'location' | 'event' | 'tribe';
-  media?: {
-    uri: string;
-    type: string;
-    name: string;
-  };
-  replyTo?: string;
-}
-
-export interface CreateChatData {
-  type: 'direct' | 'group' | 'tribe';
-  participants: string[];
-  name?: string;
-}
-
+import type { Chat, Message, ApiResponse, PaginatedResponse } from '@/types';
+export interface SendMessageData { chatId: string; content: string; messageType?: 'text' | 'image' | 'video' | 'audio' | 'file'; media?: { uri: string; type: string; name: string }; replyTo?: string }
+export interface CreateChatData { type: 'direct' | 'group' | 'tribe'; participants: string[]; name?: string }
+const normalizeChat = (chat: any): Chat => ({ ...chat, id: chat.chatId || chat.id || chat._id, participants: (chat.participants || []).map((p: any) => p.user || p) });
 class ChatService {
-  private static instance: ChatService;
-
-  private constructor() {}
-
-  public static getInstance(): ChatService {
-    if (!ChatService.instance) {
-      ChatService.instance = new ChatService();
-    }
-    return ChatService.instance;
+  async getChats(page = 1, limit = 50): Promise<PaginatedResponse<Chat>> {
+    const { data } = await apiClient.get('/chat/chats', { params: { page, limit } });
+    return { ...data, data: (data.data || []).map(normalizeChat) };
   }
-
-  public async getChats(page: number = 1, limit: number = 50): Promise<PaginatedResponse<Chat>> {
-    try {
-      const response = await apiClient.get('/chat/conversations', {
-        params: { page, limit }
-      });
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al obtener conversaciones');
+  async getChatById(chatId: string): Promise<Chat> {
+    // The API lists conversations; locate the requested chat using its public chatId.
+    for (let page = 1; ; page++) {
+      const result = await this.getChats(page);
+      const chat = result.data.find((c: any) => c.id === chatId || c._id === chatId);
+      if (chat) return chat;
+      if (!(result.pagination as any)?.hasMore || !result.data.length) break;
     }
+    throw new Error('Conversación no encontrada');
   }
-
-  public async getChatById(chatId: string): Promise<Chat> {
-    try {
-      const response = await apiClient.get(`/chat/conversations/${chatId}`);
-      if (response.data.success && response.data.data) {
-        return response.data.data;
-      }
-      throw new Error('Conversación no encontrada');
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al obtener conversación');
-    }
+  async getMessages(chatId: string, page = 1, limit = 50): Promise<PaginatedResponse<Message>> {
+    return (await apiClient.get(`/chat/${encodeURIComponent(chatId)}/messages`, { params: { page, limit } })).data;
   }
-
-  public async getMessages(chatId: string, page: number = 1, limit: number = 50): Promise<PaginatedResponse<Message>> {
-    try {
-      const response = await apiClient.get(`/chat/messages/${chatId}`, {
-        params: { page, limit }
-      });
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al obtener mensajes');
-    }
+  async sendMessage(message: SendMessageData): Promise<ApiResponse<Message>> {
+    const { chatId, ...body } = message;
+    if (body.media) throw new Error('Comparte archivos desde la web.');
+    return (await apiClient.post(`/chat/${encodeURIComponent(chatId)}/messages`, body)).data;
   }
-
-  public async sendMessage(messageData: SendMessageData): Promise<ApiResponse<Message>> {
-    try {
-      const formData = new FormData();
-      formData.append('room', messageData.chatId);
-      formData.append('content', messageData.content);
-
-      if (messageData.messageType) {
-        formData.append('type', messageData.messageType);
-      }
-
-      if (messageData.replyTo) {
-        formData.append('replyTo', messageData.replyTo);
-      }
-
-      if (messageData.media) {
-        formData.append('attachments', {
-          uri: messageData.media.uri,
-          type: messageData.media.type,
-          name: messageData.media.name,
-        } as any);
-      }
-
-      const response = await apiClient.post('/chat/messages', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al enviar mensaje');
-    }
+  async createChat(chat: CreateChatData): Promise<ApiResponse<Chat>> {
+    const direct = chat.type === 'direct';
+    const { data } = await apiClient.post(direct ? '/chat/direct' : '/chat/group', direct ? { userId: chat.participants[0] } : { name: chat.name, participantIds: chat.participants });
+    return { ...data, data: normalizeChat(data.data) };
   }
-
-  public async createChat(chatData: CreateChatData): Promise<ApiResponse<Chat>> {
-    try {
-      const response = await apiClient.post('/chat/conversations', chatData);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al crear conversación');
-    }
+  async markAsRead(chatId: string): Promise<ApiResponse<void>> {
+    const messages = await this.getMessages(chatId);
+    const unread = messages.data.filter((message: any) => !message.isRead);
+    await Promise.all(unread.map((message: any) => apiClient.put(`/chat/${encodeURIComponent(chatId)}/messages/${message._id || message.id}/read`)));
+    return { success: true };
   }
-
-  public async deleteMessage(messageId: string): Promise<ApiResponse<void>> {
-    try {
-      const response = await apiClient.delete(`/chat/messages/${messageId}`);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al eliminar mensaje');
-    }
+  async getUnreadCount(): Promise<number> {
+    const chats = await this.getChats();
+    return chats.data.reduce((total, chat: any) => total + (chat.unreadCount || 0), 0);
   }
-
-  public async markAsRead(chatId: string): Promise<ApiResponse<void>> {
-    try {
-      const response = await apiClient.post(`/chat/conversations/${chatId}/read`);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al marcar como leído');
-    }
+  async leaveChat(chatId: string): Promise<ApiResponse<void>> {
+    return (await apiClient.put(`/chat/${encodeURIComponent(chatId)}/leave`)).data;
   }
-
-  public async getUnreadCount(): Promise<number> {
-    try {
-      const response = await apiClient.get('/chat/unread-count');
-      if (response.data.success && response.data.data) {
-        return response.data.data.count;
-      }
-      return 0;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al obtener mensajes no leídos');
-    }
-  }
-
-  public async leaveChat(chatId: string): Promise<ApiResponse<void>> {
-    try {
-      const response = await apiClient.post(`/chat/conversations/${chatId}/leave`);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al abandonar conversación');
-    }
-  }
-
-  public async deleteChat(chatId: string): Promise<ApiResponse<void>> {
-    try {
-      const response = await apiClient.delete(`/chat/conversations/${chatId}`);
-      return response.data;
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || 'Error al eliminar conversación');
-    }
-  }
+  async deleteChat(chatId: string): Promise<ApiResponse<void>> { return this.leaveChat(chatId); }
+  async deleteMessage(_messageId: string): Promise<ApiResponse<void>> { throw new Error('No está disponible eliminar mensajes.'); }
 }
-
-export const chatService = ChatService.getInstance();
+export const chatService = new ChatService();
 export default chatService;

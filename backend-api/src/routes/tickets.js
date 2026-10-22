@@ -4,18 +4,45 @@ const { protect } = require('../middleware/auth');
 const Ticket = require('../models/Ticket');
 const Event = require('../models/Event');
 const logger = require('../utils/logger');
+const { listOwnedTickets, checkInAdmission } = require('../services/admissionService');
 
 const router = express.Router();
+
+router.post('/validate-qr', protect, [
+  body('qrCode').isString().isLength({ min: 1, max: 200 }).withMessage('Código QR requerido'),
+  body('eventId').optional().isMongoId().withMessage('ID de evento inválido')
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, message: errors.array()[0]?.msg || 'Datos inválidos' });
+  try {
+    const data = await checkInAdmission(req.body.qrCode, req.body.eventId, req.user);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'No se pudo registrar la entrada' });
+  }
+});
+
+// @desc    Validate ticket by ID or QR (supports mobile ticketService.validateTicket)
+// @route   POST /api/tickets/:ticketId/validate
+// @access  Private
+router.post('/:ticketId/validate', protect, async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { eventId, qrCode } = req.body;
+    const code = qrCode || ticketId;
+    const data = await checkInAdmission(code, eventId, req.user);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'No se pudo registrar la entrada' });
+  }
+});
 
 // @desc    Get current user's tickets
 // @route   GET /api/tickets/my-tickets
 // @access  Private
 router.get('/my-tickets', protect, async (req, res) => {
   try {
-    const tickets = await Ticket.find({ user: req.user.id })
-      .populate('event', 'title date location images category')
-      .sort('-createdAt')
-      .limit(50);
+    const tickets = await listOwnedTickets(req.user._id);
     res.json({ success: true, data: tickets, count: tickets.length });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Server error' });
@@ -37,9 +64,7 @@ router.get('/', [protect], async (req, res) => {
       });
     }
 
-    const tickets = await Ticket.find({ user: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(100);
+    const tickets = await listOwnedTickets(req.user._id);
 
     res.json({
       success: true,
@@ -56,6 +81,17 @@ router.get('/', [protect], async (req, res) => {
 });
 
 // Validation middleware for ticket creation
+router.get('/owned/:id', protect, async (req, res) => {
+  try {
+    const tickets = await listOwnedTickets(req.user._id);
+    const ticket = tickets.find(item => item.id === req.params.id);
+    if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found' });
+    res.json({ success: true, data: ticket });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to retrieve ticket' });
+  }
+});
+
 const validateTicketCreation = [
   body('eventId').isMongoId().withMessage('Valid event ID required'),
   body('name').trim().isLength({ min: 1, max: 100 }).withMessage('Name must be between 1-100 characters'),
@@ -122,8 +158,9 @@ router.post('/', [protect, ...validateTicketCreation], async (req, res) => {
     }
 
     // Create ticket
+    const allowedFields = ['eventId', 'name', 'description', 'price', 'currency', 'quantity', 'type', 'minPurchase', 'maxPurchase'];
     const ticketData = {
-      ...req.body,
+      ...Object.fromEntries(allowedFields.filter(key => req.body[key] !== undefined).map(key => [key, req.body[key]])),
       saleStartDate,
       saleEndDate
     };
@@ -175,9 +212,7 @@ router.get('/events/:eventId', [
     const query = { eventId };
 
     // Only show active tickets to public, unless includeInactive is requested by organizer/admin
-    if (!includeInactive) {
-      query.isActive = true;
-    }
+    query.isActive = true;
 
     const tickets = await Ticket.find(query).sort({ createdAt: 1 });
 
@@ -215,22 +250,32 @@ router.get('/events/:eventId', [
 // @desc    Get single ticket
 // @route   GET /api/tickets/:ticketId
 // @access  Public
-router.get('/:ticketId', [
-  param('ticketId').isMongoId().withMessage('Valid ticket ID required')
-], async (req, res) => {
+router.get('/:ticketId', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
-
     const { ticketId } = req.params;
-
-    const ticket = await Ticket.findById(ticketId).populate('eventId', 'title date location');
+    let ticket = null;
+    const mongoose = require('mongoose');
+    if (mongoose.Types.ObjectId.isValid(ticketId)) {
+      ticket = await Ticket.findById(ticketId).populate('eventId', 'title date location');
+    }
+    if (!ticket) {
+      // Check if this is an owned ticket ID (orderId:itemId or RSVP)
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const jwt = require('jsonwebtoken');
+          const token = authHeader.split(' ')[1];
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          if (decoded && decoded.id) {
+            const ownedList = await listOwnedTickets(decoded.id);
+            const found = ownedList.find(t => t.id === ticketId || t._id === ticketId);
+            if (found) {
+              return res.json({ success: true, data: found });
+            }
+          }
+        } catch (e) {}
+      }
+    }
 
     if (!ticket) {
       return res.status(404).json({
@@ -332,7 +377,7 @@ router.put('/:ticketId', [
     }
 
     // Update ticket
-    Object.keys(req.body).forEach(key => {
+    ['name', 'description', 'price', 'quantity', 'saleStartDate', 'saleEndDate', 'isActive', 'minPurchase', 'maxPurchase'].forEach(key => {
       if (req.body[key] !== undefined) {
         ticket[key] = req.body[key];
       }

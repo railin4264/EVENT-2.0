@@ -11,7 +11,7 @@
       },
       "android": {
         "resourceClass": "medium",
-        "buildType": "developmentBuild"
+        "buildType": "apk"
       }
     },
     "preview": {
@@ -32,7 +32,8 @@
       },
       "android": {
         "resourceClass": "medium",
-        "autoIncrement": "versionCode"
+        "autoIncrement": "versionCode",
+        "buildType": "app-bundle"
       }
     }
   },

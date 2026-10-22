@@ -117,8 +117,8 @@ export function MapView() {
               >
                 {/* Marker */}
                 <div className="relative">
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 border-2 border-white shadow-lg group-hover:scale-110 transition-transform">
-                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 animate-ping opacity-30"></div>
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 border-2 border-white shadow-lg group-hover:scale-110 transition-transform">
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 animate-ping opacity-30"></div>
                   </div>
 
                   {/* Popup */}
@@ -243,7 +243,7 @@ export function MapView() {
         {/* Quick Actions */}
         <Card className="glass-card p-4">
           <div className="space-y-3">
-            <Button className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700">
+            <Button className="w-full bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700">
               Crear evento aquí
             </Button>
             <Button variant="outline" className="w-full border-pink-500/50 text-pink-300 hover:bg-pink-500/10">

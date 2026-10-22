@@ -26,9 +26,16 @@ export interface CreateEventData {
 
 export interface EventFilters {
   category?: string
+  categories?: string | string[]
+  excludeCategories?: string
+  hidePolitical?: string | boolean
+  hideReligious?: string | boolean
   search?: string
+  timeFilter?: string
+  isUnofficial?: string
   page?: number
   limit?: number
+  [key: string]: any
 }
 
 export interface EventSearchFilters extends EventFilters {
@@ -56,6 +63,7 @@ export interface EventSearchFilters extends EventFilters {
 }
 
 export interface DiscoveryEvent extends Event {
+  publicSource?: { name?: string; datasetUrl?: string; license?: string; licenseUrl?: string }
   distance?: number
 }
 
@@ -222,7 +230,9 @@ export const getDiscoveryEvents = async (filters: EventSearchFilters = {}): Prom
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       if (Array.isArray(value)) {
-        value.forEach(v => params.append(key, v.toString()))
+        if (value.length > 0) {
+          params.append(key, value.join(','))
+        }
       } else {
         params.append(key, value.toString())
       }
@@ -236,7 +246,7 @@ export const getDiscoveryEvents = async (filters: EventSearchFilters = {}): Prom
   }>(`/events?${params.toString()}`)
 
   // Calculate distances if lat/lng provided
-  if (filters.lat && filters.lng && response.data.events) {
+  if (Number.isFinite(filters.lat) && Number.isFinite(filters.lng) && response.data.events) {
     const eventsWithDistance = response.data.events.map(event => {
       const distance = event.location?.coordinates
         ? calculateDistance(

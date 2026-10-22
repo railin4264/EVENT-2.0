@@ -1,3 +1,5 @@
+import type { EVENT_CATEGORIES } from '../constants';
+
 // Core types for EventConnect Mobile App
 
 export interface User {
@@ -8,6 +10,10 @@ export interface User {
   firstName: string;
   lastName: string;
   avatar?: string;
+  country?: string;
+  countryCode?: string;
+  preferredLocale?: string;
+  preferredCurrency?: string;
   bio?: string;
   location?: {
     lat: number;
@@ -44,6 +50,12 @@ export interface Event {
   currentAttendees?: number;
   attendees: string[] | Array<{ user: string | User; status: string; joinedAt: string }>;
   attendeesCount?: number;
+  isPrivate?: boolean;
+  isSecretLocation?: boolean;
+  isRecurring?: boolean;
+  recurrenceSchedule?: string;
+  isTourOrTrip?: boolean;
+  isCommercialDeal?: boolean;
   createdBy: User | string;
   image?: string;
   images: string[] | Array<{ url: string; publicId: string }>;
@@ -57,18 +69,7 @@ export interface Event {
   updatedAt: string;
 }
 
-export type EventCategory = 
-  | 'music'
-  | 'sports'
-  | 'technology'
-  | 'business'
-  | 'education'
-  | 'arts'
-  | 'food'
-  | 'health'
-  | 'travel'
-  | 'social'
-  | 'other';
+export type EventCategory = (typeof EVENT_CATEGORIES)[number]['value'] | 'arts' | 'travel';
 
 export interface Tribe {
   id: string;
@@ -342,6 +343,10 @@ export interface RegisterForm {
   password: string;
   confirmPassword: string;
   firstName: string;
+  country?: string;
+  countryCode?: string;
+  preferredLocale?: string;
+  preferredCurrency?: string;
   lastName: string;
   name?: string;
   interests?: string[];

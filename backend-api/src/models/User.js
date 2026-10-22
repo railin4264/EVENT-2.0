@@ -1,6 +1,24 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+// Serialization is the last boundary before a user document reaches clients.
+// Keep credentials available to auth services, but never in JSON or spreads.
+function redactCredentials(doc, result) {
+  for (const key of ['password', 'tokens', 'refreshTokens', 'revokedTokens',
+    'resetPasswordToken', 'resetPasswordExpires', 'emailVerificationToken',
+    'emailVerificationExpires', 'sessionVersion', 'loginAttempts', 'lockUntil']) {
+    delete result[key];
+  }
+  if (result.twoFactor) {
+    result.twoFactor = { isEnabled: Boolean(result.twoFactor.isEnabled) };
+  }
+  if (result.oauthAccounts) {
+    result.oauthAccounts = result.oauthAccounts.map(account => ({ provider: account.provider, linkedAt: account.linkedAt }));
+  }
+  delete result.pushTokens;
+  return result;
+}
+
 const userSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -15,7 +33,7 @@ const userSchema = new mongoose.Schema({
     unique: true,
     lowercase: true,
     match: [
-      /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+      /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/,
       'Please add a valid email'
     ]
   },
@@ -32,7 +50,7 @@ const userSchema = new mongoose.Schema({
   },
   lastName: {
     type: String,
-    required: [true, 'Please add a last name'],
+    default: '',
     maxlength: [50, 'Last name cannot be more than 50 characters']
   },
   avatar: {
@@ -53,12 +71,38 @@ const userSchema = new mongoose.Schema({
       type: [Number],
       default: [0, 0]
     },
-    address: String
+    address: String,
+    city: String,
+    country: String,
+    countryCode: String,
+    updatedAt: Date
   },
   interests: [{
     type: String,
     trim: true
   }],
+  country: {
+    type: String,
+    trim: true,
+    default: 'República Dominicana'
+  },
+  countryCode: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    default: 'DO'
+  },
+  preferredLocale: {
+    type: String,
+    trim: true,
+    default: 'es-DO'
+  },
+  preferredCurrency: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    default: 'DOP'
+  },
   phone: {
     type: String,
     trim: true,
@@ -81,6 +125,33 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isOrganizerVerified: {
+    type: Boolean,
+    default: false
+  },
+  organizerVerification: {
+    status: {
+      type: String,
+      enum: ['none', 'pending', 'verified', 'rejected'],
+      default: 'none'
+    },
+    organizationName: { type: String, trim: true },
+    documentType: {
+      type: String,
+      enum: ['cedula', 'passport', 'rnc', 'business_license', 'other']
+    },
+    documentNumber: { type: String, trim: true },
+    socialProofUrl: { type: String, trim: true },
+    phoneNumber: { type: String, trim: true },
+    notes: { type: String, trim: true },
+    submittedAt: { type: Date },
+    reviewedAt: { type: Date },
+    rejectionReason: { type: String },
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  },
   birthDate: {
     type: Date,
     required: false,
@@ -88,11 +159,13 @@ const userSchema = new mongoose.Schema({
   },
   settings: {
     notifications: {
-      email: { type: Boolean, default: true },
-      push: { type: Boolean, default: true },
+      email: { type: Boolean, default: false },
+      push: { type: Boolean, default: false },
       eventReminders: { type: Boolean, default: true },
       newMessages: { type: Boolean, default: true },
-      weeklyDigest: { type: Boolean, default: false }
+      weeklyDigest: { type: Boolean, default: false },
+      friendPlans: { type: Boolean, default: false },
+      shareAttendance: { type: Boolean, default: false }
     },
     privacy: {
       showProfile: { type: Boolean, default: true },
@@ -102,7 +175,17 @@ const userSchema = new mongoose.Schema({
     preferences: {
       theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
       language: { type: String, default: 'es' },
-      timezone: { type: String, default: 'America/Mexico_City' }
+      timezone: { type: String, default: 'America/Santo_Domingo' },
+      contentFilterMode: {
+        type: String,
+        enum: ['all', 'whitelist', 'blacklist'],
+        default: 'all'
+      },
+      preferredCategories: [{ type: String, trim: true }],
+      hiddenCategories: [{ type: String, trim: true }],
+      hidePolitical: { type: Boolean, default: false },
+      hideReligious: { type: Boolean, default: false },
+      hideAdultOnly: { type: Boolean, default: true }
     }
   },
   // Activity tracking arrays
@@ -131,7 +214,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin', 'system'],
+    enum: ['user', 'organizer', 'creator', 'admin', 'system'],
     default: 'user'
   },
   // Push notification tokens
@@ -143,8 +226,9 @@ const userSchema = new mongoose.Schema({
   }],
   // Notification settings
   notificationSettings: {
-    pushEnabled: { type: Boolean, default: true },
-    emailEnabled: { type: Boolean, default: true },
+    channelPreferences: { type: mongoose.Schema.Types.Mixed, default: {} },
+    pushEnabled: { type: Boolean, default: false },
+    emailEnabled: { type: Boolean, default: false },
     categories: {
       events: { type: Boolean, default: true },
       social: { type: Boolean, default: true },
@@ -194,6 +278,7 @@ const userSchema = new mongoose.Schema({
   // Password reset
   resetPasswordToken: { type: String },
   resetPasswordExpires: { type: Date },
+  sessionVersion: { type: Number, default: 0 },
 
   // Login tracking
   lastLogin: { type: Date },
@@ -210,11 +295,28 @@ const userSchema = new mongoose.Schema({
     expiresAt: { type: Date },
     linkedAt: { type: Date, default: Date.now },
     lastUsed: { type: Date, default: Date.now }
-  }]
+  }],
+
+  isOnline: { type: Boolean, default: false },
+  lastSeen: { type: Date, default: Date.now },
+  points: { type: Number, default: 0 },
+
+  gamification: {
+    totalXP: { type: Number, default: 0 },
+    level: { type: Number, default: 1 },
+    xpHistory: [{
+      amount: Number,
+      source: String,
+      description: String,
+      metadata: mongoose.Schema.Types.Mixed,
+      timestamp: { type: Date, default: Date.now }
+    }],
+    achievements: [{ type: mongoose.Schema.Types.ObjectId, ref: 'UserAchievement' }]
+  }
 }, {
   timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  toJSON: { virtuals: true, transform: redactCredentials },
+  toObject: { virtuals: true, transform: redactCredentials }
 });
 
 // Calculate age from birthDate
@@ -248,9 +350,19 @@ userSchema.methods.getSignedJwtToken = function () {
   const jwt = require('jsonwebtoken');
   // Use JWT_EXPIRES_IN (from env) or default to 24h
   const expiresIn = process.env.JWT_EXPIRES_IN || process.env.JWT_EXPIRE || '24h';
-  return jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
-    expiresIn: expiresIn
-  });
+  return jwt.sign(
+    {
+      id: this._id,
+      type: 'access',
+      sessionVersion: this.sessionVersion || 0
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: expiresIn,
+      issuer: 'eventconnect-api',
+      audience: 'eventconnect-clients'
+    }
+  );
 };
 
 // Match user entered password to hashed password in database
@@ -268,16 +380,7 @@ userSchema.index({ createdAt: -1 });
 userSchema.index({ isActive: 1, role: 1 });
 userSchema.index({ isActive: 1, createdAt: -1 });
 
-// Social features indexes
-userSchema.index({ 'followers.user': 1 });
-userSchema.index({ 'following.user': 1 });
-
 // Search optimization
 userSchema.index({ firstName: 'text', lastName: 'text', username: 'text' });
 
 module.exports = mongoose.model('User', userSchema);
-
-
-
-
-

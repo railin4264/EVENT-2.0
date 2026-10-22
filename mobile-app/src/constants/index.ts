@@ -8,7 +8,7 @@ const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
 const ENV_WS_URL = process.env.EXPO_PUBLIC_WS_URL;
 
 export const API_BASE_URL = ENV_API_URL 
-  ? `${ENV_API_URL}/api`
+  ? `${ENV_API_URL.replace(/\/+$/, '').replace(/\/api$/, '')}/api`
   : (__DEV__ ? 'http://localhost:5000/api' : 'https://api.eventconnect.com/api');
 
 export const SOCKET_URL = ENV_WS_URL || (__DEV__ 
@@ -18,6 +18,7 @@ export const SOCKET_URL = ENV_WS_URL || (__DEV__
 // Storage Keys
 export const STORAGE_KEYS = {
   AUTH_TOKEN: 'auth_token',
+  REFRESH_TOKEN: 'refresh_token',
   USER_DATA: 'user_data',
   THEME_PREFERENCE: 'theme_preference',
   NOTIFICATION_SETTINGS: 'notification_settings',
@@ -25,19 +26,33 @@ export const STORAGE_KEYS = {
   ONBOARDING_COMPLETED: 'onboarding_completed',
 } as const;
 
-// Event Categories
+// Event Categories (25 canonical categories aligned with backend and web)
 export const EVENT_CATEGORIES = [
   { value: 'music', label: 'Música', icon: '🎵' },
+  { value: 'art', label: 'Arte y cultura', icon: '🎨' },
+  { value: 'dance', label: 'Baile', icon: '💃' },
+  { value: 'outdoors', label: 'Aire libre', icon: '🌿' },
   { value: 'sports', label: 'Deportes', icon: '⚽' },
-  { value: 'technology', label: 'Tecnología', icon: '💻' },
-  { value: 'business', label: 'Negocios', icon: '💼' },
+  { value: 'wellness', label: 'Bienestar', icon: '🧘' },
+  { value: 'food', label: 'Gastronomía', icon: '🍽️' },
+  { value: 'workshop', label: 'Talleres', icon: '🛠️' },
   { value: 'education', label: 'Educación', icon: '📚' },
-  { value: 'arts', label: 'Artes', icon: '🎨' },
-  { value: 'food', label: 'Comida', icon: '🍕' },
-  { value: 'health', label: 'Salud', icon: '🏥' },
-  { value: 'travel', label: 'Viajes', icon: '✈️' },
-  { value: 'social', label: 'Social', icon: '👥' },
-  { value: 'other', label: 'Otros', icon: '🎪' },
+  { value: 'literature', label: 'Lectura', icon: '📖' },
+  { value: 'technology', label: 'Tecnología', icon: '💻' },
+  { value: 'gaming', label: 'Juegos', icon: '🎲' },
+  { value: 'film', label: 'Cine', icon: '🎬' },
+  { value: 'photography', label: 'Fotografía', icon: '📷' },
+  { value: 'culture', label: 'Cultura', icon: '🏛️' },
+  { value: 'community', label: 'Comunidad', icon: '🤝' },
+  { value: 'family', label: 'Familia', icon: '👨‍👩‍👧' },
+  { value: 'networking', label: 'Networking', icon: '🧑‍💼' },
+  { value: 'nightlife', label: 'Vida nocturna', icon: '🌙' },
+  { value: 'entertainment', label: 'Entretenimiento', icon: '🎭' },
+  { value: 'business', label: 'Negocios', icon: '📈' },
+  { value: 'health', label: 'Salud', icon: '❤️' },
+  { value: 'party', label: 'Fiestas', icon: '🎉' },
+  { value: 'social', label: 'Social', icon: '💬' },
+  { value: 'other', label: 'Más planes', icon: '✨' },
 ] as const;
 
 // Notification Types

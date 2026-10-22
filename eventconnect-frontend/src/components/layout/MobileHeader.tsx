@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Bell, Search, ChevronLeft } from 'lucide-react'
+import { Bell, Search, ChevronLeft, LogIn, Compass } from 'lucide-react'
 import { motion, useScroll, useTransform } from 'framer-motion'
 import { useAuthStore } from '@/stores/authStore'
 import { usePathname, useRouter } from 'next/navigation'
@@ -27,7 +27,12 @@ const PAGE_TITLES: Record<string, string> = {
   '/settings': 'Configuración',
   '/tickets': 'Mis Tickets',
   '/search': 'Buscar',
-  '/stories': 'Stories',
+  '/stories': 'Historias',
+  '/planning-tools': 'Prepara tu plan',
+  '/partners': 'Colaboraciones',
+  '/suppliers': 'Suplidores',
+  '/organizers': 'Para organizadores',
+  '/ideas': 'Ideas de la comunidad',
 }
 
 function getGreeting() {
@@ -39,7 +44,7 @@ function getGreeting() {
 
 export function MobileHeader({ title, showBack, transparent, rightAction }: MobileHeaderProps) {
   const [scrolled, setScrolled] = useState(false)
-  const { user } = useAuthStore()
+  const { user, isAuthenticated } = useAuthStore()
   const pathname = usePathname()
   const router = useRouter()
 
@@ -61,7 +66,7 @@ export function MobileHeader({ title, showBack, transparent, rightAction }: Mobi
         'sticky top-0 z-40 flex items-center justify-between px-4 h-14',
         'transition-all duration-300 md:hidden',
         scrolled || !transparent
-          ? 'bg-gray-950/85 backdrop-blur-2xl border-b border-white/[0.06]'
+          ? 'bg-background/95 backdrop-blur-xl border-b border-border'
           : 'bg-transparent',
         'pt-[env(safe-area-inset-top)]'
       )}
@@ -72,15 +77,15 @@ export function MobileHeader({ title, showBack, transparent, rightAction }: Mobi
         {showBack ? (
           <button
             onClick={() => router.back()}
-            className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/8 hover:bg-white/12 transition-colors active:scale-95"
+            className="flex items-center justify-center w-11 h-11 rounded-xl bg-muted/60 hover:bg-muted transition-colors active:scale-95"
             aria-label="Volver"
           >
-            <ChevronLeft className="w-5 h-5 text-white" strokeWidth={2.5} />
+            <ChevronLeft className="w-5 h-5 text-foreground" strokeWidth={2.5} />
           </button>
         ) : (
-          <Link href="/feed" className="flex items-center gap-2 shrink-0" aria-label="Inicio">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <span className="text-white font-black text-xs">EN</span>
+          <Link href={isAuthenticated ? '/feed' : '/'} className="flex items-center gap-2 shrink-0" aria-label="Inicio">
+            <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
+              <Compass className="h-5 w-5 text-primary-foreground" aria-hidden="true" />
             </div>
           </Link>
         )}
@@ -92,15 +97,15 @@ export function MobileHeader({ title, showBack, transparent, rightAction }: Mobi
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <p className="text-[11px] text-gray-500 font-medium leading-none mb-0.5">
+              <p className="text-[11px] text-muted-foreground font-medium leading-none mb-0.5">
                 {getGreeting()},
               </p>
-              <p className="text-[15px] font-bold text-white leading-none truncate">
+              <p className="text-[15px] font-semibold text-foreground leading-none truncate">
                 {firstName} 👋
               </p>
             </motion.div>
           ) : derivedTitle ? (
-            <h1 className="text-[16px] font-bold text-white truncate leading-none">{derivedTitle}</h1>
+            <p className="text-[16px] font-semibold text-foreground truncate leading-none">{derivedTitle}</p>
           ) : null}
         </div>
       </div>
@@ -110,29 +115,29 @@ export function MobileHeader({ title, showBack, transparent, rightAction }: Mobi
         {isFeed && (
           <Link
             href="/search"
-            className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/8 hover:bg-white/12 transition-colors active:scale-95"
+            className="flex items-center justify-center w-11 h-11 rounded-xl bg-muted/60 hover:bg-muted transition-colors active:scale-95"
             aria-label="Buscar"
           >
-            <Search className="w-4.5 h-4.5 text-gray-300" />
+            <Search className="w-5 h-5 text-foreground" />
           </Link>
         )}
 
-        {rightAction ?? (
+        {rightAction ?? (isAuthenticated ? (
           <Link
             href="/notifications"
-            className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/8 hover:bg-white/12 transition-colors active:scale-95 relative"
+            className="flex items-center justify-center w-11 h-11 rounded-xl bg-muted/60 hover:bg-muted transition-colors active:scale-95 relative"
             aria-label="Notificaciones"
           >
-            <Bell className="w-4.5 h-4.5 text-gray-300" />
+            <Bell className="w-5 h-5 text-foreground" />
           </Link>
-        )}
+        ) : null)}
 
         <Link
-          href="/profile"
-          className="ml-1 w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center text-white font-black text-[11px] shadow-lg shadow-violet-500/25 active:scale-95 transition-transform"
-          aria-label="Mi perfil"
+          href={isAuthenticated ? '/profile' : '/login'}
+          className="ml-1 w-11 h-11 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm active:scale-95 transition-transform"
+          aria-label={isAuthenticated ? 'Mi perfil' : 'Iniciar sesión'}
         >
-          {initial}
+          {isAuthenticated ? initial : <LogIn className="h-4 w-4" aria-hidden="true" />}
         </Link>
       </div>
     </header>

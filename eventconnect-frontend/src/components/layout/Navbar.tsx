@@ -2,21 +2,23 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import { SiteSections } from './SiteSections'
+import { SITE_SECTIONS } from '@/lib/site-sections'
 import { useRouter, usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Menu, X, Home, Calendar, Users, MessageCircle, User, Settings, LogOut, Search, PlusCircle, MapPin, ChevronDown, LayoutDashboard, Compass } from 'lucide-react'
+import { Menu, X, Home, Calendar, Users, MessageCircle, User, Settings, LogOut, Search, PlusCircle, MapPin, ChevronDown, LayoutDashboard, Compass, Sparkles, Ticket } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import NotificationCenter from '@/components/redesign/ui/notification-center'
 import { CompactThemeToggle } from '@/components/redesign/ui/theme-toggle'
+import GlobalLocaleSelector from '@/components/layout/GlobalLocaleSelector'
 import { cn } from '@/lib/utils'
 
 const navigation = [
-  { name: 'Descubrir', href: '/discovery', icon: Compass },
-  { name: 'Eventos', href: '/events', icon: Calendar },
+  ...SITE_SECTIONS.map(section => ({ name: section.label, href: section.href, icon: Compass, protected: false })),
   { name: 'Feed', href: '/feed', icon: Home, protected: true },
-  { name: 'Tribus', href: '/tribes', icon: Users },
   { name: 'Chat', href: '/messages', icon: MessageCircle, protected: true },
 ]
+
 
 export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -83,7 +85,7 @@ export default function Navbar() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchValue.trim()) {
-      router.push(`/discovery?q=${encodeURIComponent(searchValue.trim())}`)
+      router.push(`/search?q=${encodeURIComponent(searchValue.trim())}`)
       setSearchValue('')
     }
   }
@@ -94,66 +96,38 @@ export default function Navbar() {
       className={cn(
         'hidden md:block sticky top-0 z-50 transition-all duration-300',
         isScrolled
-          ? 'bg-white/80 dark:bg-gray-950/80 backdrop-blur-2xl shadow-sm border-b border-black/5 dark:border-white/5'
-          : 'bg-transparent'
+          ? 'bg-background/95 backdrop-blur-xl shadow-sm border-b border-border'
+          : 'bg-background/90 border-b border-border/60'
       )}
     >
-      <nav aria-label="Main navigation" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <nav aria-label="Navegación principal" className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
 
           {/* Logo */}
-          <div className="flex items-center gap-8">
+          <div className="flex min-w-0 items-center gap-4">
             <Link
               href="/"
-              aria-label="EventConnect home"
-              className="flex items-center gap-2.5 group"
+              aria-label="EventNow, inicio"
+              className="flex shrink-0 items-center gap-2.5 group"
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
-                <Calendar className="w-4 h-4 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center transition-colors group-hover:bg-primary/90">
+                <Compass className="w-5 h-5 text-primary-foreground" aria-hidden="true" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
-                Event<span className="text-emerald-500">Now</span>
+              <span className="text-xl font-semibold tracking-tight text-foreground">
+                Event<span className="text-primary">Now</span>
               </span>
             </Link>
 
             {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center gap-1" role="list">
-              {navigation.map((item) => {
-                if (item.protected && !isAuthenticated) return null
-                const active = isActivePath(item.href)
-                return (
-                  <Link
-                    key={item.name}
-                    href={item.href}
-                    role="listitem"
-                    aria-current={active ? 'page' : undefined}
-                    className={cn(
-                      'relative px-3 py-2 rounded-xl text-sm font-medium transition-colors duration-200 flex items-center gap-1.5',
-                      active
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5'
-                    )}
-                  >
-                    <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                    {item.name}
-                    {active && (
-                      <motion.div
-                        layoutId="navActiveIndicator"
-                        className="absolute inset-0 bg-emerald-500/10 dark:bg-emerald-500/15 rounded-xl -z-10"
-                        transition={{ type: 'spring', duration: 0.4 }}
-                      />
-                    )}
-                  </Link>
-                )
-              })}
-            </div>
+            <SiteSections className="hidden xl:flex" />
+
           </div>
 
           {/* Right Side */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
 
             {/* Search — Desktop */}
-            <form onSubmit={handleSearch} className="hidden lg:block" role="search">
+            <form onSubmit={handleSearch} className="hidden 2xl:block" role="search">
               <div className="relative">
                 <Search
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none"
@@ -163,18 +137,19 @@ export default function Navbar() {
                   type="search"
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
-                  placeholder="Buscar eventos…"
-                  aria-label="Buscar eventos"
-                  className="w-56 pl-9 pr-4 py-2 text-sm bg-gray-100/80 dark:bg-white/5 border border-transparent focus:border-emerald-500/50 focus:bg-white dark:focus:bg-white/10 rounded-xl outline-none transition-all placeholder:text-gray-400"
+                  placeholder="Buscar en EventNow"
+                  aria-label="Búsqueda global"
+                  maxLength={100}
+                  className="w-44 pl-9 pr-4 py-2 text-sm bg-gray-100/80 dark:bg-white/5 border border-transparent focus:border-violet-500/50 focus:bg-white dark:focus:bg-white/10 rounded-xl outline-none transition-all placeholder:text-gray-400"
                 />
               </div>
             </form>
 
             {/* Search — Mobile icon */}
             <Link
-              href="/discovery"
+              href="/search"
               aria-label="Buscar"
-              className="lg:hidden p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+              className="2xl:hidden p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
             >
               <Search className="w-5 h-5" />
             </Link>
@@ -186,12 +161,13 @@ export default function Navbar() {
                 {/* Create Event */}
                 <Link
                   href="/events/create"
-                  className="hidden lg:flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-colors shadow-sm shadow-emerald-500/20"
+                  className="hidden lg:flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-violet-500 hover:bg-violet-600 text-white rounded-xl transition-colors shadow-sm shadow-violet-500/20"
                 >
                   <PlusCircle className="w-4 h-4" aria-hidden="true" />
                   Crear
                 </Link>
 
+                <GlobalLocaleSelector />
                 <CompactThemeToggle />
                 <NotificationCenter />
 
@@ -204,7 +180,7 @@ export default function Navbar() {
                     aria-label={`Menú de ${user?.firstName || 'usuario'}`}
                     className="flex items-center gap-1.5 pl-1 pr-2 py-1 rounded-xl hover:bg-gray-100 dark:hover:bg-white/5 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-400 to-cyan-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
                       {user?.firstName?.[0]?.toUpperCase() || 'U'}
                     </div>
                     <span className="hidden lg:block text-sm font-medium text-gray-700 dark:text-gray-300 max-w-[80px] truncate">
@@ -243,6 +219,8 @@ export default function Navbar() {
                         <div className="py-1.5">
                           {[
                             { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+                            { href: '/tickets', icon: Ticket, label: 'Mis Entradas QR' },
+                            { href: '/passport', icon: Compass, label: 'Pasaporte Cultural' },
                             { href: '/profile', icon: User, label: 'Mi Perfil' },
                             { href: '/settings', icon: Settings, label: 'Configuración' },
                           ].map(({ href, icon: Icon, label }) => (
@@ -275,6 +253,7 @@ export default function Navbar() {
               </>
             ) : (
               <div className="flex items-center gap-2">
+                <GlobalLocaleSelector />
                 <CompactThemeToggle />
                 <Link
                   href="/login"
@@ -284,7 +263,7 @@ export default function Navbar() {
                 </Link>
                 <Link
                   href="/register"
-                  className="px-3 py-2 text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-colors shadow-sm shadow-emerald-500/20"
+                  className="px-3 py-2 text-sm font-medium bg-violet-500 hover:bg-violet-600 text-white rounded-xl transition-colors shadow-sm shadow-violet-500/20"
                 >
                   Registrarse
                 </Link>
@@ -296,7 +275,7 @@ export default function Navbar() {
               onClick={() => setIsMobileMenuOpen((p) => !p)}
               aria-expanded={isMobileMenuOpen}
               aria-label={isMobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
-              className="lg:hidden p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+              className="xl:hidden p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
             >
               <AnimatePresence mode="wait" initial={false}>
                 <motion.span
@@ -324,7 +303,7 @@ export default function Navbar() {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="lg:hidden overflow-hidden border-t border-gray-100 dark:border-white/5"
+              className="xl:hidden overflow-hidden border-t border-gray-100 dark:border-white/5"
             >
               <div className="py-3 space-y-0.5">
                 {navigation.map((item) => {
@@ -338,7 +317,7 @@ export default function Navbar() {
                       className={cn(
                         'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors',
                         active
-                          ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'
+                          ? 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10'
                           : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5'
                       )}
                     >
@@ -352,7 +331,7 @@ export default function Navbar() {
                   <>
                     <Link
                       href="/events/create"
-                      className="flex items-center gap-3 px-4 py-3 mt-1 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-xl transition-colors"
+                      className="flex items-center gap-3 px-4 py-3 mt-1 text-sm font-medium text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 rounded-xl transition-colors"
                     >
                       <PlusCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
                       Crear Evento
@@ -387,7 +366,7 @@ export default function Navbar() {
                     </Link>
                     <Link
                       href="/register"
-                      className="flex items-center justify-center gap-2 mx-4 py-3 rounded-xl text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white transition-colors"
+                      className="flex items-center justify-center gap-2 mx-4 py-3 rounded-xl text-sm font-medium bg-violet-500 hover:bg-violet-600 text-white transition-colors"
                     >
                       Registrarse gratis
                     </Link>

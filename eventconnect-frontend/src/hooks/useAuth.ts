@@ -44,7 +44,7 @@ export function useAuth() {
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
     try {
-      const response = await apiClient.put('/auth/change-password', { currentPassword, newPassword })
+      const response = await apiClient.post('/auth/change-password', { currentPassword, newPassword })
       return { success: true, message: response.data?.message }
     } catch (error: any) {
       return { success: false, error: error.response?.data?.message || 'Error al cambiar contraseña' }
@@ -76,6 +76,9 @@ export function useAuth() {
       const newToken = response.data?.accessToken ?? response.data?.token
       if (newToken && typeof window !== 'undefined') {
         sessionStorage.setItem('auth-token', newToken)
+        const rotatedRefresh = response.data?.refreshToken
+        if (rotatedRefresh) sessionStorage.setItem('refresh-token', rotatedRefresh)
+        useAuthStore.setState({ token: newToken })
         document.cookie = `auth-token=${newToken}; path=/; SameSite=Lax`
       }
     } catch {

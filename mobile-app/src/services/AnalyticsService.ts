@@ -1,3 +1,5 @@
+import { apiClient } from './apiClient';
+import { analyticsProperties, analyticsEventId } from '../utils/analyticsPrivacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import Constants from 'expo-constants';
@@ -8,6 +10,8 @@ import { Platform } from 'react-native';
 const IS_WEB_SSR = Platform.OS === 'web' && typeof window === 'undefined';
 
 interface AnalyticsEvent {
+  eventId?: string;
+  platform?: string;
   name: string;
   properties?: Record<string, any>;
   timestamp?: number;
@@ -40,14 +44,14 @@ class AnalyticsService {
   private userId: string | null = null;
   private isEnabled: boolean = true;
   private queue: AnalyticsEvent[] = [];
+  private isFlushing = false;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private performanceMetrics: Map<string, PerformanceMetrics> = new Map();
   private screenStartTime: number = Date.now();
   private isOnline: boolean = true;
-  private API_URL: string;
 
   constructor() {
     this.sessionId = this.generateSessionId();
-    this.API_URL = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL || '';
     this.initializeService();
   }
 
@@ -102,6 +106,7 @@ class AnalyticsService {
 
   // Public methods
   setUserId(userId: string): void {
+    if (this.userId !== userId) this.queue = [];
     this.userId = userId;
   }
 
@@ -123,6 +128,8 @@ class AnalyticsService {
 
     const event: AnalyticsEvent = {
       name: eventName,
+      eventId: analyticsEventId(),
+      platform: Platform.OS,
       properties: {
         ...properties,
         platform: Device.osName,
@@ -136,6 +143,8 @@ class AnalyticsService {
       sessionId: this.sessionId
     };
 
+    event.properties = analyticsProperties(event.properties || {});
+    this.queue = this.queue.slice(-999);
     this.queue.push(event);
     this.processQueue();
   }
@@ -247,74 +256,25 @@ class AnalyticsService {
 
   // Queue processing
   private processQueue(): void {
-    if (!this.isOnline || this.queue.length === 0) return;
-
-    // Process queue in batches
-    const batchSize = 10;
-    if (this.queue.length >= batchSize) {
-      this.flushQueue();
-    } else {
-      // Debounced flush
-      setTimeout(() => this.flushQueue(), 2000);
-    }
+    if (!this.isOnline || this.queue.length === 0 || this.isFlushing) return;
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = setTimeout(() => { this.flushTimer = null; void this.flushQueue(); }, this.queue.length >= 10 ? 0 : 2000);
   }
 
   private async flushQueue(): Promise<void> {
-    if (this.queue.length === 0) return;
-
-    const events = [...this.queue];
-    this.queue = [];
-
-    try {
-      await this.sendEvents(events);
-    } catch (error) {
-      console.error('Failed to send analytics events:', error);
-      // Re-queue events if send failed
-      this.queue.unshift(...events);
-      
-      // Store events for later if offline
-      if (!this.isOnline) {
-        await this.storeEventsLocally(events);
-      }
-    }
+    if (this.isFlushing || this.queue.length === 0) return;
+    this.isFlushing = true;
+    const events = this.queue.splice(0, 50).map(event => ({ ...event, properties: analyticsProperties(event.properties || {}) }));
+    let sent = false;
+    try { await this.sendEvents(events); sent = true; }
+    catch { this.queue = [...events, ...this.queue].slice(-1000); }
+    finally { this.isFlushing = false; }
+    if (sent && this.queue.length) this.processQueue();
   }
 
   private async sendEvents(events: AnalyticsEvent[]): Promise<void> {
-    if (!this.API_URL) {
-      console.warn('Analytics API URL not configured');
-      return;
-    }
-
-    // Store in AsyncStorage for offline support
-    try {
-      await this.storeEventsLocally(events);
-    } catch (error) {
-      console.warn('Failed to store events locally:', error);
-    }
-
-    // Send to backend analytics endpoint
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      const response = await fetch(`${this.API_URL}/api/analytics/track`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ events }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Analytics API error: ${response.status}`);
-      }
-    } catch (error) {
-      console.warn('Failed to send events to backend:', error);
-      throw error;
-    }
+    await this.storeEventsLocally(events);
+    await apiClient.post('/analytics/track', { events, ownerId: this.userId || undefined });
   }
 
   private async storeEventsLocally(events: AnalyticsEvent[]): Promise<void> {
@@ -322,7 +282,7 @@ class AnalyticsService {
     try {
       const existingData = await AsyncStorage.getItem('analytics_local_storage');
       const existingEvents = existingData ? JSON.parse(existingData) : [];
-      const allEvents = [...existingEvents, ...events];
+      const allEvents = [...existingEvents, ...events].filter(event => event && Number(event.timestamp) >= Date.now() - 7 * 86400000).map(event => ({ ...event, properties: analyticsProperties(event.properties || {}) }));
       const recentEvents = allEvents.slice(-1000);
       await AsyncStorage.setItem('analytics_local_storage', JSON.stringify(recentEvents));
     } catch (error) {

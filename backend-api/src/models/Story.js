@@ -38,12 +38,12 @@ const storySchema = new mongoose.Schema({
   location: {
     type: {
       type: String,
-      enum: ['Point'],
-      default: 'Point'
+      enum: ['Point']
     },
     coordinates: {
       type: [Number], // [longitude, latitude]
-      required: false
+      required: false,
+      default: undefined
     },
     address: String
   },
@@ -128,9 +128,9 @@ const storySchema = new mongoose.Schema({
 
 // Index for efficient queries
 storySchema.index({ author: 1, createdAt: -1 });
-storySchema.index({ expiresAt: 1 });
+storySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 storySchema.index({ isDeleted: 1 });
-storySchema.index({ 'location.coordinates': '2dsphere' });
+storySchema.index({ 'location.coordinates': '2dsphere' }, { sparse: true });
 
 // Virtual for view count
 storySchema.virtual('viewCount').get(function () {

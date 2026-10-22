@@ -212,7 +212,7 @@ export function EventDetail({ eventId, onBack }: EventDetailProps) {
         <Button
           size="lg"
           onClick={handleAttend}
-          className={`flex-1 ${isAttending ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700' : 'bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700'} neon-glow-violet`}
+          className={`flex-1 ${isAttending ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700' : 'bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700'} neon-glow-violet`}
         >
           {isAttending ? 'Cancelar asistencia' : 'Asistir al evento'}
         </Button>
@@ -245,7 +245,7 @@ export function EventDetail({ eventId, onBack }: EventDetailProps) {
               <div className="grid grid-cols-2 gap-4">
                 {((event as any)?.artists || []).map((artist: any, index: number) => (
                   <div key={index} className="flex items-center space-x-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
                       <span className="text-white font-bold">🎵</span>
                     </div>
                     <div>
@@ -272,7 +272,7 @@ export function EventDetail({ eventId, onBack }: EventDetailProps) {
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               {attendees.map((attendee, index) => (
                 <div key={index} className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white/5 transition-colors">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
                     <span className="text-white font-bold">{attendee.avatar}</span>
                   </div>
                   <div>
@@ -292,7 +292,7 @@ export function EventDetail({ eventId, onBack }: EventDetailProps) {
             <div className="space-y-6">
               {comments.map((comment, index) => (
                 <div key={index} className="flex space-x-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
                     <span className="text-white font-bold text-sm">{comment.avatar}</span>
                   </div>
                   <div className="flex-1">

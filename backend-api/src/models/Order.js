@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
 const orderItemSchema = new mongoose.Schema({
+  checkedInAt: { type: Date },
+  checkedInBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   ticketId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Ticket',
@@ -96,7 +98,17 @@ const orderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['card', 'bank_transfer', 'paypal', 'free']
+    enum: ['card', 'bank_transfer', 'bank_transfer_rd', 'cardnet', 'azul', 'cash_at_door', 'paypal', 'free']
+  },
+  bankTransferProof: {
+    bankName: { type: String, trim: true },
+    referenceNumber: { type: String, trim: true },
+    voucherUrl: { type: String, trim: true },
+    uploadedAt: { type: Date },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt: { type: Date },
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    rejectionReason: { type: String, trim: true }
   },
   stripePaymentIntentId: {
     type: String
@@ -104,6 +116,10 @@ const orderSchema = new mongoose.Schema({
   stripeClientSecret: {
     type: String
   },
+  stripeCheckoutSessionId: { type: String },
+  stripeRefundId: { type: String },
+  inventoryReleaseRequestedAt: { type: Date },
+  inventoryReleasedAt: { type: Date },
 
   // Order status
   status: {
@@ -149,7 +165,7 @@ const orderSchema = new mongoose.Schema({
 });
 
 // Generate order number
-orderSchema.pre('save', function(next) {
+orderSchema.pre('validate', function(next) {
   if (!this.orderNumber) {
     this.orderNumber = `EC-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
   }
@@ -169,7 +185,7 @@ orderSchema.methods.calculateTotal = function() {
   const processingFeeRate = 0.029; // 2.9%
   const serviceFeeFlat = 0.30; // $0.30
 
-  this.fees.processing = Math.round((this.subtotal * processingFeeRate + serviceFeeFlat) * 100) / 100;
+  this.fees.processing = this.subtotal === 0 ? 0 : Math.round((this.subtotal * processingFeeRate + serviceFeeFlat) * 100) / 100;
   this.fees.service = Math.round(this.subtotal * 0.05 * 100) / 100; // 5% service fee
   this.fees.tax = 0; // Tax calculation would depend on location
 
@@ -179,7 +195,7 @@ orderSchema.methods.calculateTotal = function() {
   // Calculate organizer payout (subtotal - commission - fees)
   this.organizerPayout.amount = Math.round((this.subtotal - this.commission.amount) * 100) / 100;
 
-  this.total = this.subtotal + this.fees.processing + this.fees.service + this.fees.tax;
+  this.total = Math.round((this.subtotal + this.fees.processing + this.fees.service + this.fees.tax) * 100) / 100;
   return this.total;
 };
 
@@ -188,11 +204,11 @@ orderSchema.methods.isExpired = function() {
 };
 
 orderSchema.methods.canCancel = function() {
-  return ['draft', 'pending_payment', 'confirmed'].includes(this.status);
+  return ['draft', 'pending_payment'].includes(this.status) || (this.status === 'confirmed' && this.total === 0);
 };
 
 orderSchema.methods.canRefund = function() {
-  return this.status === 'completed' && this.paymentStatus === 'succeeded';
+  return ['confirmed', 'completed'].includes(this.status) && this.paymentStatus === 'succeeded' && this.total > 0;
 };
 
 orderSchema.methods.markAsPaid = function() {
@@ -248,5 +264,8 @@ orderSchema.index({ userId: 1, status: 1 });
 orderSchema.index({ eventId: 1, status: 1 });
 orderSchema.index({ expiresAt: 1 });
 orderSchema.index({ status: 1, paymentStatus: 1 });
+orderSchema.index({ inventoryReleaseRequestedAt: 1 }, {
+  partialFilterExpression: { inventoryReleaseRequestedAt: { $exists: true } }
+});
 
 module.exports = mongoose.model('Order', orderSchema);

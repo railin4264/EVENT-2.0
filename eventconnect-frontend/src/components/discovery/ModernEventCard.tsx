@@ -191,7 +191,7 @@ export default function ModernEventCard({ event, onClick, categoryColor }: Moder
 
           <div
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${event.price?.amount === 0 || !event.price
-              ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+              ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
               : 'bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300'
               }`}
           >

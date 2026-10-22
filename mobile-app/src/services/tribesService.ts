@@ -29,21 +29,41 @@ export interface Tribe {
     alt: string;
   };
   tags: string[];
-  settings: {
-    privacy: 'public' | 'private' | 'secret';
-    membership: 'open' | 'approval_required' | 'invite_only';
+  settings?: {
+    privacy?: 'public' | 'private' | 'secret';
+    membership?: 'open' | 'approval_required' | 'invite_only';
   };
-  stats: {
-    totalMembers: number;
-    totalEvents: number;
-    averageRating: number;
+  privacy?: 'public' | 'private' | 'secret';
+  stats?: {
+    totalMembers?: number;
+    memberCount?: number;
+    totalEvents?: number;
+    eventCount?: number;
+    averageRating?: number;
   };
-  isActive: boolean;
+  isActive?: boolean;
   createdAt: string;
-  updatedAt: string;
   isMember?: boolean;
   isAdmin?: boolean;
-  membersCount: number;
+  isPrivate?: boolean;
+  userRole?: 'member' | 'moderator' | 'admin' | null;
+  canViewContent?: boolean;
+  canManageRequests?: boolean;
+  canRequestJoin?: boolean;
+  canJoin?: boolean;
+  isBanned?: boolean;
+  joinRequestStatus?: 'member' | 'pending' | 'rejected' | 'approved' | 'banned' | 'none';
+  hasPendingRequest?: boolean;
+  pendingRequestsCount?: number;
+  joinRequests?: Array<{
+    _id?: string;
+    user: any;
+    message?: string;
+    status: 'pending' | 'approved' | 'rejected';
+    requestedAt: string;
+  }>;
+  membersCount?: number;
+  memberCount?: number;
 }
 
 export interface CreateTribeRequest {
@@ -94,12 +114,12 @@ export class TribesService {
     if (params?.search) queryParams.append('search', params.search);
 
     const response = await apiClient.get(`/tribes?${queryParams.toString()}`);
-    return response.data;
+    return { ...response.data, tribes: response.data.tribes || response.data.data || [] };
   }
 
   async getTribe(id: string): Promise<TribeResponse> {
     const response = await apiClient.get(`/tribes/${id}`);
-    return response.data;
+    return { ...response.data, tribe: response.data.tribe || response.data.data };
   }
 
   async createTribe(data: CreateTribeRequest): Promise<TribeResponse> {
@@ -117,8 +137,28 @@ export class TribesService {
     return response.data;
   }
 
-  async joinTribe(id: string): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.post(`/tribes/${id}/join`);
+  async joinTribe(id: string, message?: string): Promise<{ success: boolean; message: string; status?: string; hasPendingRequest?: boolean }> {
+    const response = await apiClient.post(`/tribes/${id}/join`, { message: message || '' });
+    return response.data;
+  }
+
+  async cancelJoinRequest(id: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.delete(`/tribes/${id}/join-request`);
+    return response.data;
+  }
+
+  async getJoinRequests(id: string): Promise<{ success: boolean; joinRequests: any[] }> {
+    const response = await apiClient.get(`/tribes/${id}/requests`);
+    return { ...response.data, joinRequests: response.data.joinRequests || response.data.requests || response.data.data || [] };
+  }
+
+  async approveJoinRequest(tribeId: string, userId: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post(`/tribes/${tribeId}/requests/${userId}/approve`);
+    return response.data;
+  }
+
+  async rejectJoinRequest(tribeId: string, userId: string): Promise<{ success: boolean; message: string }> {
+    const response = await apiClient.post(`/tribes/${tribeId}/requests/${userId}/reject`);
     return response.data;
   }
 
@@ -129,7 +169,7 @@ export class TribesService {
 
   async getUserTribes(): Promise<TribesResponse> {
     const response = await apiClient.get('/tribes/user/me');
-    return response.data;
+    return { ...response.data, tribes: response.data.tribes || response.data.data || [] };
   }
 
   async getNearbyTribes(

@@ -2,15 +2,15 @@ const express = require('express');
 const Post = require('../models/Post');
 const User = require('../models/User');
 const Event = require('../models/Event');
-const { protect } = require('../middleware/auth');
+const { protect, optionalAuth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
 // @desc    Get feed posts
 // @route   GET /api/feed
-// @access  Private
-router.get('/', protect, async (req, res) => {
+// @access  Public (personalized when authenticated)
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
@@ -20,7 +20,7 @@ router.get('/', protect, async (req, res) => {
     // Build filter
     let filter = {
       isDeleted: false,
-      visibility: { $in: ['public', 'friends'] } // For now, show public and friends posts
+      visibility: req.user ? { $in: ['public', 'friends'] } : 'public'
     };
 
     if (type && type !== 'todos') {
@@ -76,8 +76,8 @@ router.get('/', protect, async (req, res) => {
         shares: post.sharesCount
       },
       timestamp: getTimeAgo(post.createdAt),
-      liked: post.isLikedByUser(req.user.id),
-      bookmarked: req.user.bookmarkedPosts ? req.user.bookmarkedPosts.includes(post._id) : false,
+      liked: req.user ? post.isLikedByUser(req.user.id) : false,
+      bookmarked: req.user?.bookmarkedPosts ? req.user.bookmarkedPosts.includes(post._id) : false,
       isPinned: post.isPinned,
       isSponsored: post.isSponsored
     }));

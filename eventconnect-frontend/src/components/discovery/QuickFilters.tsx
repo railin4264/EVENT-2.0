@@ -31,21 +31,21 @@ const filters = [
     id: 'today' as QuickFilterType,
     label: 'Hoy',
     icon: Calendar,
-    gradient: 'from-blue-500 to-cyan-500',
+    gradient: 'from-violet-500 to-cyan-500',
     emoji: '📅'
   },
   {
     id: 'weekend' as QuickFilterType,
     label: 'Fin de Semana',
     icon: PartyPopper,
-    gradient: 'from-purple-500 to-pink-500',
+    gradient: 'from-violet-500 to-cyan-500',
     emoji: '🎉'
   },
   {
     id: 'free' as QuickFilterType,
     label: 'Gratis',
     icon: DollarSign,
-    gradient: 'from-green-500 to-emerald-500',
+    gradient: 'from-green-500 to-violet-500',
     emoji: '💰'
   },
   {
@@ -59,7 +59,7 @@ const filters = [
     id: 'trending' as QuickFilterType,
     label: 'Tendencia',
     icon: TrendingUp,
-    gradient: 'from-indigo-500 to-purple-500',
+    gradient: 'from-violet-500 to-cyan-500',
     emoji: '📈'
   }
 ]

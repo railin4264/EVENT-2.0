@@ -427,7 +427,7 @@ router.post('/', protect, uploadMiddleware.array('media', 5), async (req, res) =
       }
 
       // Check if user is the event organizer
-      if (eventDoc.organizer.toString() !== req.user.id) {
+      if ((eventDoc.createdBy || eventDoc.organizer)?.toString() !== req.user.id) {
         return res.status(403).json({
           success: false,
           message: 'Only the event organizer can create stories for this event'

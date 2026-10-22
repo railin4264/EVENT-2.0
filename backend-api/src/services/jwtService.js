@@ -43,6 +43,7 @@ class JWTService {
     const tokenPayload = {
       id: user._id.toString(),
       type: 'temp',
+      sessionVersion: user.sessionVersion || 0,
       iat: Math.floor(Date.now() / 1000)
     };
 
@@ -130,7 +131,8 @@ class JWTService {
     const payload = {
       id: user._id.toString(),
       email: user.email,
-      role: user.role || 'user'
+      role: user.role || 'user',
+      sessionVersion: user.sessionVersion || 0
     };
 
     const accessToken = this.generateAccessToken(payload);

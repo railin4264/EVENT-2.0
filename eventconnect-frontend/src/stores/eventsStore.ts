@@ -52,7 +52,10 @@ interface EventsState {
 
 export const useEventsStore = create<EventsState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      // One intent sequence covers both list APIs; obsolete requests never commit.
+      let latestListRequest = 0
+      return {
       events: [],
       currentEvent: null,
       userEvents: [],
@@ -62,10 +65,12 @@ export const useEventsStore = create<EventsState>()(
       pagination: null,
 
       fetchEvents: async (filters: EventFilters = {}) => {
+        const requestId = ++latestListRequest
         try {
           set({ isLoading: true, error: null })
           
           const response = await getEvents(filters)
+          if (requestId !== latestListRequest) return
           
           set({
             events: response.events,
@@ -73,6 +78,7 @@ export const useEventsStore = create<EventsState>()(
             isLoading: false,
           })
         } catch (error: any) {
+          if (requestId !== latestListRequest) return
           const message = error.response?.data?.message || 'Failed to fetch events'
           set({
             error: message,
@@ -83,10 +89,12 @@ export const useEventsStore = create<EventsState>()(
       },
 
       searchEventsAction: async (filters: EventSearchFilters = {}) => {
+        const requestId = ++latestListRequest
         try {
           set({ isLoading: true, error: null })
           
           const response = await searchEvents(filters)
+          if (requestId !== latestListRequest) return
           
           set({
             events: response.events,
@@ -94,6 +102,7 @@ export const useEventsStore = create<EventsState>()(
             isLoading: false,
           })
         } catch (error: any) {
+          if (requestId !== latestListRequest) return
           const message = error.response?.data?.message || 'Failed to search events'
           set({
             error: message,
@@ -292,7 +301,8 @@ export const useEventsStore = create<EventsState>()(
       clearCurrentEvent: () => {
         set({ currentEvent: null })
       },
-    }),
+      }
+    },
     {
       name: 'events-storage',
       partialize: (state) => ({

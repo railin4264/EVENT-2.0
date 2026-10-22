@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/redesign/ui/button'
 import { useFollowsStore } from '@/stores/followsStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -36,8 +37,13 @@ export function FollowButton({
   onFollowChange
 }: FollowButtonProps) {
   const { toast } = useToast()
+  const router = useRouter()
+  const pathname = usePathname()
   const [isLoading, setIsLoading] = useState(false)
-  const { user: currentUser } = useAuthStore()
+  const [statusLoading, setStatusLoading] = useState(false)
+  const [statusError, setStatusError] = useState(false)
+  const [statusAttempt, setStatusAttempt] = useState(0)
+  const { user: currentUser, isAuthenticated } = useAuthStore()
 
   const {
     followUser,
@@ -48,12 +54,26 @@ export function FollowButton({
     isUnfollowing: globalIsUnfollowing
   } = useFollowsStore()
 
+  const currentUserId = currentUser?._id || currentUser?.id
+  useEffect(() => {
+    if (!isAuthenticated || currentUserId === userId || status) return
+    let active = true
+    setStatusLoading(true)
+    setStatusError(false)
+    void getFollowStatus(userId).catch(() => {
+      if (active) setStatusError(true)
+    }).finally(() => {
+      if (active) setStatusLoading(false)
+    })
+    return () => { active = false }
+  }, [currentUserId, isAuthenticated, userId, status, getFollowStatus, statusAttempt])
+
   // Don't show follow button for current user
-  if (currentUser && currentUser._id === userId) {
+  if (currentUserId === userId) {
     return null
   }
 
-  const followStatus = status || followStatuses[userId]
+  const followStatus = isAuthenticated ? status || followStatuses[userId] : undefined
   const isFollowing = followStatus?.isFollowing || false
   const followsMe = followStatus?.followsMe || false
   const isMutual = followStatus?.isMutual || false
@@ -62,6 +82,10 @@ export function FollowButton({
   const buttonVariant = followStatus ? getFollowButtonVariant(followStatus) : 'primary'
   
   const handleClick = async () => {
+    if (!isAuthenticated) {
+      router.push(`/login?redirect=${encodeURIComponent(pathname || '/')}`)
+      return
+    }
     if (isLoading || globalIsFollowing || globalIsUnfollowing) return
     
     setIsLoading(true)
@@ -122,16 +146,16 @@ export function FollowButton({
     }
   }
 
-  if (!followStatus) {
+  if (isAuthenticated && (statusLoading || statusError || !followStatus)) {
     return (
       <Button
-        onClick={() => getFollowStatus(userId)}
+        onClick={() => setStatusAttempt(attempt => attempt + 1)}
         variant="outline"
         className={cn(getSizeClasses(), className)}
-        disabled={isLoading}
+        disabled={statusLoading}
       >
-        {showIcon && <Clock className="h-4 w-4 animate-spin mr-2" />}
-        Cargar
+        {showIcon && statusLoading && <Clock className="h-4 w-4 animate-spin mr-2" />}
+        {statusLoading ? 'Cargando…' : 'Reintentar seguimiento'}
       </Button>
     )
   }
@@ -139,7 +163,7 @@ export function FollowButton({
   return (
     <Button
       onClick={handleClick}
-      variant={buttonVariant as "default" | "secondary" | "outline" | "destructive" | "ghost" | "link"}
+      variant={buttonVariant === 'primary' ? 'default' : buttonVariant}
       className={cn(
         getSizeClasses(),
         isFollowing && 'hover:bg-destructive hover:text-destructive-foreground hover:border-destructive',

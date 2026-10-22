@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { apiClient } from './apiClient';
 
 export interface Notification {
@@ -75,25 +76,27 @@ class NotificationsService {
     
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
-    if (params?.category) queryParams.append('category', params.category);
-    if (params?.unread !== undefined) queryParams.append('unread', params.unread.toString());
+    if (params?.category && params.category !== 'all') queryParams.append('category', params.category);
+    if (params?.unread !== undefined) queryParams.append('unreadOnly', params.unread.toString());
 
     const response = await apiClient.get(`/notifications?${queryParams.toString()}`);
-    return response.data;
+    const data = response.data.data ?? response.data;
+    return { success: response.data.success, notifications: data.notifications ?? [], count: data.unreadCount ?? data.count ?? 0, pagination: data.pagination };
   }
 
   async getUnreadCount(): Promise<UnreadCountResponse> {
     const response = await apiClient.get('/notifications/unread-count');
-    return response.data;
+    const data = response.data.data ?? response.data;
+    return { success: response.data.success, count: data.unreadCount ?? data.count ?? 0 };
   }
 
   async markAsRead(notificationId: string): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.put(`/notifications/${notificationId}/read`);
+    const response = await apiClient.post(`/notifications/${notificationId}/read`);
     return response.data;
   }
 
   async markAllAsRead(): Promise<{ success: boolean; message: string }> {
-    const response = await apiClient.put('/notifications/read-all');
+    const response = await apiClient.post('/notifications/mark-all-read');
     return response.data;
   }
 
@@ -104,12 +107,12 @@ class NotificationsService {
 
   async getPreferences(): Promise<PreferencesResponse> {
     const response = await apiClient.get('/notifications/preferences');
-    return response.data;
+    return { success: response.data.success, preferences: response.data.data ?? response.data.preferences };
   }
 
   async updatePreferences(preferences: Partial<NotificationPreferences>): Promise<PreferencesResponse> {
     const response = await apiClient.put('/notifications/preferences', preferences);
-    return response.data;
+    return { success: response.data.success, preferences: response.data.data ?? response.data.preferences };
   }
 
   // Test notification (for development)
@@ -125,7 +128,7 @@ class NotificationsService {
   async registerPushToken(token: string): Promise<{ success: boolean; message: string }> {
     const response = await apiClient.post('/push/register', {
       token,
-      platform: 'android',
+      platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
     });
     return response.data;
   }

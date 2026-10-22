@@ -139,7 +139,7 @@ export function Dashboard() {
           <h3 className="text-white font-medium mb-4">Stories de eventos</h3>
           <div className="flex space-x-4 overflow-x-auto">
             <div className="flex-shrink-0 text-center cursor-pointer">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 p-1">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 p-1">
                 <div className="w-full h-full rounded-full bg-gray-800 flex items-center justify-center">
                   <span className="text-2xl">+</span>
                 </div>
@@ -148,7 +148,7 @@ export function Dashboard() {
             </div>
             {['🎵', '🍕', '🚀', '🎨', '🏃'].map((emoji, index) => (
               <div key={index} className="flex-shrink-0 text-center cursor-pointer">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-cyan-500 p-1">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 p-1">
                   <div className="w-full h-full rounded-full bg-gray-700 flex items-center justify-center">
                     <span className="text-2xl">{emoji}</span>
                   </div>
@@ -180,7 +180,7 @@ export function Dashboard() {
               <div className="p-6 pb-0">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-blue-500 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
                       <span className="text-white font-bold text-sm">{organizer.avatar}</span>
                     </div>
                     <div>
@@ -249,7 +249,7 @@ export function Dashboard() {
                   <Button
                     size="sm"
                     onClick={() => handleAttendEvent(event._id)}
-                    className="bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700"
+                    className="bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700"
                   >
                     Asistir
                   </Button>
@@ -301,7 +301,7 @@ export function Dashboard() {
                 <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm font-bold">
                   {index + 1}
                 </div>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
                   <span className="text-white font-bold text-sm">{user.avatar}</span>
                 </div>
                 <div className="flex-1">
@@ -317,7 +317,7 @@ export function Dashboard() {
         <Card className="glass-card p-6">
           <h3 className="text-white font-medium mb-4">Acciones rápidas</h3>
           <div className="space-y-3">
-            <Button className="w-full bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-700 hover:to-pink-700">
+            <Button className="w-full bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-pink-700">
               Crear evento
             </Button>
             <Button variant="outline" className="w-full border-blue-500/50 text-blue-300 hover:bg-blue-500/10">

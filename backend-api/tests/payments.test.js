@@ -175,7 +175,8 @@ describe('Free Event Registration', () => {
       });
 
     const freeEventId = eventRes.body.data?._id || eventRes.body.event?._id;
-    if (!freeEventId) return;
+    expect(freeEventId).toBeDefined();
+    await require('../src/models/Event').findByIdAndUpdate(freeEventId, { status: 'published' });
 
     const attendRes = await request(app)
       .post(`/api/events/${freeEventId}/attend`)

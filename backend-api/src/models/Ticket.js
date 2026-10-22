@@ -28,7 +28,7 @@ const ticketSchema = new mongoose.Schema({
     type: String,
     required: true,
     default: 'usd',
-    enum: ['usd', 'eur', 'gbp', 'mxn', 'cad']
+    enum: ['usd', 'eur', 'gbp', 'mxn', 'cad', 'dop']
   },
 
   // Availability
@@ -42,6 +42,9 @@ const ticketSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  // Receipt and stock change are written together, so recovery is safe even
+  // when the process stops before the order can record completion.
+  releasedOrderIds: { type: [mongoose.Schema.Types.ObjectId], select: false, default: undefined },
   available: {
     type: Number,
     default: function() {
@@ -112,19 +115,45 @@ ticketSchema.methods.isAvailable = function() {
 };
 
 ticketSchema.methods.canPurchase = function(quantity) {
-  return this.isAvailable() &&
+  return Number.isInteger(quantity) && this.isAvailable() &&
          quantity >= this.minPurchase &&
          quantity <= this.maxPurchase &&
          quantity <= this.remaining;
 };
 
-ticketSchema.methods.reserveTickets = function(quantity) {
+ticketSchema.methods.reserveTickets = async function(quantity) {
   if (!this.canPurchase(quantity)) {
     throw new Error('Cannot reserve tickets');
   }
 
-  this.sold += quantity;
-  return this.save();
+  const now = new Date();
+  const reserved = await this.constructor.findOneAndUpdate({
+    _id: this._id, isActive: true,
+    saleStartDate: { $lte: now }, saleEndDate: { $gte: now },
+    $expr: { $gte: [{ $subtract: ['$quantity', '$sold'] }, quantity] }
+  }, { $inc: { sold: quantity, available: -quantity } }, { new: true });
+  if (!reserved) throw new Error('Cannot reserve tickets: insufficient availability');
+  this.sold = reserved.sold;
+  this.available = reserved.available;
+  return reserved;
+};
+
+ticketSchema.statics.releaseTickets = function(ticketId, quantity) {
+  return this.updateOne({ _id: ticketId, sold: { $gte: quantity } },
+    { $inc: { sold: -quantity, available: quantity } });
+};
+
+ticketSchema.statics.releaseOrderTickets = async function(ticketId, quantity, orderId) {
+  if (!Number.isInteger(quantity) || quantity < 1) throw new Error('Invalid release quantity');
+  const result = await this.updateOne({
+    _id: ticketId, sold: { $gte: quantity }, releasedOrderIds: { $ne: orderId }
+  }, {
+    $inc: { sold: -quantity, available: quantity },
+    $addToSet: { releasedOrderIds: orderId }
+  });
+  if (result.modifiedCount) return;
+  if (await this.exists({ _id: ticketId, releasedOrderIds: orderId })) return;
+  throw new Error(`Could not release inventory for ticket ${ticketId}`);
 };
 
 // Static methods

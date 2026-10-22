@@ -3,7 +3,18 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { apiClient } from '@/lib/api/client'
+import { apiCache } from '@/lib/performance/apiCache'
+import { useChatStore } from '@/stores/chatStore'
+import { useLocaleStore } from './localeStore'
 import type { User, LoginCredentials, RegisterData, AuthResponse } from '@/types/api.types'
+
+function syncUserLocale(user: User | null | undefined) {
+  if (!user) return
+  const country = user.countryCode || user.country
+  if (country) {
+    useLocaleStore.getState().setLocaleByCountry(country)
+  }
+}
 
 interface AuthState {
   user: User | null
@@ -13,7 +24,8 @@ interface AuthState {
   error: string | null
 
   // Actions
-  login: (credentials: LoginCredentials) => Promise<void>
+  login: (credentials: LoginCredentials & { tempToken?: string; code?: string }) => Promise<void>
+  loginOAuth: (provider: 'google' | 'facebook', code: string, state: string) => Promise<void>
   register: (data: RegisterData) => Promise<void>
   logout: () => void
   clearError: () => void
@@ -31,8 +43,9 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
 
-      login: async (credentials: LoginCredentials) => {
+      login: async (credentials: LoginCredentials & { tempToken?: string; code?: string }) => {
         try {
+          get().logout()
           // CRITICAL: Clear all previous auth state before login to prevent stale token issues
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('auth-token')
@@ -45,8 +58,11 @@ export const useAuthStore = create<AuthState>()(
 
           set({ isLoading: true, error: null, isAuthenticated: false, user: null, token: null })
 
-          const response = await apiClient.post('/auth/login', credentials)
+          const response = await apiClient.post(credentials.tempToken ? '/auth/verify-2fa' : '/auth/login', credentials)
           const rd = response.data
+          if (rd.requiresTwoFactor && rd.tempToken) {
+            throw Object.assign(new Error('Introduce el código de tu aplicación de autenticación.'), { requiresTwoFactor: true, tempToken: rd.tempToken })
+          }
 
           // Backend returns dual-key: accessToken (canonical) + token (alias)
           // Also enveloped under data: { user, accessToken } for normalized shape
@@ -64,6 +80,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           set({ user, token, isAuthenticated: true, isLoading: false, error: null })
+          syncUserLocale(user)
+          syncUserLocale(user)
+          syncUserLocale(user)
 
         } catch (error: any) {
           const message = error.response?.data?.message || error.message || 'Login failed'
@@ -72,8 +91,32 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      loginOAuth: async (provider, code, state) => {
+        get().logout()
+        set({ isLoading: true, error: null })
+        try {
+          const { data: rd } = await apiClient.post(`/oauth/${provider}/callback`, { code, state })
+          if (rd.requiresTwoFactor && rd.tempToken) {
+            throw Object.assign(new Error('Introduce el código de tu aplicación de autenticación.'), { requiresTwoFactor: true, tempToken: rd.tempToken })
+          }
+          const user = rd.data?.user ?? rd.user
+          const token = rd.data?.accessToken ?? rd.data?.token ?? rd.accessToken ?? rd.token
+          if (!user || !token) throw new Error('No se pudo completar el inicio de sesión.')
+          sessionStorage.setItem('auth-token', token)
+          const refreshToken = rd.data?.refreshToken ?? rd.refreshToken
+          if (refreshToken) sessionStorage.setItem('refresh-token', refreshToken)
+          document.cookie = `auth-token=${token}; path=/; SameSite=Lax`
+          set({ user, token, isAuthenticated: true, isLoading: false, error: null })
+        } catch (error: any) {
+          get().logout()
+          set({ isLoading: false, error: error.response?.data?.message || error.message || 'Error al iniciar sesión' })
+          throw error
+        }
+      },
+
       register: async (data: RegisterData) => {
         try {
+          get().logout()
           set({ isLoading: true, error: null })
 
           const response = await apiClient.post('/auth/register', data)
@@ -101,12 +144,16 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-
+        apiCache.clear()
+        useChatStore.setState({ rooms: [], currentRoom: null, messages: {}, typingUsers: {}, onlineUsers: [], unreadCounts: {}, error: null })
         if (typeof window !== 'undefined') {
           // Clear all auth-related storage
           sessionStorage.removeItem('auth-token')
           sessionStorage.removeItem('refresh-token')
           sessionStorage.removeItem('auth-storage')
+          localStorage.removeItem('auth-token')
+          localStorage.removeItem('refresh-token')
+          localStorage.removeItem('auth-storage')
           // Clear cookies - use multiple methods to ensure complete removal
           document.cookie = 'auth-token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT'
           document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
@@ -119,6 +166,7 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           isAuthenticated: false,
           error: null,
+          isLoading: false,
         })
       },
 
@@ -151,12 +199,14 @@ export const useAuthStore = create<AuthState>()(
 
           if (user) {
             set({ user, isAuthenticated: true })
+            syncUserLocale(user)
             return true
           } else {
             throw new Error('Invalid response: no user in /auth/me')
           }
-        } catch {
-          get().logout()
+        } catch (error: any) {
+          // A temporary outage must not erase a valid saved session.
+          if (error.response?.status === 401 || error.response?.status === 403) get().logout()
           return false
         }
       },

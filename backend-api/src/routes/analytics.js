@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect, restrictTo } = require('../middleware/auth');
+const { protect, optionalAuth, restrictTo } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const mongoose = require('mongoose');
 const User = require('../models/User');
@@ -9,9 +9,11 @@ const Event = require('../models/Event');
 const { getAudienceInsights } = require('../services/audienceInsights');
 
 const router = express.Router();
+const { analyticsInput } = require('../utils/analyticsInput');
 
 // Analytics Event Model
 const analyticsEventSchema = new mongoose.Schema({
+  eventId: { type: String },
   name: {
     type: String,
     required: true,
@@ -49,6 +51,9 @@ analyticsEventSchema.index({ name: 1, timestamp: -1 });
 analyticsEventSchema.index({ userId: 1, timestamp: -1 });
 analyticsEventSchema.index({ timestamp: -1 });
 
+analyticsEventSchema.index({ eventId: 1 }, { unique: true, partialFilterExpression: { eventId: { $type: 'string' } } });
+// Retention must preserve historical aggregates; no automatic deletion without an agreed policy.
+
 // Create the model if it doesn't exist
 let AnalyticsEvent;
 try {
@@ -58,50 +63,12 @@ try {
 }
 
 // POST /api/analytics/track - Track analytics events
-router.post('/track', async (req, res) => {
+router.post('/track', optionalAuth, async (req, res) => {
   try {
-    const { events } = req.body;
-    
-    if (!Array.isArray(events) || events.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Events array is required'
-      });
-    }
-
-    // Validate and process events
-    const processedEvents = events
-      .filter(event => event && event.name) // Filter out invalid events
-      .map(event => {
-        // Validate required fields
-        if (!event.name || typeof event.name !== 'string') {
-          throw new Error(`Invalid event name: ${event.name}`);
-        }
-
-        return {
-          name: event.name,
-          properties: {
-            ...event.properties,
-            // Add server-side enrichment
-            serverTimestamp: new Date(),
-            source: 'web'
-          },
-          userId: event.userId || null,
-          sessionId: event.sessionId || null,
-          timestamp: event.timestamp ? new Date(event.timestamp) : new Date(),
-          ipAddress: req.ip || req.connection?.remoteAddress || 'unknown',
-          userAgent: req.get('User-Agent') || 'unknown',
-          url: event.properties?.url || req.get('Referer') || 'unknown',
-          referrer: event.properties?.referrer || req.get('Referer') || ''
-        };
-      });
-
-    if (processedEvents.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No valid events to process'
-      });
-    }
+    if (req.body.ownerId !== undefined && req.body.ownerId !== String(req.user?._id || '')) return res.status(403).json({ success: false, message: 'La sesión de analítica cambió' });
+    let processedEvents;
+    try { processedEvents = analyticsInput(req.body.events, req.user?._id); }
+    catch (error) { return res.status(400).json({ success: false, message: error.message }); }
 
     // Insert events with error handling
     try {
@@ -140,211 +107,60 @@ router.post('/track', async (req, res) => {
 // @access  Private
 router.get('/events', protect, async (req, res) => {
   try {
-    const { eventId, timeframe = '30d' } = req.query;
-
-    // Calculate date range based on timeframe
+    const timeframe = req.query.timeframe || '30d';
+    const days = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 }[timeframe];
+    if (!days) return res.status(400).json({ success: false, message: 'Periodo inválido' });
     const now = new Date();
-    const startDate = new Date();
-    
-    switch (timeframe) {
-    case '24h':
-      startDate.setHours(now.getHours() - 24);
-      break;
-    case '7d':
-      startDate.setDate(now.getDate() - 7);
-      break;
-    case '30d':
-      startDate.setDate(now.getDate() - 30);
-      break;
-    case '90d':
-      startDate.setDate(now.getDate() - 90);
-      break;
-    default:
-      startDate.setDate(now.getDate() - 30);
+    const since = new Date(now.getTime() - days * 86400000);
+    const previous = new Date(since.getTime() - days * 86400000);
+    const scope = req.user.role === 'admin' ? {} : { createdBy: req.user._id };
+    if (req.query.eventId) {
+      if (!mongoose.isValidObjectId(req.query.eventId)) return res.status(400).json({ success: false, message: 'Evento inválido' });
+      scope._id = new mongoose.Types.ObjectId(req.query.eventId);
+      if (!await Event.exists(scope)) return res.status(404).json({ success: false, message: 'Evento no disponible' });
     }
-
-    // Get analytics data from database
-    const analyticsPromises = [
-      // Total events count
-      AnalyticsEvent.countDocuments({
-        name: 'event_interaction',
-        timestamp: { $gte: startDate }
-      }),
-      
-      // Page views count
-      AnalyticsEvent.countDocuments({
-        name: 'page_view',
-        timestamp: { $gte: startDate }
-      }),
-      
-      // User interactions
-      AnalyticsEvent.aggregate([
-        {
-          $match: {
-            name: { $in: ['event_interaction', 'page_view', 'click'] },
-            timestamp: { $gte: startDate }
-          }
-        },
-        {
-          $group: {
-            _id: '$name',
-            count: { $sum: 1 }
-          }
-        }
-      ]),
-      
-      // Top events by interactions
-      AnalyticsEvent.aggregate([
-        {
-          $match: {
-            name: 'event_interaction',
-            'properties.action': { $in: ['view', 'join'] },
-            timestamp: { $gte: startDate }
-          }
-        },
-        {
-          $group: {
-            _id: '$properties.eventId',
-            views: {
-              $sum: {
-                $cond: [{ $eq: ['$properties.action', 'view'] }, 1, 0]
-              }
-            },
-            joins: {
-              $sum: {
-                $cond: [{ $eq: ['$properties.action', 'join'] }, 1, 0]
-              }
-            }
-          }
-        },
-        { $sort: { views: -1 } },
-        { $limit: 10 }
-      ]),
-      
-      // Daily trends
-      AnalyticsEvent.aggregate([
-        {
-          $match: {
-            timestamp: { $gte: startDate }
-          }
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: { format: '%Y-%m-%d', date: '$timestamp' }
-            },
-            events: { $sum: 1 },
-            uniqueUsers: { $addToSet: '$userId' }
-          }
-        },
-        {
-          $project: {
-            date: '$_id',
-            events: 1,
-            uniqueUsers: { $size: '$uniqueUsers' }
-          }
-        },
-        { $sort: { '_id': 1 } }
-      ])
-    ];
-
-    const [
-      totalEvents,
-      totalPageViews,
-      interactions,
-      topEvents,
-      dailyTrends
-    ] = await Promise.all(analyticsPromises);
-
-    // Process interactions data
-    const interactionMap = interactions.reduce((acc, item) => {
-      acc[item._id] = item.count;
-      return acc;
-    }, {});
-
-    // Calculate growth rate (simplified)
-    const currentPeriodEvents = totalEvents;
-    const previousPeriodStart = new Date(startDate);
-    const previousPeriodEnd = new Date(startDate);
-    previousPeriodEnd.setTime(startDate.getTime() + (now.getTime() - startDate.getTime()));
-    previousPeriodStart.setTime(startDate.getTime() - (now.getTime() - startDate.getTime()));
-
-    const previousEvents = await AnalyticsEvent.countDocuments({
-      name: 'event_interaction',
-      timestamp: { $gte: previousPeriodStart, $lt: startDate }
-    });
-
-    const growthRate = previousEvents > 0 
-      ? ((currentPeriodEvents - previousEvents) / previousEvents * 100).toFixed(1)
-      : 0;
-
+    const [catalogue] = await Event.aggregate([{ $match: scope }, { $facet: {
+      totals: [{ $group: { _id: null, total: { $sum: 1 }, created: { $sum: { $cond: [{ $gte: ['$createdAt', since] }, 1, 0] } }, previous: { $sum: { $cond: [{ $and: [{ $gte: ['$createdAt', previous] }, { $lt: ['$createdAt', since] }] }, 1, 0] } }, upcoming: { $sum: { $cond: [{ $and: [{ $eq: ['$status', 'published'] }, { $gte: ['$date', now] }] }, 1, 0] } } } }],
+      statuses: [{ $group: { _id: '$status', count: { $sum: 1 } } }],
+      categories: [{ $group: { _id: '$category', count: { $sum: 1 } } }],
+      attendees: [{ $unwind: '$attendees' }, { $match: { 'attendees.status': 'confirmed' } }, { $group: { _id: '$attendees.user', count: { $sum: 1 } } }, { $group: { _id: null, total: { $sum: '$count' }, unique: { $sum: 1 } } }],
+      top: [{ $project: { title: 1, attendees: { $size: { $filter: { input: { $ifNull: ['$attendees', []] }, as: 'a', cond: { $eq: ['$$a.status', 'confirmed'] } } } } } }, { $sort: { attendees: -1 } }, { $limit: 10 }],
+      daily: [{ $match: { createdAt: { $gte: since } } }, { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, events: { $sum: 1 } } }, { $sort: { _id: 1 } }]
+    } }]);
+    // Client telemetry is observational, never a source of attendance, revenue or ratings.
+    const observations = await AnalyticsEvent.aggregate([
+      { $match: { timestamp: { $gte: since } } },
+      { $addFields: { linkedEvent: { $convert: { input: '$properties.eventId', to: 'objectId', onError: null, onNull: null } } } },
+      { $lookup: { from: 'events', localField: 'linkedEvent', foreignField: '_id', as: 'event' } },
+      { $unwind: '$event' },
+      { $match: { ...(scope.createdBy ? { 'event.createdBy': scope.createdBy } : {}), ...(scope._id ? { 'event._id': scope._id } : {}) } },
+      { $group: { _id: { day: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } }, event: '$event._id', action: '$properties.action' }, count: { $sum: 1 }, users: { $addToSet: '$userId' } } }
+    ]);
+    const total = catalogue.totals[0] || { total: 0, created: 0, previous: 0, upcoming: 0 };
+    const attendance = catalogue.attendees[0] || { total: 0, unique: 0 };
+    const statuses = Object.fromEntries(catalogue.statuses.map(row => [row._id, row.count]));
+    const count = action => observations.filter(row => row._id.action === action).reduce((sum, row) => sum + row.count, 0);
+    const views = count('view');
+    const telemetryDays = new Map();
+    for (const row of observations) {
+      const day = telemetryDays.get(row._id.day) || { date: row._id.day, events: 0, users: new Set() };
+      day.events += row.count; (row.users || []).filter(Boolean).forEach(user => day.users.add(String(user))); telemetryDays.set(day.date, day);
+    }
     const analytics = {
-      overview: {
-        totalEvents: currentPeriodEvents,
-        totalAttendees: interactionMap['event_interaction'] || 0,
-        totalRevenue: 0, // Would need payment data integration
-        averageRating: 4.5, // Would need rating data integration
-        growthRate: parseFloat(growthRate),
-        totalPageViews
-      },
-      events: {
-        created: Math.floor(currentPeriodEvents * 0.8),
-        published: Math.floor(currentPeriodEvents * 0.7),
-        completed: Math.floor(currentPeriodEvents * 0.6),
-        cancelled: Math.floor(currentPeriodEvents * 0.05),
-        upcoming: Math.floor(currentPeriodEvents * 0.3)
-      },
-      attendees: {
-        total: interactionMap['event_interaction'] || 0,
-        new: Math.floor((interactionMap['event_interaction'] || 0) * 0.3),
-        returning: Math.floor((interactionMap['event_interaction'] || 0) * 0.7),
-        averagePerEvent: currentPeriodEvents > 0 
-          ? ((interactionMap['event_interaction'] || 0) / currentPeriodEvents).toFixed(1)
-          : 0
-      },
-      engagement: {
-        averageViews: Math.floor(totalPageViews / Math.max(1, currentPeriodEvents)),
-        averageShares: Math.floor((interactionMap['click'] || 0) * 0.1),
-        averageComments: Math.floor((interactionMap['event_interaction'] || 0) * 0.05),
-        clickThroughRate: totalPageViews > 0 
-          ? ((interactionMap['click'] || 0) / totalPageViews * 100).toFixed(1)
-          : 0
-      },
-      topEvents: topEvents.map((event, index) => ({
-        _id: event._id || `event_${index + 1}`,
-        title: `Event ${event._id}`,
-        attendees: event.joins || 0,
-        views: event.views || 0,
-        rating: 4.5 + Math.random() * 0.5
-      })),
-      trends: {
-        daily: dailyTrends.map(day => ({
-          date: day.date,
-          events: day.events,
-          users: day.uniqueUsers
-        })),
-        categories: [
-          { name: 'Technology', count: Math.floor(currentPeriodEvents * 0.3), growth: growthRate },
-          { name: 'Entertainment', count: Math.floor(currentPeriodEvents * 0.25), growth: growthRate * 0.8 },
-          { name: 'Sports', count: Math.floor(currentPeriodEvents * 0.2), growth: growthRate * 1.2 },
-          { name: 'Education', count: Math.floor(currentPeriodEvents * 0.15), growth: growthRate * 0.9 },
-          { name: 'Business', count: Math.floor(currentPeriodEvents * 0.1), growth: growthRate * 1.1 }
-        ]
-      }
+      telemetry: { daily: [...telemetryDays.values()].sort((a,b) => a.date.localeCompare(b.date)).map(day => ({ date: day.date, events: day.events, users: day.users.size })) },
+      overview: { totalEvents: total.total, totalAttendees: attendance.total, totalRevenue: null, averageRating: null, growthRate: total.previous ? Number(((total.created - total.previous) / total.previous * 100).toFixed(1)) : null, totalPageViews: views, totalInteractions: observations.reduce((sum,row) => sum + row.count, 0) },
+      events: { created: total.created, published: statuses.published || 0, completed: statuses.completed || 0, cancelled: statuses.cancelled || 0, upcoming: total.upcoming },
+      attendees: { total: attendance.total, unique: attendance.unique, new: null, returning: null, averagePerEvent: total.total ? attendance.total / total.total : 0 },
+      engagement: { averageViews: total.total ? views / total.total : 0, averageShares: total.total ? count('share') / total.total : 0, averageComments: null, clickThroughRate: null },
+      topEvents: catalogue.top.map(event => ({ _id: event._id, title: event.title, attendees: event.attendees, views: observations.filter(row => String(row._id.event) === String(event._id) && row._id.action === 'view').reduce((sum, row) => sum + row.count, 0), rating: null })),
+      trends: { daily: catalogue.daily.map(row => ({ date: row._id, events: row.events, users: null })), categories: catalogue.categories.map(row => ({ name: row._id, count: row.count, growth: null })) },
+      measurement: { catalogue: 'current_database_snapshot', created: 'selected_period', telemetry: 'client_reported_selected_period', unavailable: ['revenue', 'ratings', 'new_and_returning_attendees', 'comments', 'click_through_rate'], note: 'Los campos no medidos se devuelven como null; no equivalen a cero.' }
     };
-
-    res.json({
-      success: true,
-      analytics,
-      timeframe,
-      generatedAt: new Date().toISOString()
-    });
+    res.set('Cache-Control', 'private, no-store');
+    return res.json({ success: true, analytics, timeframe, generatedAt: now.toISOString() });
   } catch (error) {
     logger.error('Get event analytics error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    return res.status(500).json({ success: false, message: 'No se pudieron cargar las métricas' });
   }
 });
 

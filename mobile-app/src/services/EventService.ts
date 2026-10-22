@@ -9,11 +9,22 @@ export interface EventFilters {
   distance?: number;
   isVirtual?: boolean;
   isFree?: boolean;
+  isRecurring?: boolean;
+  isTourOrTrip?: boolean;
+  isCommercialDeal?: boolean;
   page?: number;
   limit?: number;
   lat?: number;
   lng?: number;
   radius?: number;
+}
+
+/** Normalize the API's canonical `events` collection for native list consumers. */
+export function normalizeEventPage(payload: unknown): PaginatedResponse<Event> {
+  const body = payload as { success?: boolean; events?: unknown; data?: unknown; pagination?: PaginatedResponse<Event>['pagination']; message?: string } | null;
+  const rows = body?.events ?? body?.data;
+  if (body?.success !== true || !Array.isArray(rows)) throw new Error(body?.message || 'No pudimos cargar el catálogo de eventos');
+  return { success: true, data: rows, pagination: body.pagination || { page: 1, limit: Math.max(1, rows.length), total: rows.length, pages: rows.length ? 1 : 0 } };
 }
 
 class EventService {
@@ -39,7 +50,7 @@ class EventService {
       });
 
       const response = await apiClient.get(`/events?${params.toString()}`);
-      return response.data;
+      return normalizeEventPage(response.data);
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Error al obtener eventos');
     }
@@ -113,11 +124,11 @@ class EventService {
       
       const response = await apiClient.get('/events/nearby', { params });
       
-      if (response.data.success && response.data.events) {
+      if (response.data.success && Array.isArray(response.data.events)) {
         return response.data.events;
       }
       
-      return [];
+      throw new Error(response.data?.message || 'Respuesta de eventos cercanos inválida');
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Error al obtener eventos cercanos');
     }
@@ -134,7 +145,7 @@ class EventService {
       });
 
       const response = await apiClient.get(`/events/search?${params.toString()}`);
-      return response.data;
+      return normalizeEventPage(response.data);
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Error al buscar eventos');
     }

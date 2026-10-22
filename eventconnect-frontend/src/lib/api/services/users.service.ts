@@ -42,13 +42,14 @@ class UsersService {
    * Update current user's profile
    */
   async updateProfile(data: UpdateProfileData): Promise<User> {
-    const response = await apiClient.put<ApiResponse<User>>(
+    const response = await apiClient.put<ApiResponse<User> & { user?: User }>(
       API_ENDPOINTS.USERS.UPDATE_PROFILE,
       data
     )
 
-    if (response.data.success && response.data.data) {
-      return response.data.data
+    const user = response.data.data || response.data.user
+    if (response.data.success && user) {
+      return user
     }
 
     throw new Error(response.data.message || 'Failed to update profile')
@@ -58,12 +59,12 @@ class UsersService {
    * Get user by ID
    */
   async getUserById(id: string): Promise<PublicUser> {
-    const response = await apiClient.get<ApiResponse<PublicUser>>(
+    const response = await apiClient.get<ApiResponse<PublicUser> & { user?: PublicUser }>(
       API_ENDPOINTS.USERS.GET(id)
     )
 
-    if (response.data.success && response.data.data) {
-      return response.data.data
+    if (response.data.success && (response.data.user || response.data.data)) {
+      return (response.data.user || response.data.data) as PublicUser
     }
 
     throw new Error(response.data.message || 'User not found')

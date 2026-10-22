@@ -384,10 +384,59 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.walletBalanceContainer}>
               <Text style={styles.walletBalance}>
-                {walletData?.balance !== undefined ? `$${walletData.balance.toFixed(2)}` : '—'}
+                {walletData?.balance !== undefined ? `${walletData.balance.toFixed(2)}` : '—'}
               </Text>
               <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
             </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </Card>
+
+      {/* Pasaporte Cultural Dominicano Section */}
+      <Card variant="glass" glassIntensity="light" padding={0} style={[styles.section, { overflow: 'hidden' }] as any}>
+        <TouchableOpacity
+          onPress={() => router.push('/passport' as any)}
+        >
+          <LinearGradient
+            colors={['rgba(245, 158, 11, 0.25)', 'rgba(217, 119, 6, 0.15)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.walletCard}
+          >
+            <View style={[styles.walletIconContainer, { backgroundColor: '#f59e0b' }]}>
+              <Ionicons name="ribbon" size={24} color="#fff" />
+            </View>
+            <View style={styles.walletInfo}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.walletTitle}>Pasaporte Cultural</Text>
+                <Text style={{ fontSize: 13 }}>🇩🇴</Text>
+              </View>
+              <Text style={styles.walletSubtitle}>Sellos de experiencias y beneficios locales</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </Card>
+
+      {/* QR Ticket Scanner Tool */}
+      <Card variant="glass" glassIntensity="light" padding={0} style={[styles.section, { overflow: 'hidden' }] as any}>
+        <TouchableOpacity
+          onPress={() => Alert.alert('Control de entrada', 'Abre el detalle de un evento que organizas y pulsa Escanear QR. Solo su organizador puede registrar entradas.', [{ text: 'Entendido' }])}
+        >
+          <LinearGradient
+            colors={['rgba(139, 92, 246, 0.2)', 'rgba(236, 72, 153, 0.15)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.walletCard}
+          >
+            <View style={[styles.walletIconContainer, { backgroundColor: '#8b5cf6' }]}>
+              <Ionicons name="qr-code" size={24} color="#fff" />
+            </View>
+            <View style={styles.walletInfo}>
+              <Text style={styles.walletTitle}>Escanear Entradas QR</Text>
+              <Text style={styles.walletSubtitle}>Disponible dentro de los eventos que organizas</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.5)" />
           </LinearGradient>
         </TouchableOpacity>
       </Card>

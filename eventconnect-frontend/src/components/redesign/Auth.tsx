@@ -157,7 +157,7 @@ export function Auth({ onLogin }: AuthProps) {
                   onClick={() => setIsLogin(true)}
                   className={`flex-1 py-2 px-4 rounded-md transition-colors ${
                     isLogin 
-                      ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white' 
+                      ? 'bg-gradient-to-r from-violet-600 to-cyan-600 text-white'
                       : 'text-white/70 hover:text-white'
                   }`}
                 >
@@ -168,7 +168,7 @@ export function Auth({ onLogin }: AuthProps) {
                   onClick={() => setIsLogin(false)}
                   className={`flex-1 py-2 px-4 rounded-md transition-colors ${
                     !isLogin 
-                      ? 'bg-gradient-to-r from-violet-600 to-blue-600 text-white' 
+                      ? 'bg-gradient-to-r from-violet-600 to-cyan-600 text-white'
                       : 'text-white/70 hover:text-white'
                   }`}
                 >
@@ -334,7 +334,7 @@ export function Auth({ onLogin }: AuthProps) {
 
               <Button
                 type="submit"
-                className="w-full bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 h-12"
+                className="w-full bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-700 hover:to-blue-700 h-12"
                 disabled={isLoading || (!isLogin && (!formData.agreeTerms || formData.interests.length < 3))}
               >
                 {isLoading ? (

@@ -204,9 +204,32 @@ async function createOptimizedIndexes() {
       { key: { createdAt: -1 }, name: 'recent_comments' }
     ]);
 
+    await db.collection('communityactions').createIndexes([
+      { key: { scope: 1, target: 1 }, unique: true, name: 'scope_1_target_1' }
+    ]);
+    await db.collection('personalplandrafts').createIndexes([
+      { key: { owner: 1, updatedAt: -1 }, name: 'owner_1_updatedAt_-1' },
+      { key: { owner: 1, slot: 1 }, unique: true, partialFilterExpression: { slot: { $type: 'number' } }, name: 'owner_1_slot_1' }
+    ]);
+    await db.collection('partnerneeds').createIndexes([
+      { key: { owner: 1, createdAt: -1 }, name: 'owner_1_createdAt_-1' },
+      { key: { status: 1, createdAt: -1 }, name: 'status_1_createdAt_-1' }
+    ]);
+    await db.collection('partnerspaces').createIndexes([
+      { key: { owner: 1, createdAt: -1 }, name: 'owner_1_createdAt_-1' }
+    ]);
+
+    await db.collection('eventreviews').createIndexes([
+      { key: { event: 1, user: 1 }, unique: true, name: 'event_1_user_1' }
+    ]);
+    await db.collection('ideaconditions').createIndexes([
+      { key: { idea: 1, user: 1 }, unique: true, name: 'idea_1_user_1' }
+    ]);
+
     // Notifications Collection Indexes
     console.log('📊 Creating Notification indexes...');
     await db.collection('notifications').createIndexes([
+      { key: { deliveryKey: 1 }, unique: true, sparse: true, name: 'deliveryKey_1' },
       // Core notification queries
       { key: { recipient: 1, createdAt: -1 }, name: 'notifications_by_recipient' },
       { key: { recipient: 1, isRead: 1, createdAt: -1 }, name: 'unread_notifications' },

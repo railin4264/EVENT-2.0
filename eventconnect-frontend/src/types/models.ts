@@ -134,6 +134,27 @@ export type EventCategory =
   | 'art'
   | 'business'
   | 'education'
+  | 'dance'
+  | 'outdoors'
+  | 'wellness'
+  | 'workshop'
+  | 'literature'
+  | 'gaming'
+  | 'film'
+  | 'photography'
+  | 'culture'
+  | 'community'
+  | 'family'
+  | 'networking'
+  | 'nightlife'
+  | 'entertainment'
+  | 'health'
+  | 'religion'
+  | 'politics'
+  | 'charity'
+  | 'science'
+  | 'party'
+  | 'social'
   | 'other'
 
 export type EventStatus = 'draft' | 'published' | 'cancelled' | 'completed'
@@ -152,6 +173,7 @@ export interface EventLocation {
   venue?: string
   city?: string
   country?: string
+  countryCode?: string
 }
 
 export interface EventImage {
@@ -173,6 +195,11 @@ export interface EventAttendee {
 }
 
 export interface Event {
+  imported?: boolean
+  organizer?: string
+  publicSource?: { name?: string; datasetUrl?: string; license?: string; licenseUrl?: string }
+  attendanceSummary?: unknown;
+  timeZone?: string
   _id: string
   title: string
   description: string
@@ -233,6 +260,10 @@ export interface CreateEventRequest {
 export interface UpdateEventRequest extends Partial<CreateEventRequest> {}
 
 export interface EventFilters {
+  countryCode?: string
+  city?: string
+  timeFilter?: string
+  isUnofficial?: string
   category?: EventCategory
   date_from?: string
   date_to?: string

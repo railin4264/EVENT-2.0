@@ -73,7 +73,7 @@ main() {
     build_app
     
     echo -e "\n${GREEN}============================================${NC}"
-    echo -e "${GREEN}   ¡Deployment completado exitosamente!${NC}"
+    echo -e "${GREEN}   Build preparado. Este script no publica ni verifica un despliegue.${NC}"
     echo -e "${GREEN}============================================${NC}"
 }
 

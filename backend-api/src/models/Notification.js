@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { inAppNotificationFilter } = require('../utils/notificationPreferences');
 
 const notificationSchema = new mongoose.Schema({
   recipient: {
@@ -26,6 +27,11 @@ const notificationSchema = new mongoose.Schema({
       'comment',          // Someone commented on your event/post
       'like',             // Someone liked your content
       'tribe_invite',     // Someone invited you to a tribe
+      'tribe_request',    // Someone requested to join your tribe
+      'tribe_approved',   // Your tribe join request was approved
+      'message',          // Direct or group chat message
+      'achievement',      // Achievement unlocked
+      'admin_report',     // Admin moderation report
       'system',           // System notifications
       'welcome'           // Welcome message for new users
     ]
@@ -52,13 +58,18 @@ const notificationSchema = new mongoose.Schema({
   readAt: {
     type: Date
   },
+  deliveryKey: { type: String, maxlength: 200 },
+  sentViaPush: {
+    type: Boolean,
+    default: false
+  },
   actionUrl: {
     type: String, // URL to navigate when notification is clicked
     maxlength: 200
   },
   priority: {
     type: String,
-    enum: ['low', 'medium', 'high'],
+    enum: ['low', 'normal', 'medium', 'high', 'urgent'],
     default: 'medium'
   },
   expiresAt: {
@@ -74,8 +85,12 @@ notificationSchema.index({ recipient: 1, createdAt: -1 });
 notificationSchema.index({ recipient: 1, read: 1, createdAt: -1 });
 notificationSchema.index({ recipient: 1, type: 1 });
 notificationSchema.index({ createdAt: -1 });
+notificationSchema.index({ deliveryKey: 1 }, { unique: true, sparse: true });
 
 // Static methods
+notificationSchema.statics.inAppFilter = function(user) {
+  return inAppNotificationFilter(user, this.schema.path('type').enumValues);
+};
 notificationSchema.statics.createNotification = async function({
   recipient,
   sender,
@@ -139,8 +154,10 @@ notificationSchema.statics.createNotification = async function({
 
 notificationSchema.statics.getNotifications = async function(userId, page = 1, limit = 20) {
   const skip = (page - 1) * limit;
+  const user = await mongoose.model('User').findById(userId).select('notificationSettings settings.notifications');
+  const visible = this.inAppFilter(user || {});
   
-  const notifications = await this.find({ recipient: userId })
+  const notifications = await this.find({ recipient: userId, ...visible })
     .populate('sender', 'firstName lastName username avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -149,6 +166,7 @@ notificationSchema.statics.getNotifications = async function(userId, page = 1, l
 
   const unreadCount = await this.countDocuments({ 
     recipient: userId, 
+    ...visible,
     read: false 
   });
 
@@ -200,8 +218,10 @@ notificationSchema.statics.deleteNotification = async function(userId, notificat
 };
 
 notificationSchema.statics.getUnreadCount = async function(userId) {
+  const user = await mongoose.model('User').findById(userId).select('notificationSettings settings.notifications');
   return await this.countDocuments({
     recipient: userId,
+    ...this.inAppFilter(user || {}),
     read: false
   });
 };
@@ -214,6 +234,8 @@ notificationSchema.statics.cleanupOldNotifications = async function() {
     readAt: { $lt: thirtyDaysAgo }
   });
 };
+
+notificationSchema.statics.deleteOldNotifications = notificationSchema.statics.cleanupOldNotifications;
 
 // Helper methods for creating specific notification types
 notificationSchema.statics.createFollowNotification = async function(followerId, followedId) {
@@ -306,6 +328,11 @@ notificationSchema.statics.createWelcomeNotification = async function(userId) {
 notificationSchema.methods.markAsRead = function() {
   this.read = true;
   this.readAt = new Date();
+  return this.save();
+};
+
+notificationSchema.methods.markPushSent = async function() {
+  this.sentViaPush = true;
   return this.save();
 };
 

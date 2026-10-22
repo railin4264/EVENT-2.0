@@ -66,7 +66,7 @@ const reportSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['pending', 'under_review', 'resolved', 'dismissed', 'escalated'],
+    enum: ['pending', 'under_review', 'reviewed', 'reviewing', 'in_review', 'resolved', 'dismissed', 'escalated'],
     default: 'pending'
   },
   priority: {
@@ -129,11 +129,20 @@ reportSchema.index({ type: 1, status: 1 });
 
 // Virtuals
 reportSchema.virtual('isActive').get(function() {
-  return ['pending', 'under_review', 'escalated'].includes(this.status);
+  return ['pending', 'under_review', 'reviewed', 'reviewing', 'in_review', 'escalated'].includes(this.status);
+});
+
+reportSchema.virtual('reportedBy').get(function() {
+  return this.reporter;
+});
+
+reportSchema.virtual('contentId').get(function() {
+  const item = this.reportedEvent || this.reportedUser || this.reportedTribe || this.reportedPost || this.reportedComment;
+  return item?._id || item || null;
 });
 
 reportSchema.virtual('age').get(function() {
-  return Date.now() - this.createdAt.getTime();
+  return this.createdAt ? Date.now() - this.createdAt.getTime() : 0;
 });
 
 // Methods

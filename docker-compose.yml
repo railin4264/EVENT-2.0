@@ -4,7 +4,6 @@
 # Uso: docker-compose up -d
 # Ver logs: docker-compose logs -f
 
-version: '3.8'
 
 services:
   # ============================================
@@ -15,14 +14,13 @@ services:
     container_name: eventconnect-mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: eventconnect
-      MONGO_INITDB_ROOT_PASSWORD: eventconnect_secret_2024
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:?Define MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Define MONGO_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: eventconnect
     volumes:
       - mongodb_data:/data/db
-      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
       - eventconnect-network
     healthcheck:
@@ -39,14 +37,16 @@ services:
     container_name: eventconnect-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes --requirepass eventconnect_redis_2024
+      - "127.0.0.1:6379:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Define REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
       - redis_data:/data
     networks:
       - eventconnect-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "eventconnect_redis_2024", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -65,10 +65,18 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      MONGODB_URI: mongodb://eventconnect:eventconnect_secret_2024@mongodb:27017/eventconnect?authSource=admin
-      REDIS_URL: redis://:eventconnect_redis_2024@redis:6379
-      CORS_ORIGIN: http://localhost:3000,http://localhost:8081
-      JWT_SECRET: eventconnect_super_secret_jwt_key_2024_secure_string_min_64_chars_length_to_be_safe
+      MONGODB_URI: ${MONGODB_URI:?Define MONGODB_URI with an encoded password}
+      REDIS_URL: ${REDIS_URL:?Define REDIS_URL with an encoded password}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Define CORS_ORIGIN}
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Define JWT_REFRESH_SECRET}
+      REDIS_REQUIRED: "true"
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      FACEBOOK_REDIRECT_URI: ${FACEBOOK_REDIRECT_URI:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -77,7 +85,6 @@ services:
     networks:
       - eventconnect-network
     volumes:
-      - ./backend-api/src:/app/src:ro
       - backend_uploads:/app/uploads
 
   # ============================================
@@ -87,13 +94,17 @@ services:
     build:
       context: ./eventconnect-frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?Define public application URL}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Define public API URL}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:?Define public socket URL}
     container_name: eventconnect-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:5000/api
-      NEXT_PUBLIC_SOCKET_URL: http://localhost:5000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Define public API URL}
+      NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:?Define public socket URL}
     depends_on:
       - backend
     networks:

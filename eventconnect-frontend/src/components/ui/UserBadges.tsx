@@ -34,7 +34,7 @@ export const AVAILABLE_BADGES: Badge[] = [
     description: 'Creaste tu primer evento',
     icon: PartyPopper,
     color: 'text-blue-500',
-    gradient: 'from-blue-400 to-blue-600',
+    gradient: 'from-violet-400 to-violet-600',
     criteria: 'Crear 1 evento',
     earned: false,
     rarity: 'common'
@@ -95,7 +95,7 @@ export const AVAILABLE_BADGES: Badge[] = [
     description: 'Te uniste a 10 eventos antes que nadie',
     icon: Calendar,
     color: 'text-indigo-500',
-    gradient: 'from-indigo-400 to-indigo-600',
+    gradient: 'from-violet-400 to-violet-600',
     criteria: 'Primer asistente 10 veces',
     earned: false,
     progress: 0,
@@ -108,7 +108,7 @@ export const AVAILABLE_BADGES: Badge[] = [
     description: 'Organizaste un evento con más de 200 asistentes',
     icon: Crown,
     color: 'text-purple-500',
-    gradient: 'from-purple-400 to-purple-600',
+    gradient: 'from-violet-400 to-violet-600',
     criteria: 'Evento con 200+ asistentes',
     earned: false,
     rarity: 'legendary'
@@ -335,15 +335,15 @@ export function UserBadges({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-emerald-50 to-blue-50 dark:from-emerald-900/20 dark:to-blue-900/20 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800"
+          className="bg-gradient-to-r from-violet-50 to-cyan-50 dark:from-violet-900/20 dark:to-blue-900/20 rounded-xl p-4 border border-violet-200 dark:border-violet-800"
         >
           <h4 className="font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-emerald-500" />
+            <Sparkles className="w-4 h-4 text-violet-500" />
             Estadísticas de Logros
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
-              <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+              <div className="text-lg font-bold text-violet-600 dark:text-violet-400">
                 {earnedBadges.length}
               </div>
               <div className="text-xs text-gray-600 dark:text-gray-400">Total</div>

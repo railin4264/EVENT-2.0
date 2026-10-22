@@ -69,9 +69,11 @@ export default function PostCard({
 
   const displayTime = (timestamp: string) => {
     if (!timestamp) return ''
-    // Si viene del backend en formato relativo o localizado de es-ES
-    if (typeof timestamp === 'string' && (timestamp.match(/^[0-9]+[smhd]$/) || isNaN(Date.parse(timestamp)))) {
-      return timestamp
+    if (typeof timestamp === 'string') {
+      // If it's already a relative format (e.g. "12m", "3h", "18 oct") or localized text
+      if (timestamp.match(/^[0-9]+[smhd]$/) || timestamp.includes(' ') || isNaN(Date.parse(timestamp))) {
+        return timestamp
+      }
     }
     const now = new Date()
     const time = new Date(timestamp)
@@ -83,7 +85,7 @@ export default function PostCard({
     if (diffInMinutes < 60) return `${diffInMinutes}m`
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`
     if (diffInMinutes < 10080) return `${Math.floor(diffInMinutes / 1440)}d`
-    return new Date(timestamp).toLocaleDateString()
+    return new Date(timestamp).toLocaleDateString('es-DO', { day: 'numeric', month: 'short' })
   }
 
   return (
@@ -323,17 +325,25 @@ export default function PostCard({
         )}
       </div>
 
-      {/* Post Media */}
-      {post.media && post.media.length > 0 && (
+      {/* Post Media or Single Image */}
+      {(post.image || (post.media && post.media.length > 0)) && (
         <div className="px-6 mb-4">
-          {post.media.length === 1 ? (
-            <div className="relative w-full rounded-xl overflow-hidden min-h-[300px] max-h-[500px]">
-              <CldImage
-                src={post.media[0].url}
+          {post.image ? (
+            <div className="relative w-full rounded-2xl overflow-hidden max-h-[500px] border border-gray-100 dark:border-gray-700">
+              <img
+                src={post.image}
                 alt="Post media"
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 50vw"
+                loading="lazy"
+                className="w-full h-auto max-h-[500px] object-cover"
+              />
+            </div>
+          ) : post.media.length === 1 ? (
+            <div className="relative w-full rounded-xl overflow-hidden min-h-[300px] max-h-[500px] border border-gray-100 dark:border-gray-700">
+              <img
+                src={post.media[0].url || post.media[0]}
+                alt="Post media"
+                loading="lazy"
+                className="w-full h-auto max-h-[500px] object-cover"
               />
             </div>
           ) : (
@@ -341,24 +351,26 @@ export default function PostCard({
               post.media.length === 3 ? 'grid-cols-3' :
                 'grid-cols-2'
               }`}>
-              {post.media.slice(0, 4).map((media: any, index: number) => (
-                <div key={index} className="relative h-48 rounded-lg overflow-hidden">
-                  <CldImage
-                    src={media.url}
-                    alt={`Media ${index + 1}`}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 50vw, 25vw"
-                  />
-                  {index === 3 && post.media.length > 4 && (
-                    <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center z-10">
-                      <span className="text-white text-2xl font-bold">
-                        +{post.media.length - 4}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ))}
+              {post.media.slice(0, 4).map((media: any, index: number) => {
+                const mediaUrl = typeof media === 'string' ? media : media?.url
+                return (
+                  <div key={index} className="relative h-48 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
+                    <img
+                      src={mediaUrl}
+                      alt={`Media ${index + 1}`}
+                      loading="lazy"
+                      className="w-full h-full object-cover"
+                    />
+                    {index === 3 && post.media.length > 4 && (
+                      <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center z-10">
+                        <span className="text-white text-2xl font-bold">
+                          +{post.media.length - 4}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

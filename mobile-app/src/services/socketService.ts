@@ -30,17 +30,21 @@ class SocketService {
   private eventHandlers: SocketEventHandlers = {};
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
+  private subscriptions = new Map<string, Set<any>>();
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   connect(token: string, handlers: SocketEventHandlers = {}) {
     if (this.socket?.connected) {
+      this.socket.auth = { token };
+      this.eventHandlers = handlers;
       return;
     }
 
     this.eventHandlers = handlers;
 
     // Create socket connection
-    this.socket = io(apiConfig.baseURL, {
+    this.socket?.disconnect();
+    this.socket = io(apiConfig.baseURL.replace(/\/api(?:\/v1)?\/?$/, ''), {
       auth: {
         token,
       },
@@ -50,6 +54,7 @@ class SocketService {
     });
 
     this.setupEventListeners();
+    this.subscriptions.forEach((callbacks, event) => callbacks.forEach(callback => this.socket?.on(event, callback)));
   }
 
   private setupEventListeners() {
@@ -87,7 +92,8 @@ class SocketService {
 
     // Notification events
     this.socket.on('newNotification', (notification: NotificationData) => {
-      this.eventHandlers.onNewNotification?.(notification);
+      const document = (notification as NotificationData & { notification?: NotificationData }).notification ?? notification;
+      if (document?._id && typeof document.title === 'string') this.eventHandlers.onNewNotification?.(document);
     });
 
     this.socket.on('notificationRead', (notificationId: string) => {
@@ -187,12 +193,16 @@ class SocketService {
 
   // Generic event listeners
   on(event: string, callback: any) {
+    if (!this.subscriptions.has(event)) this.subscriptions.set(event, new Set());
+    this.subscriptions.get(event)!.add(callback);
     if (this.socket) {
       this.socket.on(event, callback);
     }
   }
 
   off(event: string, callback?: any) {
+    if (callback) this.subscriptions.get(event)?.delete(callback);
+    else this.subscriptions.delete(event);
     if (this.socket) {
       if (callback) {
         this.socket.off(event, callback);
@@ -201,6 +211,8 @@ class SocketService {
       }
     }
   }
+
+  emit(event: string, data: any) { this.socket?.emit(event, data); }
 }
 
 // Create singleton instance

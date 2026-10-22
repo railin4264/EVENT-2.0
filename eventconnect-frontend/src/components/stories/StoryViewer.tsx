@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, ChevronLeft, ChevronRight, Heart, MessageCircle, Send, MoreHorizontal, Volume2, VolumeX, Play, Pause } from 'lucide-react'
 import { useStoriesStore } from '@/stores/storiesStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useRouter, usePathname } from 'next/navigation'
 import * as storiesAPI from '@/lib/api/stories'
 
 interface StoryViewerProps {
@@ -16,7 +17,14 @@ const STORY_DURATION = 5000 // 5 seconds per story
 const reactions = ['❤️', '😂', '😮', '😢', '😡', '👏']
 
 export default function StoryViewer({ isOpen, onClose }: StoryViewerProps) {
-  const { user } = useAuthStore()
+  const { user, isAuthenticated } = useAuthStore()
+  const router = useRouter()
+  const pathname = usePathname()
+  const requireAccount = () => {
+    if (isAuthenticated && (user?.id || user?._id)) return true
+    router.push(`/login?redirect=${encodeURIComponent(pathname || '/')}`)
+    return false
+  }
   const {
     feedItems,
     currentStory,
@@ -139,7 +147,7 @@ export default function StoryViewer({ isOpen, onClose }: StoryViewerProps) {
   }
 
   const handleReaction = async (emoji: string) => {
-    if (!currentStory) return
+    if (!currentStory || !requireAccount()) return
 
     try {
       if (currentStory.hasReacted) {
@@ -155,7 +163,7 @@ export default function StoryViewer({ isOpen, onClose }: StoryViewerProps) {
   }
 
   const handleReply = async () => {
-    if (!currentStory || !replyText.trim()) return
+    if (!currentStory || !replyText.trim() || !requireAccount()) return
 
     try {
       await storiesAPI.replyToStory(currentStory._id, replyText.trim())
@@ -204,7 +212,7 @@ export default function StoryViewer({ isOpen, onClose }: StoryViewerProps) {
         {/* Header */}
         <div className="absolute top-8 left-4 right-4 z-20 flex items-center justify-between text-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white font-semibold">
+            <div className="w-10 h-10 bg-gradient-to-br from-violet-400 to-cyan-400 rounded-full flex items-center justify-center text-white font-semibold">
               {currentFeedItem.user.avatar || currentFeedItem.user.firstName[0]}
             </div>
             <div>

@@ -109,8 +109,8 @@ export function Gamification() {
   const getRarityColor = (rarity: string) => {
     switch (rarity) {
       case 'legendary': return 'from-yellow-500 to-orange-500'
-      case 'epic': return 'from-purple-500 to-pink-500'
-      case 'rare': return 'from-blue-500 to-cyan-500'
+      case 'epic': return 'from-violet-500 to-cyan-500'
+      case 'rare': return 'from-violet-500 to-cyan-500'
       default: return 'from-gray-500 to-gray-600'
     }
   }
@@ -176,7 +176,7 @@ export function Gamification() {
             </div>
           ) : (
             <div className="text-center space-y-4">
-              <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center relative">
+              <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center relative">
                 <span className="text-white text-2xl font-bold">{getUserAvatar()}</span>
                 <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 flex items-center justify-center">
                   <span className="text-white text-sm font-bold">{userStats.level}</span>
@@ -229,7 +229,7 @@ export function Gamification() {
                     <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm font-bold">
                       {entry.rank}
                     </div>
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center">
                       <span className="text-white font-bold text-sm">{getLeaderboardAvatar(entry)}</span>
                     </div>
                     <div className="flex-1">
@@ -278,7 +278,7 @@ export function Gamification() {
                   } border border-white/10`}
                 >
                   <div className="flex items-start space-x-4">
-                    <div className={`w-16 h-16 rounded-xl bg-gradient-to-r from-violet-500 to-pink-500 flex items-center justify-center text-2xl relative`}>
+                    <div className={`w-16 h-16 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-500 flex items-center justify-center text-2xl relative`}>
                       {achievement.icon}
                       {isCompleted && (
                         <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">

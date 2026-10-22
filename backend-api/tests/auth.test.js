@@ -3,8 +3,10 @@
  */
 
 const request = require('supertest');
+const express = require('express');
 const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
+
+jest.mock('../src/utils/logger', () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }));
 
 // Variables de entorno para tests
 process.env.NODE_ENV = 'test';
@@ -14,15 +16,15 @@ process.env.BCRYPT_ROUNDS = '4'; // Menos rounds para tests más rápidos
 // first as a setupFile). Do NOT override them here — overriding causes a
 // secret mismatch with the cached server instance (maxWorkers:1) and 401s.
 
-let mongoServer;
 let app;
 
 describe('Auth API', () => {
   beforeAll(async () => {
-    // MONGODB_URI is provided by jest.globalSetup (single shared mongod).
-    // Importar app después de configurar variables
-    const server = require('../src/server');
-    app = server.app || server;
+    // Exercise the real auth router against the isolated database without
+    // loading unrelated uploads, payments, Socket.IO or external SDKs.
+    app = express();
+    app.use(express.json());
+    app.use('/api/auth', require('../src/routes/auth'));
   });
 
   afterAll(async () => {
@@ -90,6 +92,43 @@ describe('Auth API', () => {
         });
 
       expect(res.status).toBe(400);
+    });
+
+    it('registers a single display name without inventing a surname or requiring profile extras', async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        ...validUser, name: 'Ana', birthDate: '2000-04-15', acceptTerms: true
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.data.user).toMatchObject({ firstName: 'Ana', lastName: '', name: 'Ana', interests: [] });
+      const login = await request(app).post('/api/auth/login').send({ email: validUser.email, password: validUser.password });
+      expect(login.status).toBe(200);
+      expect(login.body.data.user.name).toBe('Ana');
+    });
+
+    it('keeps first and last name clients compatible', async () => {
+      const { name, ...identity } = validUser;
+      const res = await request(app).post('/api/auth/register').send({ ...identity, firstName: 'Ana', lastName: 'Pérez' });
+      expect(res.status).toBe(201);
+      expect(res.body.data.user.name).toBe('Ana Pérez');
+    });
+
+    it('preserves optional profile fields without accepting privilege fields', async () => {
+      const res = await request(app).post('/api/auth/register').send({
+        ...validUser, interests: ['music'], phone: '+1 809 555 0100', role: 'admin', isEmailVerified: true
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.data.user).toMatchObject({ interests: ['music'], role: 'user' });
+      const user = await require('../src/models/User').findById(res.body.data.user.id);
+      expect(user.phone).toBe('+1 809 555 0100');
+    });
+
+    it('returns validation errors instead of a server error for missing or oversized display names', async () => {
+      const { name, ...identity } = validUser;
+      for (const payload of [identity, { ...identity, name: 'a'.repeat(101) }]) {
+        const res = await request(app).post('/api/auth/register').send(payload);
+        expect(res.status).toBe(400);
+        expect(res.body.errors).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'name' })]));
+      }
     });
   });
 

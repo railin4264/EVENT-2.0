@@ -1,199 +1,141 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { useSocket } from '@/lib/providers/SocketProvider'
 import { useChatStore } from '@/stores/chatStore'
 import { useAuthStore } from '@/stores/authStore'
+import { getUserChats, getChatMessages, sendMessage } from '@/lib/api/chat'
 import type { ChatMessage, ChatRoom } from '@/types/api.types'
 
+const wireId = (room: ChatRoom) => room.chatId || room._id
+function normalizeMessage(message: any, roomId: string): ChatMessage {
+  return { ...message, room: roomId, type: message.type || message.messageType, createdAt: message.createdAt || message.timestamp }
+}
 export function useChat() {
-  const { user } = useAuthStore()
-  const {
-    rooms,
-    currentRoom,
-    messages,
-    typingUsers,
-    onlineUsers,
-    unreadCounts,
-    isLoading,
-    error,
-    addRoom,
-    updateRoom,
-    setCurrentRoom,
-    addMessage,
-    updateMessage,
-    deleteMessage,
-    addTypingUser,
-    removeTypingUser,
-    addOnlineUser,
-    removeOnlineUser,
-    incrementUnreadCount,
-    resetUnreadCount,
-    setError,
-    clearError,
-  } = useChatStore()
-
+  const user = useAuthStore(state => state.user)
+  const viewer = user?._id || user?.id || null
+  const state = useChatStore()
   const { socket, isConnected } = useSocket()
+  const [isSending, setIsSending] = useState(false)
+  const [hasMoreRooms, setHasMoreRooms] = useState(false)
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
+  const roomPage = useRef(1)
+  const messagePage = useRef(1)
+  const sending = useRef(false)
+  const roomsRequest = useRef(0)
+  const historyRequest = useRef(0)
+  const { currentRoom } = state
+  const reloadRooms = useCallback(async (more = false) => {
+    if (!viewer) return
+    const request = ++roomsRequest.current
+    const page = more ? roomPage.current + 1 : 1
+    useChatStore.getState().setLoading(true)
+    try {
+      const result = await getUserChats(page, 50)
+      if (roomsRequest.current !== request || useChatStore.getState().ownerId !== viewer) return
+      if (!result.success) throw new Error()
+      const fetched = result.data.map(room => ({ ...room, lastMessage: room.lastMessage ? normalizeMessage(room.lastMessage, room._id) : undefined })) as unknown as ChatRoom[]
+      const store = useChatStore.getState()
+      store.setRooms(more ? [...store.rooms.filter(room => !fetched.some(item => item._id === room._id)), ...fetched] : fetched)
+      fetched.forEach(room => store.updateUnreadCount(room._id, room.unreadCount || 0))
+      roomPage.current = page; setHasMoreRooms(Boolean(result.pagination.hasMore)); store.clearError()
+    } catch { if (useChatStore.getState().ownerId === viewer) useChatStore.getState().setError('No se pudieron cargar tus conversaciones. Puedes reintentar.') }
+    finally { if (roomsRequest.current === request && useChatStore.getState().ownerId === viewer) useChatStore.getState().setLoading(false) }
+  }, [viewer])
 
-  // Socket event handlers
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    useChatStore.getState().setOwner(viewer)
+    if (viewer) void reloadRooms()
+    return () => { roomsRequest.current++; historyRequest.current++ }
+  }, [viewer, reloadRooms])
 
-    // Message events
-    const handleNewMessage = (data: { chatId: string; message: ChatMessage }) => {
-      addMessage(data.chatId, data.message)
-      
-      // Increment unread count if not in current room or window not focused
-      if (currentRoom?._id !== data.chatId || document.hidden) {
-        incrementUnreadCount(data.chatId)
-      }
-      
-      // Update room's last message
-      updateRoom(data.chatId, { lastMessage: data.message })
-    }
+  const loadHistory = useCallback(async (more = false) => {
+    if (!currentRoom || !viewer) return
+    const request = ++historyRequest.current
+    const page = more ? messagePage.current + 1 : 1
+    const id = currentRoom._id
+    try {
+      const result = await getChatMessages(wireId(currentRoom), page)
+      if (request !== historyRequest.current || useChatStore.getState().ownerId !== viewer) return
+      if (!result.success) throw new Error()
+      const store = useChatStore.getState()
+      // Merge server history with messages received while the request was in flight.
+      const merged = new Map((store.messages[id] || []).map(message => [message._id, message]))
+      result.data.forEach(message => merged.set(message._id, normalizeMessage(message, id)))
+      store.setMessages(id, [...merged.values()].sort((a,b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)))
+      messagePage.current = page; setHasMoreMessages(Boolean(result.pagination.hasMore))
+    } catch { if (useChatStore.getState().ownerId === viewer) useChatStore.getState().setError('No se pudo cargar el historial. Tu mensaje escrito se conserva.') }
+  }, [currentRoom?._id, currentRoom?.chatId, viewer])
 
-    // Typing events
-    const handleTypingStart = (data: { chatId: string; userId: string }) => {
-      if (data.userId !== user?.id) {
-        addTypingUser(data.chatId, data.userId)
-      }
-    }
-
-    const handleTypingStop = (data: { chatId: string; userId: string }) => {
-      removeTypingUser(data.chatId, data.userId)
-    }
-
-    // User presence events
-    const handleUserPresence = (data: { userId: string, status: string }) => {
-      if (data.status === 'online') {
-        addOnlineUser(data.userId)
-      } else {
-        removeOnlineUser(data.userId)
-      }
-    }
-
-    // Error events
-    const handleError = (error: { message: string }) => {
-      setError(error.message)
-    }
-
-    // Attach listeners
-    socket.on('newMessage', handleNewMessage)
-    socket.on('userTyping', handleTypingStart)
-    socket.on('userStoppedTyping', handleTypingStop)
-    socket.on('userPresenceUpdate', handleUserPresence)
-    socket.on('error', handleError)
-
-    return () => {
-      socket.off('newMessage', handleNewMessage)
-      socket.off('userTyping', handleTypingStart)
-      socket.off('userStoppedTyping', handleTypingStop)
-      socket.off('userPresenceUpdate', handleUserPresence)
-      socket.off('error', handleError)
-    }
-  }, [
-    socket,
-    isConnected,
-    addMessage,
-    addTypingUser,
-    removeTypingUser,
-    addOnlineUser,
-    removeOnlineUser,
-    incrementUnreadCount,
-    setError,
-    currentRoom,
-    user,
-    updateRoom
-  ])
-
-  // Join current room and leave previous room
   useEffect(() => {
-    if (currentRoom && socket && isConnected) {
-      socket.emit('joinChat', { chatId: currentRoom._id })
-      resetUnreadCount(currentRoom._id)
-      
-      return () => {
-        socket.emit('leaveChat', { chatId: currentRoom._id })
-      }
+    messagePage.current = 1; setHasMoreMessages(false)
+    void loadHistory()
+    return () => { historyRequest.current++ }
+  }, [loadHistory, isConnected])
+
+  useEffect(() => {
+    if (!socket || !isConnected) return
+    void reloadRooms()
+    const resolveRoom = (chatId: string) => useChatStore.getState().rooms.find(room => wireId(room) === chatId || room._id === chatId)
+    const onMessage = (data: { chatId: string; message: ChatMessage }) => {
+      const room = resolveRoom(data.chatId)
+      if (!room) { void reloadRooms(); return }
+      const store = useChatStore.getState()
+      const exists = store.messages[room._id]?.some(message => message._id === data.message._id)
+      const message = normalizeMessage(data.message, room._id)
+      store.addMessage(room._id, message); store.updateRoom(room._id, { lastMessage: message })
+      const sender = typeof message.sender === 'string' ? message.sender : message.sender?._id
+      if (!exists && sender !== viewer && (store.currentRoom?._id !== room._id || document.hidden)) store.incrementUnreadCount(room._id)
     }
-  }, [currentRoom, socket, isConnected, resetUnreadCount])
-
-  // Chat actions
-  const selectRoom = useCallback((room: ChatRoom) => {
-    if (currentRoom?._id !== room._id) {
-      setCurrentRoom(room)
+    const onTyping = (data: { chatId: string; userId: string }) => {
+      const room = resolveRoom(data.chatId)
+      if (room && data.userId !== viewer) useChatStore.getState().addTypingUser(room._id, data.userId)
     }
-  }, [currentRoom, setCurrentRoom])
-
-  const sendChatMessage = useCallback((content: string, type: 'text' | 'image' | 'file' = 'text') => {
-    if (currentRoom && content.trim() && socket && isConnected) {
-      socket.emit('sendMessage', { 
-        chatId: currentRoom._id, 
-        content: content.trim(), 
-        messageType: type 
-      })
+    const onStop = (data: { chatId: string; userId: string }) => {
+      const room = resolveRoom(data.chatId)
+      if (room) useChatStore.getState().removeTypingUser(room._id, data.userId)
     }
-  }, [currentRoom, socket, isConnected])
-
-  const handleTypingStart = useCallback(() => {
-    if (currentRoom && socket && isConnected) {
-      socket.emit('typing', { chatId: currentRoom._id })
+    const onPresence = (data: { userId: string; status: string }) => {
+      const store = useChatStore.getState()
+      if (data.status === 'online') store.addOnlineUser(data.userId)
+      else store.removeOnlineUser(data.userId)
     }
-  }, [currentRoom, socket, isConnected])
+    const onError = (error: { message?: string }) => useChatStore.getState().setError(error.message || 'El chat no está disponible temporalmente.')
+    socket.on('newMessage', onMessage); socket.on('userTyping', onTyping); socket.on('userStoppedTyping', onStop); socket.on('userPresenceUpdate', onPresence); socket.on('error', onError)
+    return () => { socket.off('newMessage', onMessage); socket.off('userTyping', onTyping); socket.off('userStoppedTyping', onStop); socket.off('userPresenceUpdate', onPresence); socket.off('error', onError) }
+  }, [socket, isConnected, viewer, reloadRooms])
 
-  const handleTypingStop = useCallback(() => {
-    if (currentRoom && socket && isConnected) {
-      socket.emit('stopTyping', { chatId: currentRoom._id })
-    }
-  }, [currentRoom, socket, isConnected])
+  useEffect(() => {
+    if (!currentRoom || !socket || !isConnected) return
+    socket.emit('joinChat', { chatId: wireId(currentRoom) })
+    useChatStore.getState().resetUnreadCount(currentRoom._id)
+    return () => { socket.emit('leaveChat', { chatId: wireId(currentRoom) }) }
+  }, [currentRoom?._id, currentRoom?.chatId, socket, isConnected])
 
-  const markMessageAsRead = useCallback((messageId: string) => {
-    if (currentRoom && socket && isConnected) {
-      socket.emit('markAsRead', { chatId: currentRoom._id, messageId })
-    }
-  }, [currentRoom, socket, isConnected])
+  const sendChatMessage = useCallback(async (content: string, type: 'text' | 'image' | 'file' = 'text') => {
+    if (!currentRoom || !content.trim() || sending.current || !viewer) return false
+    if (content.trim().length > 1000) { state.setError('El mensaje admite hasta 1,000 caracteres.'); return false }
+    sending.current = true; setIsSending(true)
+    try {
+      const result = await sendMessage(wireId(currentRoom), { content: content.trim(), messageType: type })
+      if (useChatStore.getState().ownerId !== viewer) return false
+      if (!result.success || !result.data?._id) throw new Error()
+      const message = normalizeMessage(result.data, currentRoom._id)
+      state.addMessage(currentRoom._id, message); state.updateRoom(currentRoom._id, { lastMessage: message }); state.clearError()
+      return true
+    } catch { if (useChatStore.getState().ownerId === viewer) state.setError('No se confirmó el envío. Conservamos tu texto; revisa la conexión antes de reintentar.'); return false }
+    finally { sending.current = false; setIsSending(false) }
+  }, [currentRoom, viewer])
 
-  const getTotalUnreadCount = useCallback(() => {
-    return Object.values(unreadCounts).reduce((total, count) => total + count, 0)
-  }, [unreadCounts])
-
-  const isUserOnline = useCallback((userId: string) => {
-    return onlineUsers.includes(userId)
-  }, [onlineUsers])
-
-  const getTypingUsersForRoom = useCallback((roomId: string) => {
-    return typingUsers[roomId] || []
-  }, [typingUsers])
-
-  const getRoomMessages = useCallback((roomId: string) => {
-    return messages[roomId] || []
-  }, [messages])
-
-  const getRoomUnreadCount = useCallback((roomId: string) => {
-    return unreadCounts[roomId] || 0
-  }, [unreadCounts])
-
+  const emit = (event: string, extra = {}) => { if (currentRoom && isConnected) socket?.emit(event, { chatId: wireId(currentRoom), ...extra }) }
   return {
-    // State
-    rooms,
-    currentRoom,
-    isLoading,
-    error,
-    
-    // Actions
-    selectRoom,
-    sendChatMessage,
-    handleTypingStart,
-    handleTypingStop,
-    markMessageAsRead,
-    clearError,
-    
-    // Utilities
-    getTotalUnreadCount,
-    isUserOnline,
-    getTypingUsersForRoom,
-    getRoomMessages,
-    getRoomUnreadCount,
-    addRoom
+    rooms: state.ownerId === viewer ? state.rooms : [], currentRoom, isLoading: state.isLoading, error: state.error, isSending,
+    hasMoreRooms, hasMoreMessages, reloadRooms: () => reloadRooms(), loadMoreRooms: () => reloadRooms(true), loadMoreMessages: () => loadHistory(true),
+    selectRoom: state.setCurrentRoom, addRoom: state.addRoom, sendChatMessage,
+    handleTypingStart: () => emit('typing'), handleTypingStop: () => emit('stopTyping'), markMessageAsRead: (messageId: string) => emit('markAsRead', { messageId }),
+    clearError: state.clearError,
+    getTotalUnreadCount: () => Object.values(state.unreadCounts).reduce((sum,count) => sum + count, 0),
+    isUserOnline: (id: string) => state.onlineUsers.includes(id), getTypingUsersForRoom: (id: string) => state.typingUsers[id] || [],
+    getRoomMessages: (id: string) => state.messages[id] || [], getRoomUnreadCount: (id: string) => state.unreadCounts[id] || 0,
   }
 }

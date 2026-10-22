@@ -5,6 +5,7 @@ const paymentService = require('../services/paymentService');
 const Ticket = require('../models/Ticket');
 const Event = require('../models/Event');
 const Order = require('../models/Order');
+const Notification = require('../models/Notification');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -14,7 +15,7 @@ const validateOrderCreation = [
   body('eventId').isMongoId().withMessage('Valid event ID required'),
   body('items').isArray({ min: 1 }).withMessage('At least one item is required'),
   body('items.*.ticketId').isMongoId().withMessage('Valid ticket ID required'),
-  body('items.*.quantity').isInt({ min: 1, max: 10 }).withMessage('Quantity must be between 1 and 10'),
+  body('items.*.quantity').isInt({ min: 1, max: 10 }).withMessage('Quantity must be between 1 and 10').toInt(),
   body('customerInfo.firstName').optional().trim().isLength({ min: 1, max: 50 }),
   body('customerInfo.lastName').optional().trim().isLength({ min: 1, max: 50 }),
   body('customerInfo.email').optional().isEmail(),
@@ -112,7 +113,7 @@ router.post('/orders', [protect, ...validateOrderCreation], async (req, res) => 
     });
   } catch (error) {
     logger.error('Error creating order:', error);
-    res.status(500).json({
+    res.status(error.statusCode || 400).json({
       success: false,
       message: error.message || 'Failed to create order'
     });
@@ -522,7 +523,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     let event;
 
     try {
-      event = paymentService.stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      event = paymentService.stripe.webhooks.constructEvent(req.rawBody || req.body, sig, webhookSecret);
     } catch (err) {
       logger.error(`Webhook signature verification failed: ${err.message}`);
       return res.status(400).json({
@@ -533,6 +534,10 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
     // Handle the event
     switch (event.type) {
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded':
+      await paymentService.confirmCheckout(event.data.object);
+      break;
     case 'payment_intent.succeeded': {
       const paymentIntent = event.data.object;
       logger.info(`PaymentIntent ${paymentIntent.id} succeeded`);
@@ -571,6 +576,182 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       success: false,
       message: 'Webhook processing failed'
     });
+  }
+});
+
+router.post('/orders/:orderId/checkout', protect, param('orderId').isMongoId(), async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json({ success: false, message: 'Valid order ID required' });
+  try {
+    const data = await paymentService.createCheckoutSession(req.params.orderId, req.user._id);
+    res.json({ success: true, data });
+  } catch (error) {
+    logger.error('Hosted checkout failed:', error.message);
+    res.status(error.statusCode || 400).json({ success: false, message: error.message });
+  }
+});
+
+// ─── Pagos Dominicanos: Transferencias Bancarias (RD Monetization) ───────────
+
+// @route   POST /api/payments/orders/:orderId/bank-transfer
+// @desc    Comprador sube comprobante/referencia de transferencia bancaria dominicana
+router.post('/orders/:orderId/bank-transfer', protect, param('orderId').isMongoId(), async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json({ success: false, message: 'ID de orden inválido' });
+  try {
+    const { bankName, referenceNumber, voucherUrl } = req.body;
+    if (!referenceNumber || !String(referenceNumber).trim()) {
+      return res.status(400).json({ success: false, message: 'Ingresa el número de referencia de la transferencia' });
+    }
+
+    const order = await Order.findById(req.params.orderId);
+    if (!order) return res.status(404).json({ success: false, message: 'Orden no encontrada' });
+    if (String(order.userId) !== String(req.user.id)) {
+      return res.status(403).json({ success: false, message: 'No estás autorizado a modificar esta orden' });
+    }
+
+    order.paymentMethod = 'bank_transfer_rd';
+    order.paymentStatus = 'pending';
+    order.status = 'pending_payment';
+    order.bankTransferProof = {
+      bankName: bankName ? String(bankName).slice(0, 60) : 'Transferencia Bancaria',
+      referenceNumber: String(referenceNumber).trim().slice(0, 50),
+      voucherUrl: voucherUrl ? String(voucherUrl).trim() : undefined,
+      uploadedAt: new Date(),
+      status: 'pending'
+    };
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: 'Comprobante recibido. El organizador verificará tu pago.',
+      data: order
+    });
+  } catch (error) {
+    logger.error('Submit bank transfer error:', error);
+    res.status(500).json({ success: false, message: 'No se pudo registrar el comprobante de transferencia' });
+  }
+});
+
+// @route   POST /api/payments/orders/:orderId/verify-transfer
+// @desc    Organizador aprueba o rechaza la transferencia bancaria
+router.post('/orders/:orderId/verify-transfer', protect, param('orderId').isMongoId(), async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json({ success: false, message: 'ID de orden inválido' });
+  try {
+    const { action, reason } = req.body; // 'approve' | 'reject'
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Acción inválida. Usa approve o reject' });
+    }
+
+    const order = await Order.findById(req.params.orderId).populate('eventId', 'createdBy title');
+    if (!order) return res.status(404).json({ success: false, message: 'Orden no encontrada' });
+
+    const isCreator = order.eventId && String(order.eventId.createdBy) === String(req.user.id);
+    if (!isCreator && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Solo el creador del evento o un admin puede verificar transferencias' });
+    }
+
+    if (!order.bankTransferProof) {
+      return res.status(400).json({ success: false, message: 'Esta orden no tiene un comprobante de transferencia registrado' });
+    }
+
+    order.bankTransferProof.reviewedBy = req.user.id;
+    order.bankTransferProof.reviewedAt = new Date();
+
+        if (action === 'approve') {
+      order.bankTransferProof.status = 'approved';
+      order.paymentStatus = 'succeeded';
+      order.status = 'confirmed';
+      await order.save();
+
+      // Add to event attendees if not present
+      if (order.eventId) {
+        try {
+          const eventDoc = await Event.findById(order.eventId._id || order.eventId);
+          if (eventDoc) {
+            const alreadyAttending = eventDoc.attendees && eventDoc.attendees.some(a => String(a.user) === String(order.userId));
+            if (!alreadyAttending) {
+              eventDoc.attendees.push({
+                user: order.userId,
+                status: 'confirmed',
+                joinedAt: new Date()
+              });
+              eventDoc.attendeesCount = (eventDoc.attendeesCount || 0) + 1;
+              await eventDoc.save();
+            }
+          }
+        } catch (attErr) {
+          logger.warn('Failed to update event attendees on bank transfer approval: ' + attErr.message);
+        }
+      }
+
+      // Send in-app notification to buyer
+      try {
+        await Notification.createNotification({
+          recipient: order.userId,
+          sender: req.user.id,
+          type: 'event_update',
+          title: '¡Transferencia bancaria aprobada! 🎉',
+          message: `Tu pago para "${order.eventId?.title || 'tu evento'}" fue verificado exitosamente. Tu boleta con código QR ya está activa en Mis Entradas.`,
+          data: { orderId: order._id, eventId: order.eventId?._id || order.eventId },
+          actionUrl: '/tickets',
+          priority: 'high'
+        });
+      } catch (notifErr) {
+        logger.warn('Failed to send approval notification: ' + notifErr.message);
+      }
+
+      return res.json({ success: true, message: 'Pago verificado y boleta confirmada con éxito', data: order });
+    } else {
+      order.bankTransferProof.status = 'rejected';
+      order.bankTransferProof.rejectionReason = reason ? String(reason).slice(0, 200) : 'Comprobante no coincide con el balance';
+      order.paymentStatus = 'failed';
+      await order.save();
+
+      try {
+        await Notification.createNotification({
+          recipient: order.userId,
+          sender: req.user.id,
+          type: 'event_update',
+          title: 'Transferencia bancaria no aprobada',
+          message: `El organizador de "${order.eventId?.title || 'tu evento'}" no pudo validar tu transferencia: ${order.bankTransferProof.rejectionReason}. Por favor revisa tu comprobante.`,
+          data: { orderId: order._id, eventId: order.eventId?._id || order.eventId },
+          actionUrl: `/checkout/${order.eventId?._id || order.eventId}`,
+          priority: 'high'
+        });
+      } catch (notifErr) {
+        logger.warn('Failed to send rejection notification: ' + notifErr.message);
+      }
+
+      return res.json({ success: true, message: 'Transferencia rechazada', data: order });
+    }
+  } catch (error) {
+    logger.error('Verify bank transfer error:', error);
+    res.status(500).json({ success: false, message: 'Error al verificar la transferencia' });
+  }
+});
+
+// @route   GET /api/payments/organizer/pending-transfers
+// @desc    Obtener transferencias pendientes de verificación para eventos del organizador
+router.get('/organizer/pending-transfers', protect, async (req, res) => {
+  try {
+    const events = await Event.find({ createdBy: req.user.id }).select('_id');
+    const eventIds = events.map(e => e._id);
+
+    const pendingOrders = await Order.find({
+      eventId: { $in: eventIds },
+      'bankTransferProof.status': 'pending'
+    })
+      .populate('userId', 'firstName lastName email username')
+      .populate('eventId', 'title date location.address')
+      .sort({ 'bankTransferProof.uploadedAt': -1 });
+
+    res.json({
+      success: true,
+      count: pendingOrders.length,
+      data: pendingOrders
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'No se pudieron cargar las transferencias pendientes' });
   }
 });
 

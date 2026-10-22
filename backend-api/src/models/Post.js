@@ -8,7 +8,7 @@ const postSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['event_share', 'connection', 'tribe_join', 'event_review', 'networking', 'general', 'achievement', 'text'],
+    enum: ['event_share', 'connection', 'tribe_join', 'event_review', 'networking', 'general', 'achievement', 'text', 'image'],
     default: 'general'
   },
   content: {

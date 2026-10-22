@@ -32,12 +32,17 @@ export interface RegisterData {
   email: string;
   password: string;
   // confirmPassword is frontend-only validation — never sent to backend
-  firstName: string;
-  lastName: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
   acceptTerms: boolean;
   interests?: string[];
   birthDate: string;
   phone?: string;
+  country?: string;
+  countryCode?: string;
+  preferredLocale?: string;
+  preferredCurrency?: string;
 }
 
 export interface AuthResponse {
@@ -57,12 +62,17 @@ export interface User {
   lastName: string;
   name: string;      // Full name (computed from firstName + lastName)
   avatar?: string;
+  country?: string;
+  countryCode?: string;
+  preferredLocale?: string;
+  preferredCurrency?: string;
   bio?: string;
   phone?: string;
   location?: LocationData;
   interests: string[];
   role: 'user' | 'admin';
   isActive: boolean;
+  isPrivate?: boolean;
   followers?: string[];
   following?: string[];
   points?: number;
@@ -96,6 +106,7 @@ export interface LocationData {
 
 // Event Types
 export interface Event {
+  timeZone?: string;
   _id: string;
   title: string;
   description: string;
@@ -106,6 +117,7 @@ export interface Event {
   images: EventImage[];
   maxAttendees?: number;
   attendees: EventAttendee[];
+  attendanceSummary?: unknown;
   createdBy: User;
   status: EventStatus;
   isPrivate: boolean;
@@ -202,6 +214,7 @@ export interface TribeMember {
 // Chat Types
 export interface ChatRoom {
   _id: string;
+  chatId?: string;
   type: 'direct' | 'group' | 'tribe' | 'event';
   name?: string;
   description?: string;

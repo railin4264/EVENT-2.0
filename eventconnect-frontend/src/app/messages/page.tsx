@@ -28,17 +28,24 @@ function MessagesContent() {
     getTypingUsersForRoom,
     isUserOnline,
     addRoom,
-    isLoading
+    isLoading, error, isSending, reloadRooms, hasMoreRooms, hasMoreMessages, loadMoreRooms, loadMoreMessages
   } = useChat()
 
   const searchParams = useSearchParams()
   const userIdParam = searchParams.get('userId')
+  const chatIdParam = searchParams.get('chatId')
+  useEffect(() => {
+    if (!chatIdParam) return
+    const room = rooms.find(room => room._id === chatIdParam || room.chatId === chatIdParam)
+    if (room) { selectRoom(room); window.history.replaceState(null, '', '/messages') }
+  }, [chatIdParam, rooms, selectRoom])
   const [isCreatingChat, setIsCreatingChat] = useState(false)
 
   const [messageInput, setMessageInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [showChatMenu, setShowChatMenu] = useState(false)
+  const [showParticipants, setShowParticipants] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout>()
 
@@ -74,7 +81,8 @@ function MessagesContent() {
             selectRoom(response.data)
           }
         } catch (error) {
-          console.error('Error creating chat:', error)
+          const { useChatStore } = await import('@/stores/chatStore')
+          useChatStore.getState().setError('No se pudo abrir la conversación. Vuelve al perfil y reintenta.')
         } finally {
           setIsCreatingChat(false)
           window.history.replaceState(null, '', '/messages')
@@ -87,10 +95,11 @@ function MessagesContent() {
     }
   }, [userIdParam, rooms, user, selectRoom, addRoom, isCreatingChat, isLoading])
 
-  const handleSendMessage = () => {
-    if (messageInput.trim() && currentRoom) {
-      sendChatMessage(messageInput.trim())
-      setMessageInput('')
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !currentRoom || isSending) return
+    const sentText = messageInput
+    if (await sendChatMessage(sentText.trim())) {
+      setMessageInput(value => value === sentText ? '' : value)
       handleStopTyping()
     }
   }
@@ -162,10 +171,12 @@ function MessagesContent() {
   }
 
   const currentMessages = currentRoom ? getRoomMessages(currentRoom._id) : []
+  const otherUser = currentRoom?.participants.find(p => (typeof p.user === 'string' ? p.user : p.user._id) !== (user?._id || user?.id))?.user
+  const otherUserId = typeof otherUser === 'string' ? otherUser : otherUser?._id
   const typingUsers = currentRoom ? getTypingUsersForRoom(currentRoom._id) : []
 
   return (
-    <div className="h-screen bg-background flex overflow-hidden">
+    <div className="h-[calc(100dvh-8rem)] min-h-[28rem] bg-background flex overflow-hidden">
       {/* Background Gradients */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[100px]" />
@@ -173,7 +184,7 @@ function MessagesContent() {
       </div>
 
       {/* Chat Rooms Sidebar */}
-      <div className="w-80 glass border-r border-border/40 flex flex-col z-10">
+      <div className={`w-full md:w-80 glass border-r border-border/40 flex-col z-10 ${currentRoom ? 'hidden md:flex' : 'flex'}`}>
         {/* Header */}
         <div className="p-4 border-b border-border/40">
           <div className="flex items-center justify-between mb-4">
@@ -184,7 +195,7 @@ function MessagesContent() {
               <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-accent/10">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
                 <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                  {isConnected ? 'LIVE' : 'OFFLINE'}
+                  {isConnected ? 'En vivo' : 'Reconectando'}
                 </span>
               </div>
               <motion.button
@@ -212,14 +223,16 @@ function MessagesContent() {
           </div>
         </div>
 
+      {error && <div role="alert" className="fixed bottom-24 left-4 right-4 z-50 mx-auto max-w-xl rounded-xl border border-destructive/30 bg-card p-4 text-sm shadow-lg">{error}<button type="button" onClick={() => void reloadRooms()} className="ml-3 underline">Reintentar</button></div>}
         {/* Rooms List */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+      {hasMoreRooms && <button type="button" disabled={isLoading} onClick={() => void loadMoreRooms()} className="m-3 rounded-xl border p-3 text-sm">Cargar más conversaciones</button>}
           {rooms.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
               <div className="w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center mb-4">
                 <MessageCircle className="w-8 h-8 opacity-50" />
               </div>
-              <p className="font-medium">No hay chats</p>
+              <p className="font-medium">{isLoading ? 'Cargando conversaciones…' : 'No hay chats'}</p>
               <p className="text-sm opacity-70">Inicia una nueva conversación</p>
             </div>
           ) : (
@@ -231,6 +244,7 @@ function MessagesContent() {
 
                 return (
                   <motion.div
+                    role="button" tabIndex={0} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectRoom(room) } }}
                     key={room._id}
                     layoutId={`room-${room._id}`}
                     onClick={() => selectRoom(room)}
@@ -296,12 +310,19 @@ function MessagesContent() {
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col relative z-0">
+      <div className={`flex-1 flex-col relative z-0 ${currentRoom ? 'flex' : 'hidden md:flex'}`}>
         {currentRoom ? (
           <>
             {/* Chat Header */}
             <div className="glass border-b border-border/40 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => selectRoom(null as any)}
+                  className="md:hidden p-2 -ml-1 rounded-xl hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Volver a conversaciones"
+                >
+                  ←
+                </button>
                 <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-border/50">
                   {currentRoom.type === 'direct' && currentRoom.participants.find(p => typeof p.user === 'object' && p.user._id !== user?._id && p.user.avatar) ? (
                     <img
@@ -335,13 +356,13 @@ function MessagesContent() {
               </div>
 
               <div className="flex items-center gap-1">
-                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2.5 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-primary transition-colors">
+                <motion.button disabled aria-label="Llamadas no disponibles" title="Las llamadas todavía no están habilitadas" className="p-2.5 rounded-xl text-muted-foreground opacity-40 cursor-not-allowed">
                   <Phone className="w-5 h-5" />
                 </motion.button>
-                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2.5 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-primary transition-colors">
+                <motion.button disabled aria-label="Videollamadas no disponibles" title="Las videollamadas todavía no están habilitadas" className="p-2.5 rounded-xl text-muted-foreground opacity-40 cursor-not-allowed">
                   <Video className="w-5 h-5" />
                 </motion.button>
-                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="p-2.5 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-primary transition-colors">
+                <motion.button aria-label="Ver participantes" onClick={() => setShowParticipants(value => !value)} className="p-2.5 rounded-xl hover:bg-muted/50 text-muted-foreground hover:text-primary transition-colors">
                   <Info className="w-5 h-5" />
                 </motion.button>
 
@@ -369,17 +390,9 @@ function MessagesContent() {
                           className="absolute right-0 mt-2 w-56 glass-strong rounded-xl shadow-xl border border-border/50 py-2 z-20 backdrop-blur-xl"
                         >
                           <div className="px-2 py-1 space-y-1">
-                            {['Ver perfil', 'Silenciar', 'Buscar'].map((item) => (
-                              <button key={item} className="w-full px-3 py-2 text-left text-sm font-medium rounded-lg hover:bg-white/10 transition-colors">
-                                {item}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="my-1 border-t border-border/40" />
-                          <div className="px-2 py-1">
-                            <button className="w-full px-3 py-2 text-left text-sm font-medium rounded-lg hover:bg-red-500/10 text-red-500 transition-colors">
-                              Eliminar chat
-                            </button>
+                            <button type="button" disabled={!otherUserId} onClick={() => otherUserId && router.push(`/users/${otherUserId}`)} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">Ver perfil</button>
+                            <button type="button" onClick={() => { setShowParticipants(true); setShowChatMenu(false) }} className="w-full px-3 py-2 text-left text-sm hover:bg-muted">Ver participantes</button>
+                            <p className="px-3 py-2 text-xs text-muted-foreground">Silenciar y eliminar conversaciones aún no están habilitados.</p>
                           </div>
                         </motion.div>
                       </>
@@ -389,8 +402,10 @@ function MessagesContent() {
               </div>
             </div>
 
+            {showParticipants && <section aria-label="Participantes" className="border-b border-border bg-card p-4"><div className="flex justify-between"><h3 className="font-semibold">Participantes</h3><button type="button" onClick={() => setShowParticipants(false)} className="text-sm underline">Cerrar</button></div><ul className="mt-3 flex flex-wrap gap-3">{currentRoom.participants.map(participant => { const id = typeof participant.user === 'string' ? participant.user : participant.user._id; const name = typeof participant.user === 'string' ? 'Ver perfil' : [participant.user.firstName, participant.user.lastName].filter(Boolean).join(' ') || participant.user.username; return <li key={id}><button type="button" onClick={() => router.push(`/users/${id}`)} className="rounded-lg border px-3 py-2 text-sm">{name}</button></li> })}</ul></section>}
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 custom-scrollbar bg-white/30 dark:bg-black/30 backdrop-blur-[2px]">
+      {hasMoreMessages && currentRoom && <button type="button" onClick={() => void loadMoreMessages()} className="m-3 rounded-xl border p-3 text-sm">Ver mensajes anteriores</button>}
               {currentMessages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-muted-foreground/50">
                   <MessageCircle className="w-20 h-20 mb-4 stroke-1" />
@@ -475,15 +490,16 @@ function MessagesContent() {
             <div className="p-4 glass border-t border-border/40">
               <div className="relative flex items-end gap-2 bg-muted/30 p-2 rounded-2xl border border-border/40 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all">
                 <div className="flex gap-1 pb-1">
-                  <button className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                  <button disabled aria-label="Adjuntos no disponibles" title="Los adjuntos aún no están habilitados en esta pantalla" className="p-2 rounded-xl text-muted-foreground opacity-40 cursor-not-allowed">
                     <Plus className="w-5 h-5" />
                   </button>
-                  <button className="p-2 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                  <button disabled aria-label="Adjuntos no disponibles" title="Los adjuntos aún no están habilitados en esta pantalla" className="p-2 rounded-xl text-muted-foreground opacity-40 cursor-not-allowed">
                     <Image className="w-5 h-5" />
                   </button>
                 </div>
 
                 <textarea
+                  maxLength={1000}
                   value={messageInput}
                   onChange={(e) => handleInputChange(e.target.value)}
                   onKeyDown={(e) => {
@@ -500,9 +516,10 @@ function MessagesContent() {
                 <div className="pb-1 pr-1">
                   <motion.button
                     whileTap={{ scale: 0.9 }}
+                    aria-label={isSending ? "Guardando mensaje" : "Enviar mensaje"}
                     onClick={handleSendMessage}
-                    disabled={!messageInput.trim()}
-                    className={`p-3 rounded-xl transition-all ${messageInput.trim()
+                    disabled={!messageInput.trim() || isSending}
+                    className={`p-3 rounded-xl transition-all ${messageInput.trim() && !isSending
                       ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-primary/40'
                       : 'bg-muted text-muted-foreground cursor-not-allowed'
                       }`}

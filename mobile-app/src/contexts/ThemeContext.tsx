@@ -339,10 +339,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error('useTheme must be inside ThemeProvider');
+  if (!ctx) {
+    return {
+      theme: darkTheme,
+      isDark: true,
+      themeMode: 'dark' as ThemeMode,
+      setThemeMode: (_mode: ThemeMode) => {},
+      toggleTheme: () => {},
+      setTheme: () => {},
+    };
+  }
   return ctx;
 }
 
 // ─── Convenience export (para screens que importan `theme` directamente) ────
 export { darkTheme as theme };
 export default darkTheme;
+
+export { darkTheme, lightTheme };

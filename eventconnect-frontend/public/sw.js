@@ -1,6 +1,6 @@
-const CACHE_NAME = 'eventconnect-v4'
+const CACHE_NAME = 'eventconnect-v6'
 const urlsToCache = [
-  '/',
+  '/offline.html',
   '/icons/icon.svg',
   '/manifest.json'
 ]
@@ -37,7 +37,7 @@ self.addEventListener('install', (event) => {
         )
       })
       .then(() => {
-        console.log('Service worker v4 installed')
+        console.log('Service worker v6 installed')
         return self.skipWaiting()
       })
   )
@@ -49,7 +49,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) =>
       Promise.all(
         cacheNames
-          .filter(name => name !== CACHE_NAME)
+          .filter(name => name.startsWith('eventconnect-') && name !== CACHE_NAME)
           .map(name => caches.delete(name))
       )
     ).then(() => self.clients.claim())
@@ -72,29 +72,30 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // For same-origin navigation requests: network first
+  // Never cache personalized HTML or serve the home as a different page.
   if (event.request.destination === 'document') {
     event.respondWith(
       fetch(event.request)
-        .then((response) => {
-          const clone = response.clone()
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone))
-          return response
-        })
-        .catch(() =>
-          caches.match(event.request).then(cached => cached || caches.match('/'))
-        )
+        .catch(async () => (await caches.match('/offline.html')) ||
+          new Response('Sin conexión. Vuelve a intentarlo cuando tengas internet.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }))
     )
     return
   }
 
-  // For same-origin static assets: cache first
+  // API responses and RSC streams can contain private data: network only.
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/') || event.request.headers.get('RSC') === '1' || url.searchParams.has('_rsc')) return
+
+  // Cache only the explicit offline shell. Route/prefetch requests use the
+  // browser network directly; a fetch failure must not become a synthetic 408.
+  if (!urlsToCache.includes(url.pathname)) return
+
+  // For the offline shell assets: cache first
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached
       return fetch(event.request).catch(() => {
         // Silently fail for non-critical assets
-        return new Response('', { status: 408, statusText: 'Request failed' })
+        return Response.error()
       })
     })
   )

@@ -57,15 +57,15 @@ api.interceptors.request.use(
 
     // Add auth token from sessionStorage (NOT localStorage for tab isolation)
     if (typeof window !== 'undefined') {
-      const token = sessionStorage.getItem('auth-token')
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`
-      }
+      try {
+        const token = sessionStorage.getItem('auth-token')
+        if (token) config.headers.Authorization = `Bearer ${token}`
+      } catch { /* Public browsing also works when browser storage is unavailable. */ }
     }
 
     // Add cache headers for GET requests
     if (config.method === 'get') {
-      config.headers['Cache-Control'] = 'max-age=300'
+      config.headers['Cache-Control'] = config.headers['Cache-Control'] || 'max-age=300'
     }
 
     // Add performance monitoring
@@ -92,7 +92,8 @@ api.interceptors.response.use(
     }
 
     // Cache GET responses
-    if (config.method === 'get' && response.status === 200) {
+    if (config.method === 'get' && response.status === 200 && config.responseType !== 'blob' &&
+        !/no-store/i.test(String(response.headers['cache-control'] || ''))) {
       const url = config.url || ''
       const params = config.params
       
@@ -116,6 +117,7 @@ api.interceptors.response.use(
     return response
   },
   async (error: AxiosError) => {
+    if (axios.isCancel(error)) return Promise.reject(error)
     const config = error.config as ExtendedAxiosRequestConfig
     
     // Performance monitoring for failed requests - only in development
@@ -124,42 +126,19 @@ api.interceptors.response.use(
       console.error(`Failed API request: ${config.method?.toUpperCase()} ${config.url} failed after ${duration}ms`)
     }
 
-    // Handle 401 errors by redirecting to login
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        const currentPath = window.location.pathname
-
-        console.log('401 error received:', {
-          url: config?.url,
-          currentPath,
-          isLoginPage: currentPath === '/login',
-          isLoginRequest: config?.url?.includes('/auth/login')
-        })
-
-        // Don't auto-logout if already on login/register pages or if it's a login request
-        if (currentPath !== '/login' && currentPath !== '/register' && !config?.url?.includes('/auth/login')) {
-          console.log('Auto-logout triggered due to 401')
-
-          // Clear all auth data
-          localStorage.removeItem('auth-token')
-          localStorage.removeItem('refresh-token')
-          localStorage.removeItem('auth-storage')
-          document.cookie = 'auth-token=; path=/; max-age=0'
-
-          // Prevent redirect loops by checking if we're already redirecting
-          const isRedirecting = sessionStorage.getItem('auth-redirecting')
-          if (!isRedirecting) {
-            sessionStorage.setItem('auth-redirecting', 'true')
-
-            // Add a small delay to prevent immediate redirect loops
-            setTimeout(() => {
-              sessionStorage.removeItem('auth-redirecting')
-              window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
-            }, 100)
-          }
-        } else {
-          console.log('401 ignored - on login page or login request')
-        }
+    // Authentication failures must clear the same session storage used by login.
+    // Login/reset endpoints report their errors inline without navigation loops.
+    if (error.response?.status === 401 && typeof window !== 'undefined' &&
+        !config?.url?.includes('/auth/')) {
+      const currentPath = window.location.pathname + window.location.search
+      const { useAuthStore } = await import('@/stores/authStore')
+      const hadSession = useAuthStore.getState().isAuthenticated || Boolean(config?.headers?.Authorization || config?.headers?.authorization)
+      if (hadSession) useAuthStore.getState().logout()
+      let redirecting = false
+      try { redirecting = !!sessionStorage.getItem('auth-redirecting') } catch { /* Storage may be blocked. */ }
+      if (hadSession && !['/login', '/register'].includes(window.location.pathname) && !redirecting) {
+        try { sessionStorage.setItem('auth-redirecting', 'true') } catch { /* Navigation still works without storage. */ }
+        window.location.assign(`/login?redirect=${encodeURIComponent(currentPath)}`)
       }
     }
 
@@ -167,7 +146,7 @@ api.interceptors.response.use(
     if (error.response?.status === 429) {
       const retryAfter = error.response.headers['retry-after']
       const waitSeconds = retryAfter ? parseInt(retryAfter, 10) : 60
-      toast.error(`Too many requests. Please wait ${waitSeconds} seconds before trying again.`, {
+      toast.error(`Demasiadas solicitudes. Espera ${waitSeconds} segundos e inténtalo de nuevo.`, {
         duration: waitSeconds * 1000,
         id: 'rate-limit',
       })
@@ -177,13 +156,16 @@ api.interceptors.response.use(
     // Retry on network errors and 5xx server errors (not on 4xx client errors)
     const isNetworkError = !error.response
     const isServerError = error.response && error.response.status >= 500
-    const isRetryableMethod = ['get', 'put', 'patch'].includes(config?.method?.toLowerCase() || '')
+    const isRetryableMethod = ['get', 'head', 'options'].includes(config?.method?.toLowerCase() || '')
 
     if ((isNetworkError || isServerError) && isRetryableMethod && config) {
       const retryCount = (config as ExtendedAxiosRequestConfig)._retryCount || 0
 
       if (retryCount < MAX_RETRIES) {
         ;(config as ExtendedAxiosRequestConfig)._retryCount = retryCount + 1
+        if (isNetworkError && config.baseURL?.includes('localhost:5000')) {
+          config.baseURL = config.baseURL.replace('localhost:5000', '127.0.0.1:5000')
+        }
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * Math.pow(2, retryCount)))
         return api(config)
       }
@@ -191,7 +173,7 @@ api.interceptors.response.use(
 
     // Network error feedback
     if (isNetworkError) {
-      toast.error('Network error. Please check your connection.', { id: 'network-error' })
+      toast.error('No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.', { id: 'network-error' })
     }
 
     return Promise.reject(error)

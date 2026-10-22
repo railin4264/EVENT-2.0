@@ -1,1340 +1,453 @@
-
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import type { Event } from '@/types/api.types'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { MapPin, Search, Filter, Calendar, Clock, Users, Star, Heart, X, Info, FileText } from 'lucide-react'
-
-// Alias para iconos faltantes
-import { MapPin as Navigation, Star as DollarSign, Star as Sliders, Star as Grid, Star as List, Star as Target, Star as Music, Star as Palette, FileText as Code, Star as Utensils, Star as Dumbbell, Star as GraduationCap } from 'lucide-react'
-import { useEventsStore } from '@/stores/eventsStore'
-import LoadingSpinner from '@/components/redesign/ui/loading-spinner'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getDiscoveryEvents, attendEvent, type DiscoveryEvent as DiscoveryEventType } from '@/lib/api/events'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Compass, Search, SlidersHorizontal, Map as MapIcon, Columns, LayoutGrid, Sparkles, MapPin, Calendar, ShieldCheck, Plus, ArrowRight, RotateCcw } from 'lucide-react'
+import { getEvents, attendEvent, leaveEvent, type DiscoveryEvent } from '@/lib/api/events'
 import { tribesService } from '@/lib/api/services/tribes.service'
-import { useAnalytics } from '@/components/providers/AnalyticsProvider'
-import QuickFilters, { type QuickFilterType } from '@/components/discovery/QuickFilters'
+import { apiClient } from '@/lib/api/client'
+import { useAuthStore } from '@/stores/authStore'
+import { useLocaleStore } from '@/stores/localeStore'
+import { useDiscoveryArea } from '@/stores/discoveryAreaStore'
+import { areaCenter, areaParams, WORLD_AREA } from '@/lib/discovery-area'
+import { authPageHref } from '@/lib/auth/redirect'
+import { CATEGORY_LIST, categoryMeta } from '@/lib/categories'
+import { formatEventDate, formatPrice } from '@/lib/event-display'
+import { getEventPhase } from '@/components/events/event-phase'
+import { matchesBudget, matchesMoment, validCoordinates, distanceKm, type MomentFilter } from '@/components/discovery/discovery-filters'
+import { discoveryQuery } from '@/components/discovery/discovery-query'
 import { useFavorites } from '@/hooks/useFavorites'
-import ShareButton from '@/components/discovery/ShareButton'
-import RecommendedEvents from '@/components/ai/RecommendedEvents'
-import CountdownTimer from '@/components/discovery/CountdownTimer'
-import ParallaxCard from '@/components/discovery/ParallaxCard'
 import { useToast } from '@/components/redesign/ui/use-toast'
-import { ImageWithFallback } from '@/components/redesign/figma/ImageWithFallback'
-import { CldImage } from 'next-cloudinary'
-import { EmptyState } from '@/components/ui/EmptyState'
+import { useAnalytics } from '@/components/providers/AnalyticsProvider'
+import { LocationPicker } from '@/components/discovery/LocationPicker'
+import ContentFilterModal, { DEFAULT_CONTENT_PREFERENCES, loadStoredPreferences } from '@/components/discovery/ContentFilterModal'
+import { DISCOVERY_VIBES, RD_HUBS, type RDHub } from '@/components/discovery/map/categoryTheme'
+import DiscoveryCarousel from '@/components/discovery/map/DiscoveryCarousel'
+import DiscoveryDetailPanel from '@/components/discovery/map/DiscoveryDetailPanel'
+import { LiveVibeRadar } from '@/components/discovery/LiveVibeRadar'
+import { NearbyFlashDeals } from '@/components/events/NearbyFlashDeals'
 
-// Componente de mapa personalizado para evitar problemas de SSR
 const LazyMapComponent = dynamic(() => import('@/components/discovery/LazyMapComponent'), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-      <LoadingSpinner variant="branded" size="lg" text="Cargando mapa..." />
-    </div>
-  )
+  ssr: false, loading: () => <div className="grid h-full place-items-center bg-slate-950 text-sm text-slate-300" role="status">Preparando el mapa…</div>
 })
-
-interface EventLocation {
-  type: string
-  coordinates: [number, number]
-  address: string
-  venue?: string
+type Layer = 'events' | 'ideas' | 'tribes'
+type Layout = 'map' | 'split' | 'list'
+type Center = { lat: number; lng: number; address?: string }
+type CommunityItem = {
+  _id: string; title?: string; name?: string; description?: string; category?: string
+  images?: Array<string | { url: string }>; avatar?: string
+  location?: { coordinates?: [number, number]; address?: string; city?: string; venue?: string }
+  zone?: { name?: string; city?: string; location?: { coordinates?: [number, number] } }
+  membersCount?: number; memberCount?: number; supportersCount?: number; quorumTarget?: number; supported?: boolean
+  distance?: number
 }
-
-// Use the type from the API
-type DiscoveryEvent = DiscoveryEventType
-
-// Alias for Tribe to use in the map
-type DiscoveryTribe = Awaited<ReturnType<typeof tribesService.getNearbyTribes>>['data'][0]
-
-interface UserLocation {
-  lat: number
-  lng: number
-  address?: string
-}
-
-const categoryIcons = {
-  'tecnología': Code,
-  'música': Music,
-  'arte': Palette,
-  'gastronomía': Utensils,
-  'deportes': Dumbbell,
-  'educación': GraduationCap,
-  'networking': Users,
-  'entretenimiento': Star,
-  'cultura': Heart,
-  'salud': Target
-}
-
-const categoryColors = {
-  'tecnología': '#3B82F6',
-  'música': '#8B5CF6',
-  'arte': '#EC4899',
-  'gastronomía': '#F59E0B',
-  'deportes': '#10B981',
-  'educación': '#6366F1',
-  'networking': '#EF4444',
-  'entretenimiento': '#F97316',
-  'cultura': '#84CC16',
-  'salud': '#06B6D4'
-}
+type RadarEvent = DiscoveryEvent & { isSecretLocation?: boolean }
+const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 text-sm font-medium transition-colors hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:opacity-50'
+const input = 'min-h-11 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-400/20'
 
 export default function DiscoveryPage() {
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
-  const [viewType, setViewType] = useState<'events' | 'tribes'>('events')
-  const [userLocation, setUserLocation] = useState<UserLocation | null>(null)
-  const [selectedEvent, setSelectedEvent] = useState<DiscoveryEvent | null>(null)
-  const [selectedTribe, setSelectedTribe] = useState<DiscoveryTribe | null>(null)
-  const [searchRadius, setSearchRadius] = useState(10) // km
+  const router = useRouter()
+  const { area, setArea, initialized } = useDiscoveryArea()
+  const { user, isAuthenticated } = useAuthStore()
+  const { config } = useLocaleStore()
+  const identity = user?.id || user?._id || 'guest'
+  const [viewMode, setViewMode] = useState<Layout>('map')
+  const [viewType, setViewType] = useState<Layer>('events')
+  const [mapStyle, setMapStyle] = useState<'dark' | 'light' | 'satellite'>('dark')
+  const [selectedEvent, setSelectedEvent] = useState<RadarEvent | null>(null)
+  const [selectedTribe, setSelectedTribe] = useState<CommunityItem | null>(null)
+  const [selectedIdea, setSelectedIdea] = useState<CommunityItem | null>(null)
+  const [flyToTarget, setFlyToTarget] = useState<(Center & { zoom?: number; ts?: number }) | null>(null)
+  const [activeHubId, setActiveHubId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [serverSearch, setServerSearch] = useState('')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [priceRange, setPriceRange] = useState([0, 1000])
-  const [showFilters, setShowFilters] = useState(false)
-  const [isLocationLoading, setIsLocationLoading] = useState(true)
-  const [quickFilter, setQuickFilter] = useState<QuickFilterType>(null)
-
-  // New Filter States
-  const [searchLocation, setSearchLocation] = useState('')
+  const [quickFilter, setQuickFilter] = useState<MomentFilter>(null)
   const [activeVibe, setActiveVibe] = useState<string | null>(null)
-  const [onlyFree, setOnlyFree] = useState(false)
-
-  // Debounced filters to reduce API calls
-  const [debouncedRadius, setDebouncedRadius] = useState(searchRadius)
-  const [debouncedPriceRange, setDebouncedPriceRange] = useState(priceRange)
-
-  // Analytics tracking
-  const { trackEventInteraction, trackClick, trackFeatureUsage } = useAnalytics()
-
-  // Favorites hook
-  const { toggleFavorite, isFavorite } = useFavorites()
-
-  // Query client for refetching
+  const [companionFilter, setCompanionFilter] = useState<'crew' | 'couple' | 'family' | 'solo' | null>(null)
+  const [budget, setBudget] = useState('')
+  const [queryBudget, setQueryBudget] = useState('')
+  const [currency, setCurrency] = useState<string>(config.currency || 'DOP')
+  const [showFilters, setShowFilters] = useState(false)
+  const [showLocation, setShowLocation] = useState(false)
+  const [contentPrefs, setContentPrefs] = useState(DEFAULT_CONTENT_PREFERENCES)
+  const [isContentFilterOpen, setIsContentFilterOpen] = useState(false)
+  const [busyAction, setBusyAction] = useState<string | null>(null)
+  const actionLock = useRef(false)
+  const [clock, setClock] = useState(() => new Date())
   const queryClient = useQueryClient()
   const { toast } = useToast()
-
-  // Debounce filters to prevent excessive API calls
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedRadius(searchRadius)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [searchRadius])
+  const { toggleFavorite, isFavorite } = useFavorites()
+  const { trackEventInteraction } = useAnalytics()
+  const center = useMemo(() => areaCenter(area), [area])
+  const mapCenter = center || { lat: 20, lng: 0, address: 'Mundial' }
+  const scope = useMemo(() => areaParams(area), [area])
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedPriceRange(priceRange)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [priceRange])
-
-  // Request user location automatically on mount with high accuracy
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const newLocation: UserLocation = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          }
-
-          // Get address via reverse geocoding using Google Maps API
-          try {
-            const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-            if (apiKey) {
-              const response = await fetch(
-                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${newLocation.lat},${newLocation.lng}&key=${apiKey}`
-              )
-              const data = await response.json()
-              if (data.results && data.results.length > 0) {
-                newLocation.address = data.results[0].formatted_address
-              }
-            } else {
-              console.warn('Google Maps API Key missing for Geocoding')
-            }
-          } catch (error) {
-            console.warn('Could not get address for location using Google Maps')
-          }
-
-          setUserLocation(newLocation)
-          setIsLocationLoading(false)
-
-          // Track location permission granted
-          trackFeatureUsage?.('location_permission_granted')
-        },
-        (error) => {
-          console.warn('Geolocation error:', error.message)
-          // Fallback to default location
-          setUserLocation({
-            lat: 19.4326,
-            lng: -99.1332,
-            address: 'Ciudad de México, México'
-          })
-          setIsLocationLoading(false)
-          trackFeatureUsage?.('location_permission_denied')
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      )
-
-      // Watch position for continuous updates
-      const watchId = navigator.geolocation.watchPosition(
-        async (position) => {
-          const newLocation: UserLocation = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          }
-
-          // Only update if moved more than 100m to reduce API calls
-          if (userLocation) {
-            const distance = calculateDistance(
-              userLocation.lat,
-              userLocation.lng,
-              newLocation.lat,
-              newLocation.lng
-            )
-            if (distance < 0.1) return // Less than 100m, ignore update
-          }
-
-          setUserLocation(newLocation)
-        },
-        (error) => {
-          console.warn('Watch position error:', error.message)
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 300000 // 5 minutes
-        }
-      )
-
-      return () => navigator.geolocation.clearWatch(watchId)
-    } else {
-      // Default location
-      setUserLocation({
-        lat: 19.4326,
-        lng: -99.1332,
-        address: 'Ciudad de México, México'
-      })
-      setIsLocationLoading(false)
+    setContentPrefs(loadStoredPreferences())
+    const params = new URLSearchParams(window.location.search)
+    const q = params.get('q')
+    if (q) setSearchQuery(q.slice(0, 100))
+    if (params.get('category')) setSelectedCategories([categoryMeta(params.get('category')).slug])
+    const layer = params.get('layer')
+    if (layer === 'events' || layer === 'ideas' || layer === 'tribes') setViewType(layer)
+    const hub = RD_HUBS.find(h => h.id === params.get('hub'))
+    if (hub) {
+      setActiveHubId(hub.id)
+      setArea({ kind: 'nearby', label: hub.name + ' · ' + hub.radius + ' km', lat: hub.lat, lng: hub.lng, radius: hub.radius, source: 'map' })
     }
-  }, [])
+    const timer = setInterval(() => setClock(new Date()), 60000)
+    return () => clearInterval(timer)
+  }, [setArea])
+  useEffect(() => {
+    const timer = setTimeout(() => setServerSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+  useEffect(() => {
+    const timer = setTimeout(() => setQueryBudget(budget.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [budget])
+  useEffect(() => {
+    if (config.currency) setCurrency(config.currency)
+  }, [config.currency])
 
-  // Calculate distance between two points using Haversine formula
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371 // Radius of the Earth in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180
-    const dLon = (lon2 - lon1) * Math.PI / 180
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
-  }
+  useEffect(() => {
+    setSelectedEvent(null); setSelectedTribe(null); setSelectedIdea(null); setFlyToTarget(null)
+  }, [area, viewType, identity, serverSearch, selectedCategories, quickFilter, activeVibe, companionFilter, budget, currency, contentPrefs])
+  useEffect(() => { setShowLocation(false) }, [area])
 
-  // Fetch nearby events
-  const { data: rawEvents, isLoading } = useQuery({
-    queryKey: ['discovery-events', userLocation?.lat, userLocation?.lng, debouncedRadius, selectedCategories, debouncedPriceRange],
-    queryFn: async () => {
-      if (!userLocation) return []
-
-      return await getDiscoveryEvents({
-        lat: userLocation.lat,
-        lng: userLocation.lng,
-        radius: debouncedRadius,
-        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-        priceMin: debouncedPriceRange[0],
-        priceMax: debouncedPriceRange[1],
-        limit: 50
-      })
-    },
-    enabled: !!userLocation && !isLocationLoading,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false
-  })
-
-  // Fetch nearby tribes
-  const { data: rawTribes, isLoading: isTribesLoading } = useQuery({
-    queryKey: ['discovery-tribes', userLocation?.lat, userLocation?.lng, debouncedRadius, selectedCategories],
-    queryFn: async () => {
-      if (!userLocation) return []
-
-      const response = await tribesService.getNearbyTribes({
-        lat: userLocation.lat,
-        lng: userLocation.lng,
-        radius: debouncedRadius * 1000 // Convert km to meters for backend
-      })
-
-      // Filter by category if selected
-      let tribes = response.data || []
-      if (selectedCategories.length > 0) {
-        tribes = tribes.filter((t: any) => selectedCategories.includes(t.category?.toLowerCase()))
-      }
-      return tribes
-    },
-    enabled: !!userLocation && !isLocationLoading && viewType === 'tribes',
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false
-  })
-
-  // Process events with distance calculation and sorting
-  const events = useMemo(() => {
-    if (!rawEvents || !userLocation) return []
-
-    // Events already have distance calculated from the API
-    const eventsWithDistance = rawEvents.map((event: DiscoveryEvent) => {
-      // If distance not calculated by API, calculate it here
-      const distance = event.distance || calculateDistance(
-        userLocation.lat,
-        userLocation.lng,
-        event.location?.coordinates?.[1] || 0, // lat
-        event.location?.coordinates?.[0] || 0  // lng
-      )
-
-      return {
-        ...event,
-        distance: Math.round(distance * 10) / 10 // Round to 1 decimal
-      }
+  const sortedHubs = useMemo(() => {
+    const currentCountry = config.countryCode
+    return [...RD_HUBS].sort((a, b) => {
+      const aMatches = a.country === currentCountry ? 1 : 0
+      const bMatches = b.country === currentCountry ? 1 : 0
+      return bMatches - aMatches
     })
+  }, [config.countryCode])
 
-    // Sort by distance (closest first)
-    return eventsWithDistance.sort((a, b) => (a.distance || 0) - (b.distance || 0))
-  }, [rawEvents, userLocation])
-
-  // Process tribes with distance calculation and sorting
-  const tribes = useMemo(() => {
-    if (!rawTribes || !userLocation) return []
-
-    const tribesWithDistance = rawTribes.map((tribe: any) => {
-      let distance = 0
-
-      // If it has location coordinates (lng, lat)
-      if (tribe.location && tribe.location.coordinates && tribe.location.coordinates.length === 2) {
-        distance = calculateDistance(
-          userLocation.lat,
-          userLocation.lng,
-          tribe.location.coordinates[1], // lat
-          tribe.location.coordinates[0]  // lng
-        )
-      }
-
-      return {
-        ...tribe,
-        distance: Math.round(distance * 10) / 10
-      }
-    })
-
-    return tribesWithDistance.sort((a, b) => (a.distance || 0) - (b.distance || 0))
-  }, [rawTribes, userLocation])
-
-  const handleCategoryFilter = (category: string) => {
-    setSelectedCategories(prev => {
-      const newCategories = prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-
-      // Track filter usage
-      trackClick('category_filter', {
-        category,
-        action: prev.includes(category) ? 'remove' : 'add',
-        totalFilters: newCategories.length
-      })
-
-      return newCategories
-    })
-  }
-
-  const handleEventSelect = (event: DiscoveryEvent) => {
-    setSelectedEvent(event)
-
-    // Track event view
-    trackEventInteraction('view', event._id, {
-      eventTitle: event.title,
-      eventCategory: event.category,
-      distance: event.distance,
-      price: event.price?.amount || 0,
-      viewMode,
-      source: 'discovery_page'
-    })
-  }
-
-  const handleTribeSelect = (tribe: DiscoveryTribe) => {
-    setSelectedTribe(tribe)
-    trackEventInteraction('view_tribe', tribe._id, {
-      tribeName: tribe.name,
-      tribeCategory: tribe.category,
-      distance: tribe.distance,
-      viewMode,
-      source: 'discovery_page'
-    })
-  }
-
-  const handleViewModeChange = (mode: 'map' | 'list') => {
-    setViewMode(mode)
-    trackFeatureUsage('view_mode_toggle', 'complete', {
-      newMode: mode,
-      previousMode: viewMode
-    })
-  }
-
-  const formatPrice = (price?: { amount: number; currency: string }) => {
-    if (!price || price.amount === 0) return 'Gratis'
-    return `${price.amount} ${price.currency}`
-  }
-
-  const formatDistance = (distance?: number) => {
-    if (!distance) return ''
-    if (distance < 1) {
-      const meters = Math.round(distance * 1000)
-      return `${meters} metro${meters !== 1 ? 's' : ''}`
+  const hubsLabel = useMemo(() => {
+    switch (config.countryCode) {
+      case 'ES': return 'Zonas de España & Radar:'
+      case 'MX': return 'Zonas de México & Radar:'
+      case 'US': return 'Global Hubs & US:'
+      default: return 'Zonas de RD & Radar:'
     }
-    return `${distance.toFixed(1)} km`
+  }, [config.countryCode])
+
+  const selectHub = (hub: RDHub | null) => {
+    if (!hub) {
+      setActiveHubId(null)
+      setArea(WORLD_AREA)
+      return
+    }
+    setActiveHubId(hub.id)
+    setArea({ kind: 'nearby', label: `${hub.name} · ${hub.radius} km`, lat: hub.lat, lng: hub.lng, radius: hub.radius, source: 'map' })
+    setFlyToTarget({ lat: hub.lat, lng: hub.lng, zoom: hub.zoom, ts: Date.now() })
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  const refinement = discoveryQuery({ categories: selectedCategories, vibe: activeVibe, preferences: contentPrefs, maximum: queryBudget === '' ? null : Number(queryBudget), currency, moment: quickFilter, now: clock, authenticated: isAuthenticated })
+  const eventsQuery = useInfiniteQuery({
+    queryKey: ['discovery-events', identity, scope, serverSearch, refinement], initialPageParam: 1,
+    queryFn: ({ pageParam }) => getEvents({ ...scope, ...refinement, page: pageParam, limit: 100, timeFilter: 'upcoming', search: serverSearch || undefined }),
+    getNextPageParam: page => page.pagination?.page < page.pagination?.pages ? page.pagination.page + 1 : undefined,
+    enabled: initialized && viewType === 'events', staleTime: 60000, refetchOnWindowFocus: false,
+    refetchInterval: quickFilter === 'now' ? 60000 : false
+  })
+  const tribesQuery = useQuery({
+    queryKey: ['discovery-tribes', identity, area.kind === 'nearby' ? scope : 'world', serverSearch],
+    queryFn: async () => {
+      const response = area.kind === 'nearby'
+        ? await tribesService.getNearbyTribes({ lat: area.lat, lng: area.lng, radius: area.radius * 1000 })
+        : await apiClient.get('/tribes', { params: { limit: 100, search: serverSearch || undefined } }).then(r => ({ data: r.data?.data || r.data?.tribes || [] }))
+      return (response.data || []) as CommunityItem[]
+    },
+    enabled: initialized && viewType === 'tribes', staleTime: 60000, refetchOnWindowFocus: false
+  })
+  const ideasQuery = useQuery({
+    queryKey: ['discovery-ideas', identity, area.kind === 'nearby' ? scope : 'world', serverSearch],
+    queryFn: async () => {
+      const response = await apiClient.get('/ideas', { params: { limit: 50, q: serverSearch || undefined, ...(area.kind === 'nearby' ? { lat: area.lat, lng: area.lng, radiusKm: area.radius } : {}) } })
+      return (response.data?.data || []) as CommunityItem[]
+    },
+    enabled: initialized && viewType === 'ideas', staleTime: 60000, refetchOnWindowFocus: false
+  })
+  const rawEvents = useMemo(() => eventsQuery.data?.pages.flatMap(page => page.events || []) || [], [eventsQuery.data])
+  const withDistance = <T extends { location?: { coordinates?: number[] }; distance?: number }>(item: T): T & { distance?: number } => ({
+    ...item, distance: area.kind === 'nearby' && validCoordinates(item.location?.coordinates)
+      ? distanceKm(area, item.location.coordinates) : undefined
+  })
+  const preferencesAllow = (raw?: string) => {
+    const slug = categoryMeta(raw).slug
+    if (contentPrefs.hidePolitical && slug === 'politics') return false
+    if (contentPrefs.hideReligious && slug === 'religion') return false
+    if (contentPrefs.contentFilterMode === 'whitelist' && !(contentPrefs.preferredCategories || []).some(c => categoryMeta(c).slug === slug)) return false
+    if (contentPrefs.contentFilterMode === 'blacklist' && (contentPrefs.hiddenCategories || []).some(c => categoryMeta(c).slug === slug)) return false
+    if (selectedCategories.length && !selectedCategories.includes(slug)) return false
+    const vibe = DISCOVERY_VIBES.find(v => v.id === activeVibe)
+    if (vibe && !vibe.categories.some(c => categoryMeta(c).slug === slug)) return false
+    if (companionFilter) {
+      const allowedCompanionCats: Record<string, string[]> = {
+        crew: ['party', 'music', 'sports', 'gaming', 'dance', 'nightlife'],
+        couple: ['food', 'art', 'culture', 'wellness', 'cooking', 'travel'],
+        family: ['family', 'education', 'outdoors', 'kids', 'reading', 'photography'],
+        solo: ['networking', 'tech', 'business', 'cultural', 'writing', 'volunteering']
+      }
+      const allowed = allowedCompanionCats[companionFilter] || []
+      if (!allowed.some(c => categoryMeta(c).slug === slug)) return false
+    }
+    return true
+  }
+  const maximum = budget.trim() === '' ? null : Number(budget)
+  const invalidBudget = maximum !== null && (!Number.isFinite(maximum) || maximum < 0 || maximum > 100000000)
+  const fullyFilteredEvents = rawEvents.map(withDistance).filter(event =>
+    preferencesAllow(event.category) &&
+    (!contentPrefs.hideAdultOnly || !((event as RadarEvent & { ageRestriction?: { minAge?: number; isAdultOnly?: boolean } }).ageRestriction?.isAdultOnly || ((event as RadarEvent & { ageRestriction?: { minAge?: number } }).ageRestriction?.minAge || 0) >= 18)) &&
+    !['ended', 'cancelled'].includes(getEventPhase(event, clock)) && matchesMoment(event, quickFilter, clock) &&
+    matchesBudget(event, invalidBudget ? null : maximum, currency)
+  ).sort((a, b) => quickFilter === 'popular'
+    ? (b.attendeesCount ?? b.attendees?.length ?? 0) - (a.attendeesCount ?? a.attendees?.length ?? 0)
+    : area.kind === 'nearby' ? (a.distance ?? Infinity) - (b.distance ?? Infinity) : new Date(a.date).getTime() - new Date(b.date).getTime())
+  const normalizeCommunity = (item: CommunityItem, idea = false): CommunityItem => withDistance({
+    ...item, membersCount: item.membersCount ?? item.memberCount ?? 0,
+    location: idea ? { coordinates: validCoordinates(item.zone?.location?.coordinates) ? item.zone!.location!.coordinates : undefined, address: item.zone?.name, city: item.zone?.city } : item.location,
+    images: item.images?.length ? item.images : item.avatar ? [item.avatar] : []
+  })
+  const filterCommunity = (item: CommunityItem) => {
+    const text = [item.name, item.title, item.description, item.location?.address, item.location?.city].join(' ').toLocaleLowerCase()
+    return preferencesAllow(item.category) && (!serverSearch || text.includes(serverSearch.toLocaleLowerCase())) &&
+      (area.kind !== 'nearby' || (item.distance !== undefined && item.distance <= area.radius))
+  }
+  const tribes = (tribesQuery.data || []).map(item => normalizeCommunity(item)).filter(filterCommunity)
+  const ideas = (ideasQuery.data || []).map(item => normalizeCommunity(item, true)).filter(filterCommunity)
+  const activeQuery = viewType === 'events' ? eventsQuery : viewType === 'ideas' ? ideasQuery : tribesQuery
+  const loading = !initialized || activeQuery.isLoading
+  const items = viewType === 'events' ? fullyFilteredEvents : viewType === 'ideas' ? ideas : tribes
+  const totalEvents = eventsQuery.data?.pages[0]?.pagination?.total || rawEvents.length
+  const unlocated = items.filter(item => !validCoordinates(item.location?.coordinates)).length
+  const filterCount = selectedCategories.length + Number(viewType === 'events' && !!quickFilter) + Number(!!activeVibe) + Number(!!companionFilter) + Number(viewType === 'events' && budget !== '')
+  const communityGlobal = viewType !== 'events' && area.kind !== 'world' && area.kind !== 'nearby'
+
+  const selectItem = (item: RadarEvent | CommunityItem) => {
+    if (viewType === 'events') setSelectedEvent(item as RadarEvent)
+    else if (viewType === 'ideas') setSelectedIdea(item)
+    else setSelectedTribe(item)
+    if (validCoordinates(item.location?.coordinates)) setFlyToTarget({ lat: item.location.coordinates[1], lng: item.location.coordinates[0], zoom: 14, ts: Date.now() })
+  }
+  const resetFilters = () => { setSearchQuery(''); setSelectedCategories([]); setQuickFilter(null); setActiveVibe(null); setCompanionFilter(null); setBudget('') }
+  const surprise = () => {
+    if (loading) return
+    if (viewType !== 'events' || !fullyFilteredEvents.length) { toast({ title: 'No hay eventos con estos filtros', description: 'Cambia el destino, limpia filtros o carga más resultados.' }); return }
+    selectItem(fullyFilteredEvents[Math.floor(Math.random() * fullyFilteredEvents.length)]); setViewMode('map')
+  }
+  const authenticate = (destination: string) => {
+    if (isAuthenticated) return true
+    router.push(authPageHref('/login', destination)); return false
+  }
+  const mutate = async (key: string, action: () => Promise<void>) => {
+    if (actionLock.current) return
+    actionLock.current = true; setBusyAction(key)
+    try { await action() } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } }
+      toast({ title: 'No se pudo completar la acción', description: err.response?.data?.message || 'Inténtalo otra vez.', variant: 'destructive' })
+    } finally { actionLock.current = false; setBusyAction(null) }
+  }
+  const handleAttend = async (event: RadarEvent) => {
+    const destination = '/events/' + event._id
+    if (!authenticate(destination)) return
+    if (['ended', 'cancelled'].includes(getEventPhase(event)) || (event.price?.amount || 0) > 0) { router.push(destination); return }
+    await mutate(event._id, async () => {
+      const response = event.isAttending ? await leaveEvent(event._id) : await attendEvent(event._id)
+      setSelectedEvent(response.event ? { ...response.event, isAttending: !event.isAttending } : { ...event, isAttending: !event.isAttending })
+      await queryClient.invalidateQueries({ queryKey: ['discovery-events'] })
+      toast({ title: event.isAttending ? 'Asistencia cancelada' : 'Asistencia confirmada' })
     })
   }
-
-  // Apply quick filters
-  const filteredEvents = useMemo(() => {
-    if (!quickFilter) return events
-
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000)
-
-    // Get day of week (0 = Sunday, 6 = Saturday)
-    const dayOfWeek = now.getDay()
-    const daysUntilSaturday = (6 - dayOfWeek + 7) % 7
-    const saturday = new Date(today.getTime() + daysUntilSaturday * 24 * 60 * 60 * 1000)
-    const sunday = new Date(saturday.getTime() + 24 * 60 * 60 * 1000)
-    const mondayAfterWeekend = new Date(sunday.getTime() + 24 * 60 * 60 * 1000)
-
-    return events.filter(event => {
-      const eventDate = new Date(event.date)
-
-      switch (quickFilter) {
-        case 'now':
-          // Events starting within the next 4 hours or already started today
-          const fourHoursFromNow = new Date(now.getTime() + 4 * 60 * 60 * 1000)
-          return eventDate >= today && eventDate <= fourHoursFromNow
-        case 'today':
-          return eventDate >= today && eventDate < todayEnd
-
-        case 'weekend':
-          return eventDate >= saturday && eventDate < mondayAfterWeekend
-
-        case 'free':
-          return !event.price || event.price.amount === 0
-
-        case 'new':
-          // Events created in the last 7 days
-          const createdAt = new Date(event.createdAt || event.date)
-          const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-          return createdAt >= sevenDaysAgo
-
-        case 'popular':
-          // Events with more attendees (top 50%)
-          const sortedByAttendees = [...events].sort((a, b) => (b.attendees?.length || 0) - (a.attendees?.length || 0))
-          const top50Percent = sortedByAttendees.slice(0, Math.ceil(sortedByAttendees.length / 2))
-          return top50Percent.some(e => e._id === event._id)
-
-        case 'trending':
-          // Events with recent activity or high attendance rate
-          const attendanceRate = (event.attendees?.length || 0) / event.maxAttendees
-          return attendanceRate > 0.5
-
-        default:
-          return true
-      }
-    })
-  }, [events, quickFilter])
-
-  // Apply visual filters (Location Text, Vibe, Free) on top of QuickFilters
-  const fullyFilteredEvents = useMemo(() => {
-    return filteredEvents.filter(event => {
-      // 1. Text Search by Location/Address
-      if (searchLocation.trim() !== '') {
-        const query = searchLocation.toLowerCase()
-        const addressMatch = event.location?.address?.toLowerCase().includes(query)
-        const cityMatch = event.location?.city?.toLowerCase().includes(query)
-        const venueMatch = event.location?.venue?.toLowerCase().includes(query)
-
-        if (!addressMatch && !cityMatch && !venueMatch) return false
-      }
-
-      // 2. Only Free Filter
-      if (onlyFree) {
-        if (event.price && event.price.amount > 0) return false
-      }
-
-      // 3. Vibe Filter (Mapped to categories/tags)
-      if (activeVibe) {
-        const vibeMappings: Record<string, string[]> = {
-          'chill': ['arte', 'cultura', 'salud'],
-          'fiesta': ['música', 'entretenimiento'],
-          'aprendizaje': ['tecnología', 'educación', 'networking'],
-          'aventura': ['deportes', 'gastronomía']
-        }
-
-        const mappedCategories = vibeMappings[activeVibe] || []
-        const matchesCategory = mappedCategories.includes(event.category.toLowerCase())
-        // You can also check event.tags if necessary
-
-        if (!matchesCategory) return false
-      }
-
-      return true
-    })
-  }, [filteredEvents, searchLocation, onlyFree, activeVibe])
-
-  if (isLocationLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center">
-        <LoadingSpinner variant="branded" size="xl" text="Obteniendo ubicación..." fullScreen />
-      </div>
-    )
+  const handleJoinTribe = async (tribe: CommunityItem) => {
+    const destination = '/tribes/' + tribe._id
+    if (authenticate(destination)) router.push(destination)
   }
+  const handleSupport = async (idea: CommunityItem) => {
+    if (!authenticate('/discovery?layer=ideas')) return
+    await mutate(idea._id, async () => {
+      const response = await apiClient.post('/ideas/' + idea._id + '/support')
+      if (response.data?.data) setSelectedIdea({ ...idea, ...response.data.data, location: idea.location })
+      await queryClient.invalidateQueries({ queryKey: ['discovery-ideas'] })
+      toast({ title: response.data?.message || 'Interés actualizado' })
+    })
+  }
+  const changeMapArea = (loc: Center, gps = false) => {
+    setActiveHubId(null)
+    setArea({ kind: 'nearby', label: gps ? 'Cerca de ti · 50 km' : 'Zona del mapa · 50 km', lat: loc.lat, lng: loc.lng, radius: 50, source: gps ? 'gps' : 'map' })
+  }
+  const close = () => { setSelectedEvent(null); setSelectedIdea(null); setSelectedTribe(null) }
 
-  if (!userLocation) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Ubicación requerida
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Necesitamos tu ubicación para mostrar eventos cercanos
-          </p>
+  const cards = <div className={viewMode === 'list' ? 'grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3' : 'space-y-3'}>
+    {items.map(item => {
+      const event = viewType === 'events' ? item as RadarEvent : null
+      const meta = categoryMeta(item.category)
+      const image = item.images?.[0]
+      const cover = typeof image === 'string' ? image : image?.url
+      const selected = (selectedEvent || selectedIdea || selectedTribe)?._id === item._id
+      return <article key={item._id} className={'overflow-hidden rounded-2xl border bg-slate-900 transition-colors ' + (selected ? 'border-violet-400' : 'border-slate-800 hover:border-slate-600')}>
+        {viewMode === 'list' && <div className="relative h-44 bg-slate-800">
+          {cover ? <img src={cover} alt="" loading="lazy" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-5xl" style={{ backgroundColor: meta.color + '20' }} aria-hidden="true">{meta.emoji}</div>}
+          <span className="absolute bottom-3 left-3 rounded-lg bg-slate-950/90 px-2.5 py-1 text-xs text-white">{meta.emoji} {meta.label}</span>
+        </div>}
+        <div className="p-4">
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs"><span className="text-slate-300">{viewMode !== 'list' && meta.emoji + ' ' + meta.label}</span>{event && <span className="font-semibold text-violet-200">{formatPrice(event)}</span>}</div>
+          <h2 className="text-base font-semibold leading-snug text-white">{item.title || ('name' in item && item.name)}</h2>
+          {event && <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-slate-300"><Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0" />{formatEventDate(event.date, event.timeZone)}</p>}
+          <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-slate-400"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />{event?.isSecretLocation ? 'Ubicación aproximada · consulta el detalle' : item.location?.city || item.location?.address || 'Ubicación por confirmar'}</p>
+          <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-slate-400">{item.description}</p>
+          <div className="mt-4 flex items-center gap-2">
+            <button type="button" onClick={() => { selectItem(item); setViewMode(viewMode === 'list' ? 'map' : viewMode) }} className={button + ' flex-1 text-slate-100'}>Vista rápida</button>
+            <Link href={viewType === 'ideas' ? '/ideas' : '/' + viewType + '/' + item._id} className={button + ' border-violet-400/30 bg-violet-500/15 text-violet-200'} aria-label={'Ver detalle de ' + (item.title || ('name' in item && item.name))}><ArrowRight className="h-4 w-4" /></Link>
+          </div>
         </div>
-      </div>
-    )
-  }
+      </article>
+    })}
+  </div>
 
-  return (
-    <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
-      {/* Header */}
-      <div className="sticky top-0 z-50 bg-white/80 dark:bg-gray-800/90 backdrop-blur-md border-b border-gray-200/50 dark:border-gray-700/50 supports-[backdrop-filter]:bg-white/60">
-        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-primary-500/50 to-transparent opacity-50" />
-        <div className="max-w-7xl mx-auto p-4 flex items-center justify-between relative">
+  return <div className="bg-slate-950 text-slate-100">
+    <header className="border-b border-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950 px-4 py-4 sm:px-6 sm:py-5">
+      <div className="mx-auto max-w-[1600px]">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-              Descubrimiento
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 flex items-center gap-2 text-sm">
-              <Navigation className="w-4 h-4 text-primary-500" />
-              <span className="font-medium">
-                {viewType === 'events' ? fullyFilteredEvents.length : tribes.length}
-              </span>
-              {viewType === 'events' ? 'eventos' : 'tribus'} cerca de ti
+            <p className="mb-1 inline-flex items-center gap-2 text-xs font-semibold tracking-[0.16em] text-violet-300">
+              <span className="h-2 w-2 rounded-full bg-violet-400" />
+              EVENTNOW · DESCUBRE TU PRÓXIMO PLAN
             </p>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Tu próximo plan empieza aquí.</h1>
+            <p className="mt-1 hidden max-w-2xl text-sm sm:block leading-relaxed text-slate-400">Explora eventos en el mapa, vota ideas del Quórum Colectivo y conecta con Tribus cerca de ti.</p>
           </div>
-
-          {/* Type Toggle (Events / Tribes) */}
-          <div className="absolute left-1/2 -translate-x-1/2 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shadow-inner hidden md:flex items-center">
-            <button
-              onClick={() => {
-                setViewType('events')
-                setSelectedTribe(null)
-              }}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${viewType === 'events'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-            >
-              Eventos
-            </button>
-            <button
-              onClick={() => {
-                setViewType('tribes')
-                setSelectedEvent(null)
-              }}
-              className={`px-6 py-2 rounded-lg text-sm font-semibold transition-all ${viewType === 'tribes'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-            >
-              Tribus
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Search Location Input */}
-            <div className="hidden lg:flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
-              <MapPin className="w-4 h-4 text-gray-500 mr-2" />
-              <input
-                type="text"
-                placeholder="Ciudad o zona..."
-                value={searchLocation}
-                onChange={(e) => setSearchLocation(e.target.value)}
-                className="bg-transparent border-0 text-sm focus:ring-0 w-32 dark:text-white placeholder-gray-500"
-              />
-            </div>
-
-            {/* Search Radius */}
-            <div className="flex items-center gap-2">
-              <Target className="w-4 h-4 text-gray-500" />
-              <select
-                value={searchRadius}
-                onChange={(e) => setSearchRadius(Number(e.target.value))}
-                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border-0 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 dark:text-white"
-              >
-                <option value={1}>1km</option>
-                <option value={5}>5km</option>
-                <option value={10}>10km</option>
-                <option value={25}>25km</option>
-                <option value={50}>50km</option>
-              </select>
-            </div>
-
-            {/* Filters */}
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${showFilters
-                ? 'bg-primary-600 text-white'
-                : 'bg-primary-500 hover:bg-primary-600 text-white'
-                }`}
-            >
-              <Filter className="w-4 h-4" />
-              Filtros
-              {(selectedCategories.length > 0 || priceRange[1] < 1000) && (
-                <span className="bg-white/20 rounded-full w-2 h-2"></span>
-              )}
-            </button>
-
-            {/* View Mode Toggle */}
-            <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-              <button
-                onClick={() => handleViewModeChange('map')}
-                className={`p-2 rounded-md transition-colors ${viewMode === 'map' ? 'bg-white dark:bg-gray-600 shadow' : ''
-                  }`}
-                title="Vista de mapa"
-              >
-                <MapPin className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => handleViewModeChange('list')}
-                className={`p-2 rounded-md transition-colors ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow' : ''
-                  }`}
-                title="Vista de lista"
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Link href="/plans" className={button + ' hidden md:inline-flex border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'}>Planes espontáneos</Link>
+            <Link href="/events/create" className={button + ' border-violet-500/40 bg-violet-600/20 text-violet-100 hover:bg-violet-600/30'}><Plus className="h-4 w-4" />Crear evento</Link>
           </div>
         </div>
-      </div>
-
-      {/* Filters Panel */}
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 overflow-hidden"
+        <div className="mt-3 flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1"><Search className="absolute left-3.5 top-3.5 h-4 w-4 text-slate-400" aria-hidden="true" /><label htmlFor="discovery-search" className="sr-only">Buscar eventos, ideas o tribus</label><input id="discovery-search" type="search" maxLength={100} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Conciertos, violín en el parque, pintura, ajedrez, tech…" className={input + ' pl-10'} /></div>
+          <button type="button" aria-expanded={showLocation} aria-controls="discovery-location" onClick={() => setShowLocation(!showLocation)} className={button + ' justify-between text-slate-200'}><span className="flex min-w-0 items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-violet-300" /><span className="truncate">{area.label}</span></span><span className="ml-3 text-xs text-violet-300">Cambiar</span></button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters} aria-controls="discovery-filters" className={button + (filterCount ? ' border-violet-400/50 bg-violet-500/15 text-violet-200' : '')}><SlidersHorizontal className="h-4 w-4" />Filtros{filterCount > 0 && ' · ' + filterCount}</button>
+            <button type="button" onClick={() => setIsContentFilterOpen(true)} className={button} aria-label="Preferencias de contenido"><ShieldCheck className="h-4 w-4 text-emerald-400" /><span className="hidden sm:inline">Mi Radar</span></button>
+            <button type="button" onClick={surprise} disabled={loading || viewType !== 'events' || !!busyAction} className={button + ' border-violet-400/30 bg-violet-500/15 text-violet-200'}><Sparkles className="h-4 w-4" />Sorpréndeme</button>
+          </div>
+        </div>
+        {/* Companion / Mood Rail */}
+        <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Filtro de compañía">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-400">¿Con quién vas?:</span>
+          <button
+            type="button"
+            onClick={() => setCompanionFilter(companionFilter === 'crew' ? null : 'crew')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all ' + (companionFilter === 'crew' ? 'border-amber-400 bg-amber-500/20 text-amber-100 shadow-sm shadow-amber-500/20' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-700 hover:text-white')}
           >
-            <div className="p-4 max-w-7xl mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Category Filters */}
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Categorías</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(categoryIcons).map(([category, Icon]) => {
-                      const isSelected = selectedCategories.includes(category)
-
-                      return (
-                        <button
-                          key={category}
-                          onClick={() => handleCategoryFilter(category)}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isSelected
-                            ? 'text-white'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                            }`}
-                          style={isSelected ? { backgroundColor: categoryColors[category as keyof typeof categoryColors] } : {}}
-                        >
-                          <Icon className="w-4 h-4" />
-                          {category.charAt(0).toUpperCase() + category.slice(1)}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Price Range & Free Toggle */}
-                <div>
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">Presupuesto</h3>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Solo Gratis</span>
-                      <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                        <input
-                          type="checkbox"
-                          checked={onlyFree}
-                          onChange={(e) => setOnlyFree(e.target.checked)}
-                          className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out border-gray-300 dark:border-gray-600 checked:translate-x-5 checked:border-primary-500"
-                        />
-                        <div className={`toggle-label block overflow-hidden h-5 rounded-full ${onlyFree ? 'bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
-                      </div>
-                    </label>
-                  </div>
-
-                  {!onlyFree && (
-                    <div className="space-y-2 mt-4">
-                      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
-                        <span>$0</span>
-                        <span>$1000+</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1000"
-                        value={priceRange[1]}
-                        onChange={(e) => setPriceRange([0, Number(e.target.value)])}
-                        className="w-full accent-primary-500"
-                      />
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Hasta: {priceRange[1] === 1000 ? '$1000+' : `$${priceRange[1]}`}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Results Count */}
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Resultados</h3>
-                  <div className="text-3xl font-bold text-primary-600 mb-2">
-                    {fullyFilteredEvents.length}
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    eventos encontrados en {searchRadius}km
-                  </p>
-                  {selectedCategories.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {selectedCategories.map(category => (
-                        <span
-                          key={category}
-                          className="px-2 py-1 text-xs rounded-full text-white"
-                          style={{ backgroundColor: categoryColors[category as keyof typeof categoryColors] }}
-                        >
-                          {category}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {/* Vibe Buttons Selection */}
-                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm">O busca por "Vibra"</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { id: 'chill', label: 'Chill 🧘‍♀️', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' },
-                        { id: 'fiesta', label: 'Fiesta 🎉', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800' },
-                        { id: 'aprendizaje', label: 'Aprender 🧠', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800' },
-                        { id: 'aventura', label: 'Aventura 🧗‍♂️', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-orange-200 dark:border-orange-800' }
-                      ].map(vibe => (
-                        <button
-                          key={vibe.id}
-                          onClick={() => setActiveVibe(activeVibe === vibe.id ? null : vibe.id)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${activeVibe === vibe.id ? `${vibe.color} ring-2 ring-offset-1 ring-primary-500` : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                        >
-                          {vibe.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Quick Filters */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 py-4">
-        <div className="max-w-7xl mx-auto px-4">
-          <QuickFilters
-            activeFilter={quickFilter}
-            onFilterChange={(filter) => {
-              setQuickFilter(filter)
-              trackClick('quick_filter', { filter: filter || 'none' })
-            }}
-          />
+            🔥 {config.terms.hangout} ({config.terms.friends})
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompanionFilter(companionFilter === 'couple' ? null : 'couple')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all ' + (companionFilter === 'couple' ? 'border-pink-400 bg-pink-500/20 text-pink-100 shadow-sm shadow-pink-500/20' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-700 hover:text-white')}
+          >
+            💑 En Pareja
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompanionFilter(companionFilter === 'family' ? null : 'family')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all ' + (companionFilter === 'family' ? 'border-sky-400 bg-sky-500/20 text-sky-100 shadow-sm shadow-sky-500/20' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-700 hover:text-white')}
+          >
+            👨‍👩‍👧 En Familia
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompanionFilter(companionFilter === 'solo' ? null : 'solo')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all ' + (companionFilter === 'solo' ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100 shadow-sm shadow-emerald-500/20' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-700 hover:text-white')}
+          >
+            🧭 Solo / Explorador
+          </button>
         </div>
+
+        {/* Global & Regional Quick-Jump Hotspots Rail */}
+        <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Zonas rápidas del radar">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{hubsLabel}</span>
+          <button
+            type="button"
+            onClick={() => selectHub(null)}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all ' + (area.kind === 'world' && !activeHubId && quickFilter !== 'virtual' ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-700 hover:text-white')}
+          >
+            🌎 Todo el Radar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveHubId('virtual-online')
+              setArea({ kind: 'world', label: '🌐 En Línea / Streams Mundiales' })
+              setQuickFilter('virtual')
+            }}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (quickFilter === 'virtual' ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200 shadow-sm shadow-cyan-500/20' : 'border-slate-800 bg-slate-900/90 text-cyan-300 hover:border-slate-700 hover:text-white')}
+          >
+            🌐 En Línea / Streams
+          </button>
+          {sortedHubs.map(hub => (
+            <button
+              type="button"
+              key={hub.id}
+              onClick={() => selectHub(hub)}
+              className={'shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all ' + (activeHubId === hub.id ? 'border-violet-400 bg-violet-500/20 text-violet-100 shadow-sm shadow-violet-500/20' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-slate-700 hover:text-white')}
+            >
+              {hub.emoji} {hub.name}
+            </button>
+          ))}
+        </div>
+        {area.kind === 'nearby' && <label className="mt-2.5 flex items-center gap-2 text-xs text-slate-400">Radio de búsqueda<select aria-label="Radio de búsqueda" className="rounded-lg border border-slate-700 bg-slate-900 p-2 text-slate-200" value={area.radius} onChange={e => { const radius = Number(e.target.value); setArea({ ...area, radius, label: (area.source === 'map' ? 'Zona del mapa' : 'Cerca de ti') + ' · ' + radius + ' km' }) }}>{[5,15,25,50,100,300].map(radius => <option key={radius} value={radius}>{radius} km</option>)}</select></label>}
+        {showLocation && <div id="discovery-location" className="mt-3 max-w-2xl text-foreground"><LocationPicker /></div>}
+        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex rounded-xl bg-slate-900 p-1 border border-slate-800" role="group" aria-label="Qué quieres descubrir">{([['events', 'Eventos'], ['ideas', 'Ideas'], ['tribes', 'Tribus']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={viewType === value} onClick={() => setViewType(value)} className={'min-h-10 rounded-lg px-3.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-violet-400 ' + (viewType === value ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-400 hover:text-white')}>{label}</button>)}</div>
+          <div className="flex items-center gap-3"><span role="status" className="hidden text-xs tabular-nums text-slate-400 sm:inline">{loading ? 'Buscando…' : items.length + ' resultados'}{viewType === 'events' && totalEvents > rawEvents.length ? ' · ' + rawEvents.length + ' de ' + totalEvents + ' cargados' : ''}</span><div className="flex rounded-xl border border-slate-800 p-1" role="group" aria-label="Vista de resultados">{([{ value: 'map', label: 'Mapa', Icon: MapIcon }, { value: 'split', label: 'Lista y mapa', Icon: Columns }, { value: 'list', label: 'Tarjetas', Icon: LayoutGrid }] as const).map(({ value, label, Icon }) => <button type="button" key={value} aria-label={label} aria-pressed={viewMode === value} onClick={() => setViewMode(value)} className={'grid h-10 w-10 place-items-center rounded-lg focus-visible:ring-2 focus-visible:ring-violet-400 ' + (value === 'split' ? 'hidden lg:grid ' : '') + (viewMode === value ? 'bg-slate-700 text-violet-200' : 'text-slate-400 hover:text-white')}><Icon className="h-4 w-4" /></button>)}</div></div>
+        </div>
+        {communityGlobal && <p className="mt-3 text-xs leading-relaxed text-amber-200">Las ideas y tribus muestran su catálogo mundial. El filtro por ciudad o país está disponible en eventos; para ver estas comunidades cerca de un punto, usa ubicación o busca una zona en el mapa.</p>}
       </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {viewMode === 'map' ? (
-          /* Map View */
-          <div className="flex-1 relative">
-            {isLoading || isTribesLoading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800 z-10">
-                <LoadingSpinner variant="branded" size="lg" text="Cargando mapa..." />
-              </div>
-            ) : (
-              <LazyMapComponent
-                userLocation={userLocation}
-                events={viewType === 'events' ? fullyFilteredEvents : []}
-                tribes={viewType === 'tribes' ? tribes : []}
-                selectedItem={viewType === 'events' ? selectedEvent : selectedTribe}
-                onEventSelect={handleEventSelect}
-                onTribeSelect={handleTribeSelect}
-                categoryColors={categoryColors}
-                showRadius={true}
-                radiusKm={searchRadius}
-                onLocationUpdate={setUserLocation}
-                viewType={viewType}
-              />
-            )}
-
-            {/* Event/Tribe Details Sidebar */}
-            <AnimatePresence>
-              {(selectedEvent || selectedTribe) && (
-                <motion.div
-                  initial={{ x: 400, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: 400, opacity: 0 }}
-                  className="absolute top-0 right-0 w-96 h-full bg-white dark:bg-gray-800 shadow-2xl border-l border-gray-200 dark:border-gray-700 overflow-y-auto z-[1001]"
-                >
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                          style={{ backgroundColor: categoryColors[(selectedEvent?.category || selectedTribe?.category || 'other') as keyof typeof categoryColors] }}
-                        >
-                          {(selectedEvent?.category || selectedTribe?.category || 'O')[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <span className="px-3 py-1 bg-primary-100 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-full text-sm font-medium">
-                            {selectedEvent?.category || selectedTribe?.category}
-                          </span>
-                          <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                            <Navigation className="w-3 h-3" />
-                            {formatDistance(selectedEvent?.distance || selectedTribe?.distance)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          setSelectedEvent(null)
-                          setSelectedTribe(null)
-                        }}
-                        className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                      {selectedEvent ? selectedEvent.title : selectedTribe?.name}
-                    </h2>
-
-                    {/* Countdown Timer (Events only) */}
-                    {selectedEvent && (
-                      <div className="mb-6">
-                        <CountdownTimer
-                          eventDate={selectedEvent.date}
-                          compact={false}
-                          showIcon={true}
-                        />
-                      </div>
-                    )}
-
-                    <p className="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
-                      {selectedEvent ? selectedEvent.description : selectedTribe?.description}
-                    </p>
-
-                    <div className="space-y-4 mb-6">
-                      {selectedEvent && (
-                        <div className="flex items-center gap-3">
-                          <Calendar className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                          <span className="text-gray-900 dark:text-white">
-                            {formatDate(selectedEvent.date)}
-                          </span>
-                        </div>
-                      )}
-
-                      <div className="flex items-start gap-3">
-                        <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-gray-900 dark:text-white font-medium">
-                            {selectedEvent ? selectedEvent.location.address : (selectedTribe?.location?.address || 'Ubicación no especificada')}
-                          </p>
-                          {selectedEvent && selectedEvent.location.city && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              {selectedEvent.location.city}{selectedEvent.location.country && `, ${selectedEvent.location.country}`}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {selectedEvent && (
-                        <div className="flex items-center gap-3">
-                          <DollarSign className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                          <div>
-                            <span className={`font-semibold ${selectedEvent.price?.amount || 0 === 0
-                              ? 'text-green-600 dark:text-green-400'
-                              : 'text-gray-900 dark:text-white'
-                              }`}>
-                              {formatPrice(selectedEvent.price)}
-                            </span>
-                            {selectedEvent.price?.amount || 0 === 0 && (
-                              <p className="text-xs text-green-600 dark:text-green-400">
-                                ¡Entrada libre!
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-3">
-                        <Users className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                        <div>
-                          <span className="text-gray-900 dark:text-white font-medium">
-                            {selectedEvent ? `${(selectedEvent.attendees?.length || 0)}/${selectedEvent.maxAttendees}` : selectedTribe?.membersCount}
-                          </span>
-                          <span className="text-gray-600 dark:text-gray-400 ml-2">
-                            {selectedEvent ? 'asistentes' : 'miembros'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Info className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                        <div>
-                          <p className="text-gray-900 dark:text-white font-medium">
-                            Creado por {selectedEvent ? `${selectedEvent.createdBy.firstName} ${selectedEvent.createdBy.lastName}` : 'Administrador'}
-                          </p>
-                          {selectedEvent && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              @{selectedEvent.createdBy.username}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {(selectedEvent?.tags || (selectedTribe && 'tags' in selectedTribe) ? (selectedTribe as any).tags : [])?.length > 0 && (
-                      <div className="mb-6">
-                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Etiquetas</h3>
-                        <div className="flex flex-wrap gap-2">
-                          {(selectedEvent?.tags || ((selectedTribe && 'tags' in selectedTribe) ? (selectedTribe as any).tags : []))?.map((tag: string) => (
-                            <span
-                              key={tag}
-                              className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full text-sm"
-                            >
-                              #{tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="space-y-3">
-                      {selectedEvent ? (
-                        selectedEvent.isAttending ? (
-                          <button
-                            onClick={async () => {
-                              try {
-                                const { leaveEvent } = await import('@/lib/api/events')
-                                await leaveEvent(selectedEvent._id)
-
-                                // Update local state immediately
-                                setSelectedEvent({
-                                  ...selectedEvent,
-                                  isAttending: false,
-                                  attendees: selectedEvent.attendees.filter(a => a.user !== 'me') // Optimistic update
-                                })
-
-                                trackEventInteraction('leave', selectedEvent._id, {
-                                  eventTitle: selectedEvent.title,
-                                  source: 'discovery_sidebar'
-                                })
-                                toast({
-                                  title: 'Has salido del evento',
-                                  description: `Ya no asistes a "${selectedEvent.title}"`,
-                                })
-                                await queryClient.invalidateQueries({ queryKey: ['discovery-events'] })
-                              } catch (error: any) {
-                                console.error('Error leaving event:', error)
-                                toast({
-                                  title: 'Error',
-                                  description: error.response?.data?.message || 'No se pudo salir del evento',
-                                  variant: 'destructive'
-                                })
-                              }
-                            }}
-                            className="w-full px-4 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-xl font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                          >
-                            Salir del Evento
-                          </button>
-                        ) : (
-                          <button
-                            onClick={async () => {
-                              try {
-                                await attendEvent(selectedEvent._id)
-
-                                // Update local state immediately
-                                setSelectedEvent({
-                                  ...selectedEvent,
-                                  isAttending: true,
-                                  attendees: [...selectedEvent.attendees, { _id: 'temp', user: 'me' } as any] // Optimistic update
-                                })
-
-                                trackEventInteraction('attend', selectedEvent._id, {
-                                  eventTitle: selectedEvent.title,
-                                  source: 'discovery_sidebar'
-                                })
-                                toast({
-                                  title: 'Te has unido al evento',
-                                  description: `Ahora asistes a "${selectedEvent.title}"`,
-                                })
-                                await queryClient.invalidateQueries({ queryKey: ['discovery-events'] })
-                              } catch (error: any) {
-                                console.error('Error attending event:', error)
-                                toast({
-                                  title: 'Error',
-                                  description: error.response?.data?.message || 'No se pudo unir al evento',
-                                  variant: 'destructive'
-                                })
-                              }
-                            }}
-                            className="w-full px-4 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-xl font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                          >
-                            Unirse al Evento
-                          </button>
-                        )
-                      ) : (
-                        <button
-                          onClick={() => {
-                            // Integrate with tribe joining logic
-                            toast({
-                              title: 'Función en desarrollo',
-                              description: 'La función para unirse a tribus desde el mapa estará disponible pronto.'
-                            })
-                          }}
-                          className="w-full px-4 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-semibold shadow-lg shadow-primary-500/30 transition-all hover:shadow-primary-500/50 hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                          Unirse a la Tribu
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Favorite & Share (Events only for now) */}
-                    {selectedEvent && (
-                      <div className="flex gap-3">
-                        <motion.button
-                          onClick={() => {
-                            toggleFavorite(selectedEvent._id)
-                            trackClick('favorite_event', {
-                              eventId: selectedEvent._id,
-                              source: 'discovery_sidebar',
-                              action: isFavorite(selectedEvent._id) ? 'remove' : 'add'
-                            })
-                          }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${isFavorite(selectedEvent._id)
-                            ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                            : 'border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-                            }`}
-                        >
-                          <Heart className={`w-4 h-4 ${isFavorite(selectedEvent._id) ? 'fill-current' : ''}`} />
-                          <span className="text-sm">{isFavorite(selectedEvent._id) ? 'Guardado' : 'Guardar'}</span>
-                        </motion.button>
-
-                        <ShareButton
-                          event={selectedEvent}
-                          variant="button"
-                          className="flex-1"
-                          onShare={(platform) => {
-                            trackClick('share_event', {
-                              eventId: selectedEvent._id,
-                              platform,
-                              source: 'discovery_sidebar'
-                            })
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        ) : (
-          /* List View */
-          <div className="flex-1 p-6 overflow-y-auto">
-            <div className="max-w-4xl mx-auto">
-              {isLoading ? (
-                <div className="space-y-6">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="animate-pulse bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg">
-                      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-4"></div>
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2"></div>
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : fullyFilteredEvents.length === 0 ? (
-                <EmptyState
-                  icon={Target}
-                  title="No hay eventos cerca"
-                  description="Intenta aumentar el radio de búsqueda o limpiar los filtros seleccionados."
-                  actionLabel="Buscar en área más amplia"
-                  actionOnClick={() => {
-                    setSearchRadius(50)
-                    setSelectedCategories([])
-                    setPriceRange([0, 1000])
-                    setSearchLocation('')
-                    setActiveVibe(null)
-                    setOnlyFree(false)
-                  }}
-                  className="my-12 py-16"
-                />
-              ) : (
-                <div className="space-y-6">
-                  {/* Trending Section Overlay */}
-                  {fullyFilteredEvents.length > 3 && (
-                    <div className="mb-8">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <Star className="w-5 h-5 text-yellow-500 fill-current" />
-                        En Tendencia 🔥
-                      </h3>
-                      <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
-                        {fullyFilteredEvents.slice(0, 3).map((trendingEvent) => (
-                          <div
-                            key={`trending-${trendingEvent._id}`}
-                            onClick={() => handleEventSelect(trendingEvent)}
-                            className="min-w-[280px] sm:min-w-[320px] bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-4 border border-primary-200 dark:border-primary-800/30 shadow-md cursor-pointer snap-start hover:scale-[1.02] transition-transform"
-                          >
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="p-2 bg-primary-100 dark:bg-primary-900/50 rounded-lg text-primary-600 dark:text-primary-400">
-                                <Navigation className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <h4 className="font-bold text-gray-900 dark:text-white line-clamp-1">{trendingEvent.title}</h4>
-                                <p className="text-xs text-gray-500">{formatDate(trendingEvent.date)}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center justify-between mt-auto">
-                              <span className="text-xs font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 px-2 py-1 rounded-full text-center">
-                                {trendingEvent.category}
-                              </span>
-                              <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {formatPrice(trendingEvent.price)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
-                    Eventos ordenados por distancia (más cercanos primero)
-                  </div>
-
-                  {fullyFilteredEvents.map((event, index) => (
-                    <ParallaxCard
-                      key={event._id}
-                      className="bg-white dark:bg-gray-800 shadow-sm hover:shadow-xl border border-gray-100 dark:border-gray-700 group flex flex-col md:flex-row overflow-hidden"
-                      onClick={() => handleEventSelect(event)}
-                    >
-                      {/* Event Image (Left side on desktop, top on mobile) */}
-                      <div className="w-full md:w-48 h-48 md:h-auto z-[2] relative bg-gray-100 dark:bg-gray-700 flex-shrink-0">
-                        {event.images && event.images.length > 0 && event.images[0].url ? (
-                          event.images[0].url.startsWith('http') && !event.images[0].url.includes('res.cloudinary.com') ? (
-                            <img src={event.images[0].url} alt={event.title} className="w-full h-full object-cover" />
-                          ) : (
-                            <CldImage src={event.images[0].url} alt={event.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 200px" />
-                          )
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-gray-400">
-                            <div
-                              className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-inner mb-2"
-                              style={{ backgroundColor: categoryColors[event.category as keyof typeof categoryColors] }}
-                            >
-                              {event.category[0].toUpperCase()}
-                            </div>
-                            <span className="text-xs font-medium uppercase tracking-wider">{event.category}</span>
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-
-                      {/* Card Content */}
-                      <div className="flex-1 p-6 relative flex flex-col justify-between">
-
-                        {/* Favorite & Share Buttons - Top Right */}
-                        <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-                          <motion.button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleFavorite(event._id)
-                            }}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            className={`p-2.5 rounded-full backdrop-blur-sm transition-all ${isFavorite(event._id)
-                              ? 'bg-red-500 text-white shadow-lg shadow-red-500/50'
-                              : 'bg-white/90 dark:bg-gray-800/90 text-gray-600 dark:text-gray-400 hover:bg-red-50 dark:hover:bg-red-900/20'
-                              }`}
-                          >
-                            <Heart className={`w-5 h-5 ${isFavorite(event._id) ? 'fill-current' : ''}`} />
-                          </motion.button>
-
-                          <ShareButton
-                            event={event}
-                            variant="icon"
-                            className="backdrop-blur-sm bg-white/90 dark:bg-gray-800/90"
-                            onShare={(platform) => {
-                              trackClick('share_event', {
-                                eventId: event._id,
-                                platform,
-                                source: 'discovery_list'
-                              })
-                            }}
-                          />
-                        </div>
-
-                        <div className="flex flex-col md:flex-row md:items-start justify-between mb-4 gap-4 pr-24 md:pr-0">
-                          <div className="flex items-start gap-4 flex-1">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white font-bold flex-shrink-0 shadow-sm border-2 border-white dark:border-gray-800 relative z-10">
-                              {event.createdBy?.firstName?.[0] || 'A'}
-                            </div>
-
-                            {/* Social Proof Avatars */}
-                            {event.attendees && (event.attendees?.length || 0) > 0 && (
-                              <div className="flex -space-x-4 absolute top-12 left-6 z-0 mix-blend-multiply dark:mix-blend-normal opacity-60">
-                                {[...Array(Math.min(3, (event.attendees?.length || 0)))].map((_, i) => (
-                                  <div key={`sp-${i}`} className={`w-6 h-6 rounded-full border border-white dark:border-gray-800 bg-gray-300 dark:bg-gray-600 shadow-sm overflow-hidden flex items-center justify-center text-[10px] font-bold text-gray-700 dark:text-gray-300`}>
-                                    {String.fromCharCode(65 + (i * (event.attendees?.length || 0) % 26))}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            <div className="ml-2">
-                              {event.attendees && (event.attendees?.length || 0) > 0 && (
-                                <p className="text-[10px] text-gray-500 mb-1 ml-1 transform translate-x-4 animate-pulse">A {(event.attendees?.length || 0)} amigos les interesa</p>
-                              )}
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white line-clamp-1">
-                                  {event.title}
-                                </h3>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
-                                <span className="font-semibold text-primary-600 dark:text-primary-400 flex items-center gap-1">
-                                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: categoryColors[event.category as keyof typeof categoryColors] }} />
-                                  {event.category}
-                                </span>
-                                <span className="flex items-center gap-1 font-medium bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                                  <Navigation className="w-3.5 h-3.5 text-gray-500" />
-                                  {formatDistance(event.distance)}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="w-3.5 h-3.5" />
-                                  {formatDate(event.date)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-start gap-4 md:gap-1 mt-2 md:mt-0 pt-4 md:pt-0 border-t md:border-0 border-gray-100 dark:border-gray-700">
-                            <div className={`text-lg font-extrabold ${event.price?.amount || 0 === 0
-                              ? 'text-green-500'
-                              : 'text-gray-900 dark:text-white'
-                              }`}>
-                              {formatPrice(event.price)}
-                            </div>
-                            <div className="flex -space-x-2">
-                              {[...Array(Math.min(3, (event.attendees?.length || 0)))].map((_, i) => (
-                                <div key={i} className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-600 border-2 border-white dark:border-gray-800" />
-                              ))}
-                              {(event.attendees?.length || 0) > 3 && (
-                                <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-700 border-2 border-white dark:border-gray-800 flex items-center justify-center text-[10px] font-medium text-gray-600 dark:text-gray-300">
-                                  +{(event.attendees?.length || 0) - 3}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Countdown Timer */}
-                        <div className="mb-4">
-                          <CountdownTimer
-                            eventDate={event.date}
-                            compact={true}
-                            showIcon={true}
-                          />
-                        </div>
-
-                        <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-2 md:line-clamp-3 leading-relaxed text-sm">
-                          {event.description}
-                        </p>
-
-                        <div className="mt-auto pt-4 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 dark:border-gray-700/50">
-                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                            <MapPin className="w-4 h-4 flex-shrink-0" />
-                            <span className="truncate max-w-[200px] md:max-w-xs">
-                              {event.location.venue || event.location.address}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 ml-auto">
-                            <span className="text-sm font-medium text-gray-500">
-                              {(event.attendees?.length || 0)}/{event.maxAttendees} cupos
-                            </span>
-                          </div>
-                        </div>
-
-                        {event.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700/50">
-                            {event.tags.slice(0, 4).map(tag => (
-                              <span
-                                key={tag}
-                                className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-md text-xs"
-                              >
-                                #{tag}
-                              </span>
-                            ))}
-                            {event.tags.length > 4 && (
-                              <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-md text-xs">
-                                +{event.tags.length - 4} más
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Hover Effect Gradient */}
-                      <div className="absolute inset-0 bg-gradient-to-br z-0 from-primary-500/0 via-transparent to-secondary-500/0 opacity-0 group-hover:opacity-5 transition-opacity duration-300 pointer-events-none rounded-2xl" />
-                    </ParallaxCard>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* AI personalized recommendations */}
-        <RecommendedEvents />
+    </header>
+    {showFilters && <section id="discovery-filters" aria-label="Filtros de Discovery" className="border-b border-slate-800 bg-slate-900/50 px-4 py-4 sm:px-6 sm:py-5">
+      <div className="mx-auto grid max-w-[1600px] gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div><h2 className="mb-3 text-sm font-semibold">Categorías</h2><div className="flex max-h-48 flex-wrap gap-2 overflow-y-auto">{CATEGORY_LIST.map(cat => <button type="button" key={cat.slug} aria-pressed={selectedCategories.includes(cat.slug)} onClick={() => setSelectedCategories(prev => prev.includes(cat.slug) ? prev.filter(c => c !== cat.slug) : [...prev, cat.slug])} className={'min-h-10 rounded-lg border px-2.5 text-xs transition-colors ' + (selectedCategories.includes(cat.slug) ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-slate-700 text-slate-300 hover:bg-slate-800')}>{cat.emoji} {cat.label}</button>)}</div></div>
+        <div><h2 className="mb-3 text-sm font-semibold">¿Qué te apetece?</h2><div className="flex flex-wrap gap-2">{DISCOVERY_VIBES.map(vibe => <button type="button" key={vibe.id} aria-pressed={activeVibe === vibe.id} onClick={() => setActiveVibe(activeVibe === vibe.id ? null : vibe.id)} className={button + (activeVibe === vibe.id ? ' border-violet-400 bg-violet-500/20' : '')}>{vibe.emoji} {vibe.label}</button>)}</div></div>
+        {viewType === 'events' && <div><h2 className="mb-3 text-sm font-semibold">Fecha y entrada</h2><div className="flex flex-wrap gap-2">{([['now', 'En curso'], ['today', 'Hoy'], ['weekend', 'Fin de semana'], ['free', 'Gratis'], ['popular', 'Más asistentes'], ['virtual', '🌐 En Línea'], ['secret', 'Ubicación secreta']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={quickFilter === value} onClick={() => setQuickFilter(quickFilter === value ? null : value)} className={button + (quickFilter === value ? ' border-violet-400 bg-violet-500/20' : '')}>{label}</button>)}</div><p className="mt-2 text-xs text-slate-400">Hoy y fin de semana usan el calendario de tu dispositivo.</p><div className="mt-4 flex gap-2"><label className="flex-1 text-xs text-slate-400">Precio máximo<input type="number" min={0} max={100000000} value={budget} onChange={e => setBudget(e.target.value)} placeholder="Sin límite" className={input + ' mt-1'} /></label><label className="text-xs text-slate-400">Moneda<select value={currency} onChange={e => setCurrency(e.target.value)} className={input + ' mt-1'}>{['DOP', 'USD', 'EUR', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BRL', 'CAD', 'GBP'].map(c => <option key={c}>{c}</option>)}</select></label></div><p className="mt-2 text-xs text-slate-400">Con un máximo se muestran entradas en esa moneda y eventos gratuitos; no se convierten divisas.</p>{invalidBudget && <p role="alert" className="mt-2 text-xs text-rose-300">Escribe un precio entre 0 y 100.000.000 para aplicar el presupuesto.</p>}</div>}
       </div>
-    </div >
-  )
+      <div className="mx-auto mt-5 flex max-w-[1600px] justify-end"><button type="button" onClick={resetFilters} className={button}><RotateCcw className="h-4 w-4" />Limpiar filtros</button></div>
+    </section>}
+    <section aria-label="Resultados de Discovery" className="mx-auto max-w-[1600px] p-3 sm:p-5">
+      {activeQuery.isError && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100"><p>No pudimos cargar {viewType === 'events' ? 'los eventos' : viewType === 'ideas' ? 'las ideas' : 'las tribus'}. Revisa la conexión y vuelve a intentarlo.</p><button type="button" className={button} onClick={() => void activeQuery.refetch()}>Reintentar</button></div>}
+      <div className={viewMode === 'list' ? '' : 'relative flex h-[68dvh] min-h-[30rem] overflow-hidden rounded-2xl border border-slate-800 md:h-[calc(100dvh-18rem)]'}>
+        {viewMode === 'split' && <aside aria-label="Lista de resultados" className="hidden w-[23rem] shrink-0 overflow-y-auto border-r border-slate-800 p-4 lg:block">{cards}</aside>}
+        {viewMode === 'list' ? cards : <div className="relative min-w-0 flex-1">
+          <LazyMapComponent suppressSelectionPopup userLocation={mapCenter} events={viewType === 'events' ? fullyFilteredEvents : []} tribes={viewType === 'tribes' ? tribes : []} ideas={viewType === 'ideas' ? ideas : []}
+            viewType={viewType} selectedEvent={selectedEvent} selectedItem={selectedEvent || selectedIdea || selectedTribe}
+            onEventSelect={ev => { if (ev) { selectItem(ev); trackEventInteraction?.('view', ev._id, { source: 'discovery_map' }) } else close() }} onTribeSelect={item => item ? selectItem(item) : close()} onIdeaSelect={item => item ? selectItem(item) : close()}
+            showRadius={area.kind === 'nearby'} showUserLocation={area.kind === 'nearby' && area.source !== 'map'} radiusKm={area.kind === 'nearby' ? area.radius : 50}
+            fitToEvents={area.kind !== 'nearby'} overviewMode={area.kind === 'nearby' ? undefined : communityGlobal ? 'world' : area.kind === 'country' ? 'country' : area.kind === 'city' ? 'city' : 'world'}
+            onLocationUpdate={loc => changeMapArea(loc, true)} onSearchArea={loc => changeMapArea(loc)}
+            mapStyle={mapStyle} onMapStyleChange={setMapStyle} flyToTarget={flyToTarget} />
+          {loading && <div className="absolute left-4 top-4 z-[950] rounded-xl border border-slate-700 bg-slate-950/95 px-4 py-3 text-sm text-slate-200" role="status">Cargando resultados…</div>}
+          {!loading && !activeQuery.isError && items.length === 0 && <div className="absolute left-4 right-4 top-20 z-[950] mx-auto max-w-md rounded-2xl border border-slate-700 bg-slate-950/95 p-5 shadow-xl"><Compass className="mb-2 h-6 w-6 text-violet-300" /><h2 className="font-semibold">Todavía no hay resultados con estos filtros</h2><p className="mt-2 text-sm leading-relaxed text-slate-400">Prueba otro destino, carga más eventos o cambia los filtros. También puedes proponer una idea.</p><div className="mt-4 flex flex-wrap gap-2"><button type="button" className={button} onClick={resetFilters}>Limpiar filtros</button><button type="button" className={button} onClick={() => setShowLocation(true)}>Cambiar destino</button></div></div>}
+          {viewMode === 'map' && items.length > 0 && !selectedEvent && !selectedIdea && !selectedTribe && <DiscoveryCarousel items={items} viewType={viewType} onSelect={selectItem} onSurpriseMe={viewType === 'events' ? surprise : undefined} busyAction={!!busyAction} userLocation={area.kind === 'nearby' && area.source !== 'map' ? center : null} />}
+          {(selectedEvent || selectedIdea || selectedTribe) && <DiscoveryDetailPanel selectedEvent={selectedEvent} selectedIdea={selectedIdea} selectedTribe={selectedTribe} userLocation={area.kind === 'nearby' && area.source !== 'map' ? center : null} isFavorite={isFavorite} onToggleFavorite={toggleFavorite} onClose={close} onAttendToggle={handleAttend} onJoinTribe={handleJoinTribe} onSupportIdea={handleSupport} busyAction={!!busyAction} />}
+        </div>}
+      </div>
+      {viewMode === 'list' && !loading && !activeQuery.isError && !items.length && <div className="py-16 text-center"><Compass className="mx-auto mb-3 h-8 w-8 text-violet-300" /><h2 className="text-lg font-semibold">No encontramos resultados con esos filtros</h2><p className="mx-auto mt-2 max-w-md text-sm text-slate-400">Cambia el destino o limpia los filtros para seguir explorando.</p><button type="button" onClick={resetFilters} className={button + ' mt-5'}>Limpiar filtros</button></div>}
+      {unlocated > 0 && <p className="mt-3 text-xs text-slate-400">{unlocated} resultados sin coordenadas válidas aparecen en las tarjetas, sin inventar un punto en el mapa.</p>}
+      {viewType === 'events' && eventsQuery.hasNextPage && <div className="mt-4 text-center"><button type="button" className={button} disabled={eventsQuery.isFetchingNextPage} onClick={() => void eventsQuery.fetchNextPage()}>{eventsQuery.isFetchingNextPage ? 'Cargando…' : 'Cargar más eventos'}</button><p className="mt-2 text-xs text-slate-400">Mostrando {rawEvents.length} de {totalEvents} eventos que coinciden con tu búsqueda.</p></div>}
+    </section>
+    
+      {/* 10 Dominican Innovations: Live Vibe Heat Radar & Nearby Flash Deals */}
+      <section className="mx-auto max-w-[1600px] p-3 sm:p-5 space-y-6">
+        <LiveVibeRadar area={area} identity={identity} />
+        <NearbyFlashDeals />
+      </section>
+
+      <ContentFilterModal isOpen={isContentFilterOpen} onClose={() => setIsContentFilterOpen(false)} onApply={setContentPrefs} />
+  </div>
 }

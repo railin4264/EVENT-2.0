@@ -5,15 +5,15 @@ import { motion } from 'framer-motion'
 import { Music, Trophy, Laptop, Palette, Utensils, Users, Heart, Camera, Book, Plane } from 'lucide-react'
 
 export const AVAILABLE_INTERESTS = [
-  { id: 'music', label: 'Música', icon: Music, color: 'from-purple-500 to-pink-500' },
-  { id: 'sports', label: 'Deportes', icon: Trophy, color: 'from-green-500 to-emerald-500' },
-  { id: 'technology', label: 'Tecnología', icon: Laptop, color: 'from-blue-500 to-cyan-500' },
+  { id: 'music', label: 'Música', icon: Music, color: 'from-violet-500 to-cyan-500' },
+  { id: 'sports', label: 'Deportes', icon: Trophy, color: 'from-green-500 to-violet-500' },
+  { id: 'technology', label: 'Tecnología', icon: Laptop, color: 'from-violet-500 to-cyan-500' },
   { id: 'art', label: 'Arte', icon: Palette, color: 'from-orange-500 to-red-500' },
   { id: 'food', label: 'Gastronomía', icon: Utensils, color: 'from-yellow-500 to-orange-500' },
-  { id: 'networking', label: 'Networking', icon: Users, color: 'from-indigo-500 to-purple-500' },
+  { id: 'networking', label: 'Networking', icon: Users, color: 'from-violet-500 to-cyan-500' },
   { id: 'wellness', label: 'Bienestar', icon: Heart, color: 'from-pink-500 to-rose-500' },
   { id: 'photography', label: 'Fotografía', icon: Camera, color: 'from-gray-500 to-slate-500' },
-  { id: 'education', label: 'Educación', icon: Book, color: 'from-teal-500 to-cyan-500' },
+  { id: 'education', label: 'Educación', icon: Book, color: 'from-cyan-500 to-cyan-500' },
   { id: 'travel', label: 'Viajes', icon: Plane, color: 'from-sky-500 to-blue-500' }
 ]
 

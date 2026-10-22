@@ -1,88 +1,191 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList,
-  Image, ActivityIndicator, RefreshControl, TextInput, Dimensions,
-  Animated, StatusBar, Alert, Switch } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, FlatList, Image,
+  ActivityIndicator, RefreshControl, TextInput, useWindowDimensions, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useAuth } from '@/contexts/AuthContext';
-import * as Haptics from 'expo-haptics';
-const PINK='#ec4899',VIOLET='#8b5cf6',BLUE='#3b82f6',BG='#0C0B10',SURF='rgba(255,255,255,0.05)',BORDER='rgba(255,255,255,0.08)',TXT='#ffffff',TXTS='rgba(255,255,255,0.5)';
-
+import { discoveryAppearance } from '@/constants/discoveryAppearance';
 import { eventService } from '@/services';
-import { Event } from '@/types';
-const {width}=Dimensions.get('window');
-const CARD_W=(width-48)/2;
-const CATS=[{id:'all',label:'Todo',icon:'apps',g:[PINK,VIOLET]},{id:'music',label:'Música',icon:'musical-notes',g:['#f97316','#ef4444']},{id:'social',label:'Social',icon:'people',g:[BLUE,VIOLET]},{id:'food',label:'Food',icon:'restaurant',g:['#10b981','#059669']},{id:'tech',label:'Tech',icon:'code-slash',g:['#06b6d4',BLUE]},{id:'art',label:'Arte',icon:'color-palette',g:['#f59e0b','#f97316']}];
-export default function DiscoveryScreen(){
-  const router=useRouter(),insets=useSafeAreaInsets();
-  const [events,setEvents]=useState<Event[]>([]),[loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false),[search,setSearch]=useState(''),[cat,setCat]=useState('all'),[viewMode,setViewMode]=useState<'grid'|'list'>('grid');
-  const load=useCallback(async()=>{try{const r=await eventService.getEvents({limit:30,category:(cat==='all'?undefined:cat) as any});setEvents(r?.data||[]);}catch{}finally{setLoading(false);setRefreshing(false);}},[ cat]);
-  useEffect(()=>{setLoading(true);load();},[cat]);
-  const filtered=events.filter(e=>!search||e.title?.toLowerCase().includes(search.toLowerCase()));
-  const GridCard=({item}:{item:Event})=>(
-    <TouchableOpacity style={[ds.gridCard,{width:CARD_W}]} onPress={()=>router.push('/event/'+item._id as any)} activeOpacity={0.85}>
-      <Image source={{uri:item.image||'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400'}} style={ds.gridImg}/>
-      <LinearGradient colors={['transparent','rgba(0,0,0,0.88)']} style={ds.gridOverlay}/>
-      <View style={ds.gridBadge}><Text style={ds.gridBadgeTxt}>{item.price?'$'+Math.round((typeof item.price==='number'?item.price:item.price.amount)/1000)+'K':'GRATIS'}</Text></View>
-      <View style={ds.gridInfo}><Text style={ds.gridTitle} numberOfLines={2}>{item.title}</Text><Text style={ds.gridLoc} numberOfLines={1}>{(item.location as any)?.address||'Ver ubicación'}</Text></View>
-    </TouchableOpacity>
-  );
-  const ListCard=({item}:{item:Event})=>(
-    <TouchableOpacity style={ds.listCard} onPress={()=>router.push('/event/'+item._id as any)} activeOpacity={0.85}>
-      <Image source={{uri:item.image||'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=200'}} style={ds.listImg}/>
-      <View style={ds.listContent}>
-        <Text style={ds.listTitle} numberOfLines={2}>{item.title}</Text>
-        <View style={{flexDirection:'row',alignItems:'center',gap:4,marginVertical:4}}><Ionicons name="location-outline" size={12} color={TXTS}/><Text style={ds.listLoc} numberOfLines={1}>{(item.location as any)?.address||'Ubicación'}</Text></View>
-        <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
-          <Text style={ds.listPrice}>{item.price?'$'+(typeof item.price==='number'?item.price:item.price.amount).toLocaleString():'GRATIS'}</Text>
-          <LinearGradient colors={[PINK,VIOLET] as any} style={ds.listBtn} start={{x:0,y:0}} end={{x:1,y:0}}><Text style={{fontSize:12,fontWeight:'700',color:'#fff'}}>Ver</Text></LinearGradient>
+import { homeEventImage, homeEventPrice } from '@/utils/homeToday';
+import type { Event, EventCategory } from '@/types';
+
+type CategoryFilterId = 'all' | 'recurring' | EventCategory;
+
+const CATEGORIES: { id: CategoryFilterId; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { id: 'all', label: 'Todo', icon: 'apps-outline' },
+  { id: 'recurring', label: '🔁 Actividades Fijas', icon: 'repeat-outline' },
+  { id: 'education', label: 'Cursos & Talleres', icon: 'school-outline' },
+  { id: 'sports', label: 'Deportes & LIDOM', icon: 'baseball-outline' },
+  { id: 'art', label: 'Arte & Museos', icon: 'color-palette-outline' },
+  { id: 'travel', label: 'Tours & Ecoturismo', icon: 'compass-outline' },
+  { id: 'music', label: 'Música & Conciertos', icon: 'musical-notes-outline' },
+  { id: 'food', label: 'Gastronomía & Café', icon: 'restaurant-outline' },
+  { id: 'business', label: 'Negocios & Finanzas', icon: 'briefcase-outline' },
+  { id: 'technology', label: 'Tecnología & IA', icon: 'code-slash-outline' },
+  { id: 'wellness', label: 'Bienestar', icon: 'leaf-outline' },
+  { id: 'social', label: 'Social & Coros', icon: 'people-outline' },
+  { id: 'other', label: 'Otros', icon: 'ellipsis-horizontal' },
+];
+function place(event: Event) {
+  if (event.isSecretLocation) return 'Ubicación reservada';
+  if (event.isVirtual) return 'Evento en línea';
+  return typeof event.location === 'string' ? event.location : event.location?.city || event.location?.address || 'Ver ubicación';
+}
+function dateLabel(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString('es', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Fecha por confirmar';
+}
+
+export default function DiscoveryScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width, fontScale } = useWindowDimensions();
+  const { isDark } = useTheme();
+  const palette = useMemo(() => discoveryAppearance(isDark), [isDark]);
+  const styles = useMemo(() => createStyles(palette), [palette]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<CategoryFilterId>('all');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const generation = useRef({ value: 0 });
+  const columns = viewMode === 'grid' && width >= 380 && fontScale < 1.25 ? 2 : 1;
+  const listLayout = viewMode === 'list';
+  const cardWidth = Math.max(0, (width - insets.left - insets.right - 40 - (columns - 1) * 14) / columns);
+  const load = useCallback(async () => {
+    const ticket = ++generation.current.value;
+    setError('');
+    try {
+      const response = await eventService.getEvents({
+        limit: 50,
+        category: category === 'all' || category === 'recurring' ? undefined : category,
+        isRecurring: category === 'recurring' ? true : undefined,
+      });
+      if (ticket !== generation.current.value) return;
+      if (!response.success || !Array.isArray(response.data)) throw new Error('Invalid catalog');
+      setEvents(response.data.filter(event => event && event._id && event.status === 'published' && !event.isPrivate));
+    } catch {
+      if (ticket === generation.current.value) setError('No pudimos cargar los eventos. Comprueba tu conexión e inténtalo de nuevo.');
+    } finally {
+      if (ticket === generation.current.value) { setLoading(false); setRefreshing(false); }
+    }
+  }, [category]);
+  useEffect(() => {
+    const requests = generation.current;
+    setLoading(true); setEvents([]); void load();
+    return () => { requests.value++; };
+  }, [load]);
+  const filtered = events.filter(event => !search.trim() || [event.title, place(event)].join(' ').toLocaleLowerCase('es').includes(search.trim().toLocaleLowerCase('es')));
+
+  const renderCard = ({ item }: { item: Event }) => {
+    const image = homeEventImage(item);
+    return (
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ver evento ${item.title}`} activeOpacity={0.85}
+        style={[styles.card, { width: cardWidth }, listLayout && styles.listCard]}
+        onPress={() => router.push(`/event/${item._id}` as any)}>
+        <View style={{ position: 'relative' }}>
+          {image ? <Image source={{ uri: image }} style={listLayout ? styles.listImage : styles.image} />
+            : <View style={[listLayout ? styles.listImage : styles.image, styles.imageFallback]}><Ionicons name="ticket-outline" size={32} color={palette.accent} /></View>}
+          {Boolean(item.isRecurring) && (
+            <View style={styles.recurringBadge}>
+              <Ionicons name="repeat" size={11} color="#fff" />
+              <Text style={styles.recurringBadgeText}>Fijo Semanal</Text>
+            </View>
+          )}
+          {Boolean((item as any).isOfficial) && (
+            <View style={[styles.recurringBadge, { backgroundColor: '#f59e0b', top: item.isRecurring ? 30 : 8 }]}>
+              <Ionicons name="shield-checkmark" size={11} color="#fff" />
+              <Text style={styles.recurringBadgeText}>Oficial</Text>
+            </View>
+          )}
         </View>
+        <View style={styles.cardCopy}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+            <Text style={styles.date}>{dateLabel(item.date)}</Text>
+            {item.category === 'education' && <Text style={styles.catPill}>🎓 Taller / Masterclass</Text>}
+            {item.category === 'sports' && <Text style={styles.catPill}>⚾ Deporte</Text>}
+            {item.category === 'art' && <Text style={styles.catPill}>🎨 Arte & Museo</Text>}
+            {item.category === 'travel' && <Text style={styles.catPill}>🚌 Tour / Aventura</Text>}
+          </View>
+          <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+          <View style={styles.location}><Ionicons name="location-outline" size={14} color={palette.muted} /><Text style={styles.locationText} numberOfLines={2}>{place(item)}</Text></View>
+          <View style={styles.cardFooter}><Text style={styles.price}>{homeEventPrice(item).label}</Text><Ionicons name="arrow-forward" size={18} color={palette.accent} /></View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={[styles.page, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}><Text style={styles.eyebrow}>Encuentra tu próximo plan</Text><Text accessibilityRole="header" style={styles.title}>Explorar</Text></View>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ver mapa" onPress={() => router.push('/map')} style={styles.iconButton}><Ionicons name="map-outline" size={22} color={palette.accent} /></TouchableOpacity>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={listLayout ? 'Ver en tarjetas' : 'Ver en lista'} onPress={() => setViewMode(mode => mode === 'grid' ? 'list' : 'grid')} style={styles.iconButton}>
+          <Ionicons name={listLayout ? 'grid-outline' : 'list-outline'} size={23} color={palette.text} />
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
-  );
-  return(
-    <View style={{flex:1,backgroundColor:BG}}>
-      <StatusBar barStyle="light-content"/>
-      <View style={[ds.header,{paddingTop:insets.top+8}]}>
-        <Text style={ds.headerTitle}>Explorar</Text>
-        <TouchableOpacity style={ds.toggleBtn} onPress={()=>setViewMode(v=>v==='grid'?'list':'grid')}><Ionicons name={viewMode==='grid'?'list':'grid'} size={20} color={TXT}/></TouchableOpacity>
+      <View style={styles.search}>
+        <Ionicons name="search-outline" size={20} color={palette.muted} />
+        <TextInput accessibilityLabel="Buscar eventos por nombre o lugar" style={styles.searchInput} placeholder="Un evento, un lugar…" placeholderTextColor={palette.muted} value={search} onChangeText={setSearch} returnKeyType="search" autoCorrect={false} />
+        {search.length > 0 && <TouchableOpacity accessibilityRole="button" accessibilityLabel="Limpiar búsqueda" onPress={() => setSearch('')} style={styles.clear}><Ionicons name="close" size={20} color={palette.muted} /></TouchableOpacity>}
       </View>
-      <View style={ds.searchWrap}><Ionicons name="search-outline" size={18} color={TXTS} style={{marginRight:8}}/><TextInput style={ds.searchInput} placeholder="Buscar eventos..." placeholderTextColor={TXTS} value={search} onChangeText={setSearch}/>{search.length>0&&<TouchableOpacity onPress={()=>setSearch('')}><Ionicons name="close-circle" size={18} color={TXTS}/></TouchableOpacity>}</View>
-      <FlatList data={CATS} horizontal showsHorizontalScrollIndicator={false} keyExtractor={i=>i.id} contentContainerStyle={{paddingHorizontal:16,gap:8,paddingVertical:4}}
-        renderItem={({item})=>{const a=cat===item.id;return a
-          ?<TouchableOpacity onPress={()=>{setCat(item.id);Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);}}><LinearGradient colors={item.g as any} style={ds.catA} start={{x:0,y:0}} end={{x:1,y:0}}><Ionicons name={item.icon as any} size={14} color="#fff"/><Text style={[ds.catTxt,{color:'#fff'}]}>{item.label}</Text></LinearGradient></TouchableOpacity>
-          :<TouchableOpacity onPress={()=>{setCat(item.id);Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);}}><View style={ds.cat}><Ionicons name={item.icon as any} size={14} color={TXTS}/><Text style={ds.catTxt}>{item.label}</Text></View></TouchableOpacity>;}}/>
-      {loading?<View style={{flex:1,justifyContent:'center',alignItems:'center'}}><ActivityIndicator size="large" color={PINK}/></View>
-      :viewMode==='grid'
-        ?<FlatList data={filtered} numColumns={2} keyExtractor={i=>i._id} contentContainerStyle={{padding:16,gap:12}} columnWrapperStyle={{gap:12}} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load();}} tintColor={PINK}/>} renderItem={({item})=><GridCard item={item}/>} ListEmptyComponent={<View style={ds.empty}><Ionicons name="calendar-outline" size={48} color={TXTS}/><Text style={ds.emptyTxt}>Sin eventos</Text></View>}/>
-        :<FlatList data={filtered} keyExtractor={i=>i._id} contentContainerStyle={{padding:16,gap:12}} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={()=>{setRefreshing(true);load();}} tintColor={PINK}/>} renderItem={({item})=><ListCard item={item}/>} ListEmptyComponent={<View style={ds.empty}><Ionicons name="calendar-outline" size={48} color={TXTS}/><Text style={ds.emptyTxt}>Sin eventos</Text></View>}/>}
+      <TouchableOpacity accessibilityRole="button" style={{ minHeight: 44, marginHorizontal: 20, justifyContent: 'center' }} onPress={() => router.push('/search')}><Text style={{ color: palette.accent, fontSize: 13 }}>Buscar personas, tribus y anfitriones →</Text></TouchableOpacity>
+      <View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categories}>
+        {CATEGORIES.map(item => {
+          const selected = category === item.id;
+          return <TouchableOpacity key={item.id} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => setCategory(item.id)} style={[styles.category, selected && { backgroundColor: palette.accent, borderColor: palette.accent }]}>
+            <Ionicons name={item.icon} size={16} color={selected ? palette.onAccent : palette.muted} /><Text style={[styles.categoryText, selected && { color: palette.onAccent }]}>{item.label}</Text>
+          </TouchableOpacity>;
+        })}
+      </ScrollView></View>
+      {loading ? <View style={styles.state}><ActivityIndicator size="large" color={palette.accent} accessibilityLabel="Buscando eventos" /><Text style={styles.stateCopy}>Buscando tu próximo plan…</Text></View>
+        : error ? <View style={styles.state}><Ionicons name="cloud-offline-outline" size={34} color={palette.accent} /><Text accessibilityRole="header" style={styles.stateTitle}>Volvamos a intentarlo</Text><Text style={styles.stateCopy}>{error}</Text><TouchableOpacity accessibilityRole="button" style={styles.retry} onPress={() => { setLoading(true); void load(); }}><Text style={styles.retryText}>Reintentar</Text></TouchableOpacity></View>
+        : <FlatList key={`${viewMode}-${columns}`} data={filtered} numColumns={columns} keyExtractor={item => item._id}
+          contentContainerStyle={styles.results} columnWrapperStyle={columns > 1 ? { gap: 14 } : undefined}
+          keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void load(); }} tintColor={palette.accent} colors={[palette.accent]} />}
+          ListHeaderComponent={<Text style={styles.resultsLabel}>{filtered.length === 1 ? '1 plan para explorar' : `${filtered.length} planes para explorar`}</Text>}
+          renderItem={renderCard}
+          ListEmptyComponent={<View style={styles.state}><Ionicons name="search-outline" size={34} color={palette.accent} /><Text style={styles.stateTitle}>El próximo plan está por llegar</Text><Text style={styles.stateCopy}>Prueba otra categoría o cambia tu búsqueda.</Text>{(search || category !== 'all') && <TouchableOpacity accessibilityRole="button" style={styles.retry} onPress={() => { setSearch(''); setCategory('all'); }}><Text style={styles.retryText}>Ver todos los planes</Text></TouchableOpacity>}</View>} />}
     </View>
   );
 }
-const ds=StyleSheet.create({
-  header:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',paddingHorizontal:20,paddingBottom:12},
-  headerTitle:{fontSize:26,fontWeight:'800',color:TXT},
-  toggleBtn:{width:40,height:40,borderRadius:13,justifyContent:'center',alignItems:'center',backgroundColor:SURF,borderWidth:1,borderColor:BORDER},
-  searchWrap:{flexDirection:'row',alignItems:'center',marginHorizontal:16,marginBottom:12,backgroundColor:SURF,borderRadius:14,borderWidth:1,borderColor:BORDER,paddingHorizontal:14,height:48},
-  searchInput:{flex:1,color:TXT,fontSize:15},
-  cat:{flexDirection:'row',alignItems:'center',gap:5,backgroundColor:SURF,borderRadius:12,paddingHorizontal:12,paddingVertical:8,borderWidth:1,borderColor:BORDER},
-  catA:{flexDirection:'row',alignItems:'center',gap:5,borderRadius:12,paddingHorizontal:12,paddingVertical:8},
-  catTxt:{fontSize:13,color:TXTS,fontWeight:'600'},
-  gridCard:{borderRadius:18,overflow:'hidden',backgroundColor:'#1a1825'},
-  gridImg:{width:'100%',height:160},
-  gridOverlay:{position:'absolute',bottom:0,left:0,right:0,height:110},
-  gridBadge:{position:'absolute',top:10,right:10,backgroundColor:'rgba(0,0,0,0.7)',borderRadius:8,paddingHorizontal:8,paddingVertical:3},
-  gridBadgeTxt:{fontSize:10,fontWeight:'800',color:'#fff'},
-  gridInfo:{position:'absolute',bottom:0,left:0,right:0,padding:10},
-  gridTitle:{fontSize:14,fontWeight:'700',color:'#fff',marginBottom:3},
-  gridLoc:{fontSize:11,color:'rgba(255,255,255,0.6)'},
-  listCard:{flexDirection:'row',backgroundColor:SURF,borderRadius:16,overflow:'hidden',borderWidth:1,borderColor:BORDER},
-  listImg:{width:90,height:100},listContent:{flex:1,padding:12},
-  listTitle:{fontSize:15,fontWeight:'700',color:TXT,lineHeight:20},
-  listLoc:{fontSize:12,color:TXTS,flex:1},listPrice:{fontSize:15,fontWeight:'800',color:TXT},
-  listBtn:{paddingHorizontal:14,paddingVertical:6,borderRadius:10},
-  empty:{alignItems:'center',paddingTop:60,gap:12},emptyTxt:{fontSize:16,color:TXTS},
+const createStyles = (p: ReturnType<typeof discoveryAppearance>) => StyleSheet.create({
+  page: { flex: 1, backgroundColor: p.background },
+  header: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 20, flexDirection: 'row', gap: 14, alignItems: 'center' },
+  eyebrow: { fontSize: 13, color: p.muted, lineHeight: 20, marginBottom: 4 },
+  title: { fontSize: 32, fontWeight: '800', letterSpacing: -1, color: p.text },
+  iconButton: { width: 46, height: 46, backgroundColor: p.surface, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  search: { marginHorizontal: 20, paddingHorizontal: 14, minHeight: 54, borderWidth: 1, borderColor: p.border, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  searchInput: { flex: 1, fontSize: 15, color: p.text, paddingVertical: 14 },
+  clear: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  categories: { gap: 10, paddingHorizontal: 20, paddingVertical: 18 },
+  category: { minHeight: 44, paddingVertical: 11, paddingHorizontal: 14, gap: 7, flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: p.border },
+  categoryText: { fontSize: 13, fontWeight: '600', color: p.muted },
+  results: { paddingHorizontal: 20, paddingBottom: 28, gap: 14 },
+  resultsLabel: { fontSize: 13, color: p.muted, marginBottom: 4 },
+  card: { borderRadius: 20, backgroundColor: p.surface, overflow: 'hidden' },
+  image: { width: '100%', aspectRatio: 1.55 },
+  imageFallback: { backgroundColor: p.elevated, alignItems: 'center', justifyContent: 'center' },
+  cardCopy: { flex: 1, padding: 16, gap: 8 },
+  date: { fontSize: 12, lineHeight: 18, fontWeight: '600', color: p.accent },
+  cardTitle: { fontSize: 18, lineHeight: 25, fontWeight: '700', color: p.text },
+  location: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
+  locationText: { flex: 1, fontSize: 13, lineHeight: 20, color: p.muted },
+  cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 8 },
+  price: { flex: 1, fontSize: 14, fontWeight: '700', lineHeight: 21, color: p.text },
+  recurringBadge: { position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#3b82f6', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, zIndex: 2 },
+  recurringBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  catPill: { fontSize: 10, fontWeight: '700', color: p.accent, backgroundColor: 'rgba(242,139,182,0.12)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  listCard: { flexDirection: 'row', alignItems: 'stretch' },
+  listImage: { width: 88, minHeight: 140 },
+  state: { flex: 1, padding: 28, alignItems: 'center', justifyContent: 'center', gap: 14 },
+  stateTitle: { fontSize: 19, fontWeight: '700', color: p.text, textAlign: 'center', lineHeight: 26 },
+  stateCopy: { color: p.muted, fontSize: 14, textAlign: 'center', lineHeight: 23 },
+  retry: { minHeight: 48, paddingHorizontal: 20, paddingVertical: 14, borderRadius: 14, backgroundColor: p.accent, marginTop: 4 },
+  retryText: { color: p.onAccent, fontSize: 14, fontWeight: '600', textAlign: 'center' },
 });

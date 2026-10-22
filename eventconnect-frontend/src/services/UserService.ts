@@ -1,4 +1,5 @@
-import axios, { AxiosResponse } from 'axios';
+import type { AxiosResponse } from 'axios';
+import axios from '@/lib/api/client';
 import type { User, ApiResponse, PaginatedResponse } from '../types/api.types';
 
 export interface UpdateProfileData {
@@ -44,11 +45,11 @@ class UserService {
 
   public async getUserById(userId: string): Promise<User> {
     try {
-      const response: AxiosResponse<ApiResponse<User>> =
-        await axios.get(`${this.apiBaseUrl}/users/${userId}`);
+      const response: AxiosResponse<ApiResponse<User> & { user?: User }> =
+        await axios.get(`${this.apiBaseUrl}/users/profile/${userId}`);
 
-      if (response.data.success && response.data.data) {
-        return response.data.data;
+      if (response.data.success && (response.data.user || response.data.data)) {
+        return (response.data.user || response.data.data)!;
       }
 
       throw new Error('Usuario no encontrado');

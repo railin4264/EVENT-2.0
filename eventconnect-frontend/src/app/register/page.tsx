@@ -1,475 +1,394 @@
-'use client'
-
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { Suspense, useState, useEffect, useRef } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, User, Loader2, ChevronRight, ChevronLeft, Calendar, ArrowRight, Sparkles, Phone } from 'lucide-react'
-import { useAuthStore } from '@/stores/authStore'
-import InterestsSelector from '@/components/auth/InterestsSelector'
-import toast from 'react-hot-toast'
+import { ArrowLeft, ArrowRight, Calendar, Check, Eye, EyeOff, Globe, Loader2, ShieldCheck, Sparkles } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import toast from 'react-hot-toast'
+import { useAuthStore } from '@/stores/authStore'
+import { useLocaleStore } from '@/stores/localeStore'
+import { authPageHref, publicExploreHref, safeRedirect } from '@/lib/auth/redirect'
+import { registerSchema, type RegisterFormData } from '@/lib/auth/register'
 import OAuthButtons from '@/components/auth/OAuthButtons'
-import { ParticleField } from '@/components/redesign/ui/particle-field'
-import { Onboarding } from '@/components/redesign/Onboarding'
-import { cn } from '@/lib/utils'
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
+const inputClass = 'w-full rounded-xl border border-border bg-background px-4 py-3 text-base text-foreground outline-none transition-colors hover:border-primary/30 focus:border-primary focus:ring-2 focus:ring-primary/20 aria-[invalid=true]:border-red-500'
 
-const registerSchema = z.object({
-  firstName: z.string().min(2, 'Mínimo 2 caracteres').max(50),
-  lastName: z.string().min(2, 'Mínimo 2 caracteres').max(50),
-  username: z.string()
-    .min(3, 'Mínimo 3 caracteres').max(30)
-    .regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guiones bajos'),
-  email: z.string().min(1, 'Requerido').email('Email inválido'),
-  birthDate: z.string()
-    .min(1, 'Requerido')
-    .refine((v) => {
-      const t = Date.parse(v)
-      return !isNaN(t) && t < Date.now()
-    }, 'La fecha debe ser en el pasado'),
-  password: z.string()
-    .min(8, 'Mínimo 8 caracteres')
-    .regex(/(?=.*[a-z])/, 'Debe contener al menos una minúscula')
-    .regex(/(?=.*[A-Z])/, 'Debe contener al menos una mayúscula')
-    .regex(/(?=.*\d)/, 'Debe contener al menos un número')
-    .regex(/(?=.*[@$!%*?&])/, 'Debe contener al menos un carácter especial (@$!%*?&)'),
-  confirmPassword: z.string().min(1, 'Confirma tu contraseña'),
-  phone: z.string().regex(/^[0-9+\-\s()]*$/, 'Formato inválido').optional().or(z.literal('')),
-  acceptTerms: z.boolean().refine((v) => v, 'Debes aceptar los términos'),
-  interests: z.array(z.string()).min(1, 'Selecciona al menos 1 interés'),
-}).refine((d) => d.password === d.confirmPassword, {
-  message: 'Las contraseñas no coinciden',
-  path: ['confirmPassword'],
-})
+const COUNTRIES = [
+  { code: 'DO', name: 'República Dominicana', flag: '🇩🇴', label: 'Rep. Dominicana', terms: 'Coros · Boletas · RD$' },
+  { code: 'ES', name: 'España', flag: '🇪🇸', label: 'España', terms: 'Quedadas · Entradas · €' },
+  { code: 'MX', name: 'México', flag: '🇲🇽', label: 'México', terms: 'Planes · Boletos · MXN$' },
+  { code: 'CO', name: 'Colombia', flag: '🇨🇴', label: 'Colombia', terms: 'Parches · Boletas · COP$' },
+  { code: 'AR', name: 'Argentina', flag: '🇦🇷', label: 'Argentina', terms: 'Juntadas · Entradas · ARS$' },
+  { code: 'US', name: 'Estados Unidos', flag: '🇺🇸', label: 'EE.UU. / Global', terms: 'Hangouts · Tickets · USD$' },
+]
 
-type RegisterFormData = z.infer<typeof registerSchema>
-
-// ─── Field wrapper ─────────────────────────────────────────────────────────────
-
-function Field({
-  id,
-  label,
-  error,
-  children,
-  className,
-}: {
-  id: string
-  label: string
-  error?: string
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div className={cn('space-y-1.5', className)}>
-      <label htmlFor={id} className="block text-sm font-medium text-muted-foreground">
-        {label}
-      </label>
-      {children}
-      {error && (
-        <p role="alert" className="text-xs text-red-500 font-medium">
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
-
-const inputCls =
-  'w-full py-3 text-sm rounded-xl border border-border bg-gray-50 bg-primary/5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all'
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter()
-  const { register: registerUser, user } = useAuthStore()
-
-  const [step, setStep] = useState(1)
+  const searchParams = useSearchParams()
+  const destination = safeRedirect(searchParams.get('redirect'))
+  const exploreHref = publicExploreHref(destination)
+  const registerUser = useAuthStore(state => state.register)
   const [showPassword, setShowPassword] = useState(false)
-  const [showOnboarding, setShowOnboarding] = useState(false)
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-    trigger,
-    watch,
-    setValue,
-  } = useForm<RegisterFormData>({
+  // Locale and regional psychology store
+  const { config, setLocaleByCountry } = useLocaleStore()
+  const [selectedCountryCode, setSelectedCountryCode] = useState(config.countryCode || 'DO')
+
+  const { register, handleSubmit, setError, clearErrors, watch, setValue, formState: { errors, isSubmitting, dirtyFields } } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
-    mode: 'onChange',
-    reValidateMode: 'onChange',
     defaultValues: {
-      firstName: '', lastName: '', username: '', email: '',
-      birthDate: '', password: '', confirmPassword: '',
-      phone: '', acceptTerms: false, interests: [],
+      name: '',
+      username: '',
+      email: '',
+      birthDate: '',
+      password: '',
+      acceptTerms: false,
+      countryCode: config.countryCode || 'DO',
+      country: config.countryName || 'República Dominicana'
     },
   })
 
-  const interests = watch('interests')
-
-  const handleNextStep = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const ok = await trigger([
-      'firstName', 'lastName', 'username', 'email',
-      'birthDate', 'password', 'confirmPassword', 'acceptTerms', 'phone',
-    ])
-    if (ok) setStep(2)
+  const handleCountrySelect = (code: string, name: string) => {
+    setSelectedCountryCode(code as any)
+    setValue('countryCode', code)
+    setValue('country', name)
+    setLocaleByCountry(code)
+    toast.success(`Experiencia adaptada para ${name}`, { id: 'country-switch' })
   }
 
   const onSubmit = async (data: RegisterFormData) => {
+    clearErrors('root')
     try {
+      const activeCountry = COUNTRIES.find(c => c.code === selectedCountryCode) || COUNTRIES[0]
       await registerUser({
+        name: data.name,
         username: data.username,
         email: data.email,
         birthDate: data.birthDate,
         password: data.password,
-        firstName: data.firstName,
-        lastName: data.lastName,
         acceptTerms: data.acceptTerms,
-        interests: data.interests,
-        phone: data.phone,
+        country: data.country || activeCountry.name,
+        countryCode: data.countryCode || activeCountry.code,
+        preferredLocale: config.locale,
+        preferredCurrency: config.currency
       })
-      toast.success('¡Cuenta creada!')
-      setShowOnboarding(true)
-    } catch (error: any) {
-      toast.error(error.message || 'Error al crear la cuenta')
+      toast.success('¡Tu cuenta está lista!')
+      router.replace(`/onboarding?redirect=${encodeURIComponent(destination)}`)
+    } catch (error: unknown) {
+      const failure = (error && typeof error === 'object' ? error : {}) as { response?: { data?: { message?: string; errors?: { path?: string; msg?: string }[] } }; message?: string }
+      const fields = ['name', 'username', 'email', 'birthDate', 'password', 'acceptTerms', 'countryCode', 'country']
+      const validation = Array.isArray(failure.response?.data?.errors) ? failure.response.data.errors : []
+      validation?.forEach(issue => {
+        if (issue && typeof issue.path === 'string' && fields.includes(issue.path)) {
+          setError(issue.path as keyof RegisterFormData, { message: typeof issue.msg === 'string' ? issue.msg : 'Revisa este campo' })
+        }
+      })
+      const message = failure.response?.data?.message
+      const explanation = message === 'User already exists'
+        ? 'Ese correo o usuario ya tiene una cuenta. Inicia sesión o utiliza otro.'
+        : validation.length ? 'Revisa los campos señalados.' : message || failure.message || 'No pudimos crear tu cuenta. Inténtalo de nuevo.'
+      setError('root.server', { message: explanation })
+      toast.error(explanation)
     }
   }
 
-  if (showOnboarding) {
-    return <Onboarding user={user} onComplete={() => router.push('/events')} />
-  }
+  const fieldError = (field: keyof RegisterFormData) => errors[field] && (
+    <p id={`${field}-error`} role="alert" className="mt-1.5 text-sm text-red-500">
+      {errors[field]?.message}
+    </p>
+  )
+
+  const password = watch('password')
+  const name = watch('name')
+  const suffix = useRef('')
+
+  useEffect(() => {
+    if (dirtyFields.username || name.trim().length < 2) return
+    if (!suffix.current) suffix.current = String(Math.floor(Math.random() * 900000) + 100000)
+    const base = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'persona'
+    setValue('username', `${base}_${suffix.current}`)
+  }, [name, dirtyFields.username, setValue])
 
   return (
-    <div className="relative min-h-screen flex bg-white dark:bg-background">
-      <ParticleField className="pointer-events-none opacity-50" color="139, 92, 246" />
-
-      {/* ── Left panel ────────────────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:flex-1 flex-col justify-between relative overflow-hidden bg-background p-12">
-        <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-primary/15 rounded-full blur-[100px] -translate-x-1/3 translate-y-1/3" />
-        </div>
-
-        <div className="relative z-10 flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/30">
-            <Calendar className="w-5 h-5 text-white" aria-hidden="true" />
-          </div>
-          <span className="text-xl font-bold text-white tracking-tight">
-            Event<span className="text-primary">Now</span>
+    <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-2">
+      <aside className="hidden flex-col justify-between bg-muted/40 px-12 py-10 text-foreground lg:flex xl:px-20">
+        <Link href="/" className="flex w-fit items-center gap-2 text-xl font-bold">
+          <Calendar className="h-6 w-6 text-primary" />
+          EventNow
+        </Link>
+        <div className="max-w-md py-16">
+          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+            {config.countryCode === 'DO' ? 'De verlo a vivirlo · RD' :
+             config.countryCode === 'ES' ? 'De verlo a vivirlo · España' :
+             config.countryCode === 'MX' ? 'De verlo a vivirlo · México' :
+             config.countryCode === 'CO' ? 'De verlo a vivirlo · Colombia' :
+             config.countryCode === 'AR' ? 'De verlo a vivirlo · Argentina' :
+             'From browsing to living it · Global'}
           </span>
-        </div>
-
-        <div className="relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-6 rounded-full bg-primary/15 border border-primary/25 text-primary text-sm font-medium">
-              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-              Únete a la comunidad
-            </div>
-            <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-tight mb-4 tracking-tight">
-              Tu aventura<br />empieza<br />aquí
-            </h1>
-            <p className="text-muted-foreground text-base leading-relaxed max-w-sm">
-              Crea tu cuenta gratuita y descubre miles de eventos exclusivos en tu ciudad.
-            </p>
-          </motion.div>
-
-          <motion.ul
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="mt-12 space-y-4"
-          >
+          <h1 className="mt-5 text-5xl font-semibold leading-[1.1] tracking-tight">
+            Tu próximo {config.terms.hangout.toLowerCase()}<br />empieza aquí.
+          </h1>
+          <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
+            Descubre eventos a tu ritmo con la jerga y cultura de tu país. Conecta con tus {config.terms.friends.toLowerCase()} y haz el {config.terms.splitBill.toLowerCase()} sin fricciones.
+          </p>
+          <div className="mt-10 flex flex-wrap gap-2">
             {[
-              '✓  Descubre eventos cercanos personalizados',
-              '✓  Conecta con comunidades que te interesan',
-              '✓  Tickets seguros con pagos cifrados',
-            ].map((item) => (
-              <li key={item} className="text-sm text-muted-foreground font-medium">{item}</li>
+              'Música en vivo',
+              config.terms.hangoutPlural,
+              config.terms.drinksBites,
+              'En Línea & Streams'
+            ].map(label => (
+              <span key={label} className="rounded-full border border-border px-3 py-2 text-sm text-muted-foreground">
+                {label}
+              </span>
             ))}
-          </motion.ul>
+          </div>
+          <div className="mt-10 flex items-start gap-3 border-t border-border pt-6 text-sm leading-relaxed text-muted-foreground">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            Explora antes de decidir. Moneda nativa ({config.currencySymbol} {config.currency}), métodos de cobro locales y adaptabilidad a cualquier país del mundo.
+          </div>
         </div>
+        <Link href={exploreHref} className="flex w-fit items-center gap-2 text-sm text-muted-foreground hover:text-white">
+          <ArrowLeft className="h-4 w-4" />
+          Seguir explorando sin cuenta
+        </Link>
+      </aside>
 
-        <p className="relative z-10 text-xs text-gray-600">© 2025 EventNow</p>
-      </div>
+      <section aria-label="Crear tu cuenta" className="flex justify-center px-5 py-8 sm:px-10 sm:py-12">
+        <div className="w-full max-w-md">
+          <Link href={exploreHref} className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" />
+            Volver a explorar
+          </Link>
+          <div className="mb-5 flex items-center gap-3 text-xs font-semibold">
+            <span className="rounded-full bg-primary/10 px-3 py-1.5 text-primary">01 · Tu cuenta</span>
+            <span className="text-muted-foreground">02 · Personalización nativa</span>
+          </div>
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            Un buen {config.terms.hangout.toLowerCase()} empieza aquí.
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            Un solo paso. Tu experiencia se adapta automáticamente a tu país.
+          </p>
+          <p className="mt-4 text-sm text-muted-foreground">
+            ¿Ya tienes cuenta?{' '}
+            <Link href={authPageHref('/login', destination)} className="font-semibold text-primary hover:underline">
+              Inicia sesión
+            </Link>
+          </p>
 
-      {/* ── Right panel: form ─────────────────────────────────────────── */}
-      <div className="flex-1 flex items-start justify-center px-4 sm:px-8 py-12 overflow-y-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-sm"
-        >
-          {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2 mb-10">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-white" aria-hidden="true" />
-            </div>
-            <span className="text-lg font-bold text-foreground">
-              Event<span className="text-primary">Now</span>
-            </span>
+          {/* Social Sign-In (Google Multi-Account First) */}
+          <div className="mt-6">
+            <OAuthButtons mode="register" />
           </div>
 
-          {/* Step header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4" aria-label={`Paso ${step} de 2`}>
-              {[1, 2].map((s) => (
-                <div
-                  key={s}
-                  className={cn(
-                    'h-1 rounded-full transition-all duration-300',
-                    s === step ? 'flex-[2] bg-primary' : s < step ? 'bg-primary/60' : 'flex-1 bg-gray-200 bg-primary/10'
-                  )}
-                />
-              ))}
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="mt-7 space-y-4">
+            {/* Country Selector Rail */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-sm font-medium">
+                  <Globe className="h-4 w-4 text-primary" />
+                  Tu país / Región
+                </label>
+                <span className="text-xs text-muted-foreground">Adapta la jerga y moneda</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
+                {COUNTRIES.map(c => {
+                  const isSelected = selectedCountryCode === c.code
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => handleCountrySelect(c.code, c.name)}
+                      className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-center transition-all ${
+                        isSelected
+                          ? 'border-primary bg-primary/10 text-primary shadow-sm font-semibold ring-1 ring-primary'
+                          : 'border-border bg-background hover:bg-muted/60 text-muted-foreground'
+                      }`}
+                    >
+                      <span className="text-xl mb-0.5">{c.flag}</span>
+                      <span className="text-xs truncate w-full">{c.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Dynamic native terms banner */}
+              <div className="mt-2 flex items-center gap-2 rounded-lg bg-primary/5 px-3 py-1.5 text-xs text-primary border border-primary/20">
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <strong>{COUNTRIES.find(c => c.code === selectedCountryCode)?.label}:</strong> {COUNTRIES.find(c => c.code === selectedCountryCode)?.terms}
+                </span>
+              </div>
             </div>
-            <h2 className="text-2xl font-bold text-foreground mb-1">
-              {step === 1 ? 'Crea tu cuenta' : 'Tus intereses'}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {step === 1 ? (
+
+            <div>
+              <label htmlFor="name" className="mb-1.5 block text-sm font-medium">Tu nombre</label>
+              <input
+                id="name"
+                autoComplete="name"
+                placeholder="¿Cómo te llamas?"
+                maxLength={50}
+                {...register('name')}
+                className={inputClass}
+                aria-invalid={!!errors.name}
+                aria-describedby={errors.name ? 'name-error' : undefined}
+              />
+              {fieldError('name')}
+            </div>
+
+            <details open={errors.username ? true : undefined} className="rounded-xl bg-muted/40 p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                Personalizar mi nombre de usuario (opcional)
+              </summary>
+              <div className="mt-3">
+                <label htmlFor="username" className="mb-1.5 block text-sm font-medium">Nombre de usuario</label>
+                <input
+                  id="username"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="tu_usuario"
+                  maxLength={30}
+                  {...register('username')}
+                  className={inputClass}
+                  aria-invalid={!!errors.username}
+                  aria-describedby={errors.username ? 'username-error' : 'username-hint'}
+                />
+                <p id="username-hint" className="mt-1.5 text-xs text-muted-foreground">Así te encontrarán otros {config.terms.friends.toLowerCase()}.</p>
+                {fieldError('username')}
+              </div>
+            </details>
+
+            <div>
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium">Correo electrónico</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                placeholder="tu@correo.com"
+                {...register('email')}
+                className={inputClass}
+                aria-invalid={!!errors.email}
+                aria-describedby={errors.email ? 'email-error' : undefined}
+              />
+              {fieldError('email')}
+            </div>
+
+            <div>
+              <label htmlFor="birthDate" className="mb-1.5 block text-sm font-medium">Fecha de nacimiento</label>
+              <input
+                id="birthDate"
+                type="date"
+                autoComplete="bday"
+                {...register('birthDate')}
+                className={inputClass}
+                aria-invalid={!!errors.birthDate}
+                aria-describedby={errors.birthDate ? 'birthDate-error birthDate-hint' : 'birthDate-hint'}
+              />
+              <p id="birthDate-hint" className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                Nos permite comprobar las restricciones de edad de cada evento.
+              </p>
+              {fieldError('birthDate')}
+            </div>
+
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-sm font-medium">Contraseña</label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  maxLength={128}
+                  {...register('password')}
+                  className={`${inputClass} pr-12`}
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? 'password-error password-hint' : 'password-hint'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(value => !value)}
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <div id="password-hint" className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {[
+                  { text: '8 caracteres', valid: password.length >= 8 },
+                  { text: 'Mayúscula y minúscula', valid: /[a-z]/.test(password) && /[A-Z]/.test(password) },
+                  { text: 'Número', valid: /\d/.test(password) },
+                  { text: 'Símbolo @$!%*?&', valid: /[@$!%*?&]/.test(password) },
+                ].map(rule => (
+                  <span key={rule.text} className={`inline-flex items-center gap-1 ${rule.valid ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+                    <Check className={`h-3 w-3 ${rule.valid ? 'opacity-100' : 'opacity-30'}`} aria-hidden="true" />
+                    {rule.text}
+                  </span>
+                ))}
+              </div>
+              {fieldError('password')}
+            </div>
+
+            <div className="pt-1">
+              <div className="flex items-start gap-3">
+                <input
+                  id="acceptTerms"
+                  type="checkbox"
+                  {...register('acceptTerms')}
+                  aria-invalid={!!errors.acceptTerms}
+                  aria-describedby={errors.acceptTerms ? 'acceptTerms-error' : undefined}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                />
+                <label htmlFor="acceptTerms" className="text-sm leading-relaxed text-muted-foreground">
+                  Acepto los <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">términos</Link> y la <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">política de privacidad</Link>.
+                </label>
+              </div>
+              {fieldError('acceptTerms')}
+            </div>
+
+            {errors.root?.server && (
+              <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm">
+                {errors.root.server.message}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+            >
+              {isSubmitting ? (
                 <>
-                  ¿Ya tienes cuenta?{' '}
-                  <Link href="/login" className="font-semibold text-primary hover:underline underline-offset-2">
-                    Inicia sesión
-                  </Link>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creando tu cuenta…
                 </>
               ) : (
-                'Selecciona entre 1 y 5 intereses para personalizar tu experiencia'
+                <>
+                  Crear cuenta gratis
+                  <ArrowRight className="h-4 w-4" />
+                </>
               )}
-            </p>
-          </div>
+            </button>
+          </form>
 
-          {/* ── Step 1 ── */}
-          <AnimatePresence mode="wait">
-            {step === 1 && (
-              <motion.form
-                key="step1"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                onSubmit={handleNextStep}
-                noValidate
-                className="space-y-4"
-              >
-                <OAuthButtons mode="register" />
-
-                <Field id="username" label="Nombre de usuario" error={errors.username?.message}>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
-                    <input
-                      id="username" type="text" autoComplete="username"
-                      {...register('username')}
-                      className={cn(inputCls, 'pl-10 pr-4')}
-                      placeholder="tu_usuario"
-                    />
-                  </div>
-                </Field>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field id="firstName" label="Nombre" error={errors.firstName?.message}>
-                    <input
-                      id="firstName" type="text" autoComplete="given-name"
-                      {...register('firstName')}
-                      className={cn(inputCls, 'px-4')}
-                      placeholder="Juan"
-                    />
-                  </Field>
-                  <Field id="lastName" label="Apellido" error={errors.lastName?.message}>
-                    <input
-                      id="lastName" type="text" autoComplete="family-name"
-                      {...register('lastName')}
-                      className={cn(inputCls, 'px-4')}
-                      placeholder="Pérez"
-                    />
-                  </Field>
-                </div>
-
-                <Field id="email" label="Correo electrónico" error={errors.email?.message}>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
-                    <input
-                      id="email" type="email" autoComplete="email"
-                      {...register('email')}
-                      className={cn(inputCls, 'pl-10 pr-4')}
-                      placeholder="tu@email.com"
-                    />
-                  </div>
-                </Field>
-
-                <Field id="birthDate" label="Fecha de nacimiento" error={errors.birthDate?.message}>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
-                    <input
-                      id="birthDate" type="date"
-                      {...register('birthDate')}
-                      className={cn(inputCls, 'pl-10 pr-4')}
-                    />
-                  </div>
-                </Field>
-
-                <Field id="password" label="Contraseña" error={errors.password?.message}>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
-                    <input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
-                      {...register('password')}
-                      className={cn(inputCls, 'pl-10 pr-11')}
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((s) => !s)}
-                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showPassword
-                        ? <EyeOff className="w-4 h-4" aria-hidden="true" />
-                        : <Eye className="w-4 h-4" aria-hidden="true" />
-                      }
-                    </button>
-                  </div>
-                </Field>
-
-                <Field id="confirmPassword" label="Confirmar contraseña" error={errors.confirmPassword?.message}>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
-                    <input
-                      id="confirmPassword"
-                      type={showPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
-                      {...register('confirmPassword')}
-                      className={cn(inputCls, 'pl-10 pr-4')}
-                      placeholder="••••••••"
-                    />
-                  </div>
-                </Field>
-
-                <Field id="phone" label="Teléfono (opcional)" error={errors.phone?.message}>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden="true" />
-                    <input
-                      id="phone" type="tel" autoComplete="tel"
-                      {...register('phone')}
-                      className={cn(inputCls, 'pl-10 pr-4')}
-                      placeholder="+52 55 1234 5678"
-                    />
-                  </div>
-                </Field>
-
-                <div className="space-y-1">
-                  <div className="flex items-start gap-2.5">
-                    <input
-                      id="terms"
-                      type="checkbox"
-                      checked={watch('acceptTerms')}
-                      onChange={(e) => { setValue('acceptTerms', e.target.checked); trigger('acceptTerms') }}
-                      className="mt-0.5 w-4 h-4 shrink-0 rounded border-gray-300 text-primary focus:ring-emerald-500 accent-primary cursor-pointer"
-                    />
-                    <span className="text-xs text-muted-foreground leading-relaxed select-none cursor-default">
-                      Acepto los términos y condiciones y la política de privacidad
-                    </span>
-                  </div>
-                  <div className="pl-6 flex gap-3">
-                    <Link href="/terms" target="_blank" className="text-xs text-primary hover:underline underline-offset-2">
-                      Términos
-                    </Link>
-                    <Link href="/privacy" target="_blank" className="text-xs text-primary hover:underline underline-offset-2">
-                      Privacidad
-                    </Link>
-                  </div>
-                  {errors.acceptTerms && (
-                    <p role="alert" className="text-xs text-red-500 font-medium">{errors.acceptTerms.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  className="group w-full flex items-center justify-center gap-2 py-3 px-4 bg-primary text-primary-foreground text-white dark:text-foreground rounded-xl font-semibold text-sm transition-all hover:opacity-90 shadow-lg shadow-black/10 mt-2"
-                >
-                  Siguiente
-                  <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                </button>
-
-                <div className="text-center pt-2">
-                  <Link
-                    href="/events"
-                    className="text-xs text-muted-foreground dark:text-gray-500 hover:text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    ← Explorar sin cuenta
-                  </Link>
-                </div>
-              </motion.form>
-            )}
-
-            {/* ── Step 2 ── */}
-            {step === 2 && (
-              <motion.form
-                key="step2"
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                onSubmit={handleSubmit(onSubmit)}
-                noValidate
-                className="space-y-5"
-              >
-                <InterestsSelector
-                  selectedInterests={interests}
-                  onChange={(v) => setValue('interests', v)}
-                  min={1}
-                  max={5}
-                />
-                {errors.interests && (
-                  <p role="alert" className="text-xs text-red-500 font-medium">
-                    {errors.interests.message as string}
-                  </p>
-                )}
-
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setStep(1)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-xl border border-border text-muted-foreground hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                  >
-                    <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-                    Atrás
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || interests.length < 1}
-                    className="flex-[2] flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-xl bg-primary text-primary-foreground text-white dark:text-foreground disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all shadow-lg shadow-black/10"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                        Creando…
-                      </>
-                    ) : (
-                      <>
-                        Crear cuenta
-                        <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                      </>
-                    )}
-                  </button>
-                </div>
-              </motion.form>
-            )}
-          </AnimatePresence>
-        </motion.div>
-      </div>
+          <p className="mt-7 text-center text-sm text-muted-foreground">
+            <Link href={exploreHref} className="hover:text-foreground hover:underline">
+              Explorar eventos sin registrarme
+            </Link>
+          </p>
+        </div>
+      </section>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader2 className="h-7 w-7 animate-spin" aria-label="Cargando registro" /></div>}>
+      <RegisterForm />
+    </Suspense>
   )
 }

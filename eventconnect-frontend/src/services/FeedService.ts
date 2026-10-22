@@ -1,4 +1,5 @@
-import axios, { AxiosResponse } from 'axios';
+import type { AxiosResponse } from 'axios';
+import axios from '@/lib/api/client';
 import type { FeedPost, PostAttachment, PostReaction, FeedComment, ApiResponse, PaginatedResponse } from '../types/api.types';
 
 export interface CreatePostData {

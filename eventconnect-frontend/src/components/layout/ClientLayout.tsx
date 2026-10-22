@@ -2,12 +2,13 @@
 
 import { usePathname } from 'next/navigation'
 import Navbar from './Navbar'
+import { SiteSections } from './SiteSections'
 import { MobileNav } from './MobileNav'
 import { MobileHeader } from './MobileHeader'
 import { useConsoleErrorReporter } from '@/hooks/useConsoleErrorReporter'
 import { ApiStatusBanner } from '@/components/redesign/ui/api-status-indicator'
 import { InstallBanner } from '@/components/pwa/InstallBanner'
-import { useServiceWorker } from '@/hooks/usePWA'
+import AppUpdateNotice from '@/components/pwa/AppUpdateNotice'
 import dynamic from 'next/dynamic'
 
 // Load dev config in development
@@ -27,13 +28,14 @@ interface ClientLayoutProps {
 export default function ClientLayout({ children }: ClientLayoutProps) {
   const pathname = usePathname()
 
-  const shouldReportErrors = process.env.NODE_ENV === 'production' ||
-                            (typeof window !== 'undefined' && !!localStorage.getItem('debug-mode'))
+  let shouldReportErrors = process.env.NODE_ENV === 'production'
+  try {
+    shouldReportErrors ||= typeof window !== 'undefined' && !!window.localStorage.getItem('debug-mode')
+  } catch { /* Storage can be unavailable in private or restricted browsers. */ }
 
   useConsoleErrorReporter(shouldReportErrors)
-  useServiceWorker()
 
-  const noNavPages = ['/login', '/register', '/', '/forgot-password']
+  const noNavPages = ['/login', '/register', '/onboarding', '/', '/forgot-password', '/reset-password']
   const shouldShowNav = !noNavPages.includes(pathname)
 
   return (
@@ -43,19 +45,21 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
 
       {/* Mobile sticky header — visible only on mobile via md:hidden inside component */}
       {shouldShowNav && <MobileHeader />}
+      {shouldShowNav && <SiteSections className="flex justify-center border-b border-border bg-background px-3 py-1 md:hidden" />}
 
       <ApiStatusBanner />
       <InstallBanner />
+      <AppUpdateNotice />
 
       {/* pb-[72px] on mobile: 60px nav + 12px breathing room. Desktop: 0 */}
-      <main className={shouldShowNav ? 'pb-[72px] md:pb-0' : 'min-h-screen'}>
+      <main id="main-content" tabIndex={-1} className={shouldShowNav ? 'pb-[calc(72px+env(safe-area-inset-bottom))] md:pb-0' : 'min-h-dvh'}>
         {children}
       </main>
 
       {/* Mobile bottom nav */}
       {shouldShowNav && <MobileNav />}
 
-      {process.env.NODE_ENV === 'development' && <DebugPanel />}
+      {process.env.NODE_ENV === 'development' && shouldReportErrors && <DebugPanel />}
     </>
   )
 }

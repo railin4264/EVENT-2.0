@@ -353,8 +353,8 @@ router.post('/award-xp',
   validateRequest,
   async (req, res) => {
     try {
-      // Check if user is admin (you might want to implement proper role checking)
-      if (!req.user.isAdmin) {
+      // Check if user is admin
+      if (req.user.role !== 'admin') {
         return res.status(403).json({
           success: false,
           message: 'Acceso denegado',
@@ -584,5 +584,136 @@ router.post('/initialize',
     }
   }
 );
+
+// @route   GET /api/gamification/passport
+// @desc    Get Dominican Cultural Passport (Pasaporte Dominicano de Experiencias)
+// @access  Private
+router.get('/passport', authMiddleware, async (req, res) => {
+  try {
+    const Event = require('../models/Event');
+    const user = await User.findById(req.user.id);
+    const attendedEvents = await Event.find({
+      'attendees.user': req.user.id,
+      status: { $in: ['published', 'completed'] }
+    }).select('title category isUnofficial location attendees').lean();
+
+    // Define Dominican Stamps
+    const stamps = [
+      {
+        id: 'bohemio_colonial',
+        title: 'Alma Colonial 🎻',
+        description: 'Asiste a conciertos acústicos, recitales o arte en la Zona Colonial',
+        category: 'music',
+        zone: 'Zona Colonial',
+        icon: 'Music',
+        unlocked: attendedEvents.some(e => ['music', 'art'].includes(e.category) || (e.location?.address && /colonial/i.test(e.location.address))),
+        pointsReward: 150
+      },
+      {
+        id: 'parques_verdes',
+        title: 'Explorador Verde 🌳',
+        description: 'Planes al aire libre: pintura, yoga o violín en parques de Santo Domingo',
+        category: 'sports',
+        zone: 'Mirador Sur / Iberoamérica',
+        icon: 'Compass',
+        unlocked: attendedEvents.some(e => ['health', 'sports', 'culture'].includes(e.category) || (e.location?.address && /parque|mirador/i.test(e.location.address))),
+        pointsReward: 150
+      },
+      {
+        id: 'astro_nocturno',
+        title: 'Vigía del Cosmos 🌌',
+        description: 'Observaciones astronómicas o eventos nocturnos bajo el cielo abierto',
+        category: 'technology',
+        zone: 'Ruinas de Engombe / Playas',
+        icon: 'Sparkles',
+        unlocked: attendedEvents.some(e => e.title && /astro|cosmos|noche/i.test(e.title)),
+        pointsReward: 200
+      },
+      {
+        id: 'extraoficial_secret',
+        title: 'Iniciado Secreto 🤫',
+        description: 'Descubriste un evento extraoficial con ubicación secreta',
+        category: 'culture',
+        zone: 'Rooftops & Patios Ocultos',
+        icon: 'Lock',
+        unlocked: attendedEvents.some(e => e.isUnofficial),
+        pointsReward: 300
+      },
+      {
+        id: 'tech_cibao',
+        title: 'Pionero Cibao 💻',
+        description: 'Participa en un encuentro de creadores o tecnología en Santiago',
+        category: 'technology',
+        zone: 'Santiago / Monumento',
+        icon: 'Code',
+        unlocked: attendedEvents.some(e => e.category === 'technology' || (e.location?.address && /santiago|cibao/i.test(e.location.address))),
+        pointsReward: 200
+      },
+      {
+        id: 'solo_adventurer',
+        title: 'Espíritu Libre 🤝',
+        description: 'Te uniste a la mesa de los que van solos a un evento',
+        category: 'networking',
+        zone: 'Toda RD',
+        icon: 'Users',
+        unlocked: attendedEvents.some(e => e.attendees?.some(a => a.user?.toString() === req.user.id && a.isSolo)),
+        pointsReward: 250
+      }
+    ];
+
+    const unlockedCount = stamps.filter(s => s.unlocked).length;
+
+    // Passport Levels
+    let passportTier = 'Turista Novato';
+    if (unlockedCount >= 5) passportTier = 'Embajador Cultural Dominicano 🇩🇴';
+    else if (unlockedCount >= 3) passportTier = 'Explorador Urbano Oro';
+    else if (unlockedCount >= 1) passportTier = 'Descubridor de Experiencias';
+
+    // Local Sponsor Perks
+    const perks = [
+      {
+        id: 'perk_cafe',
+        partner: 'Café Colonial 1502',
+        offer: 'Café artesanal de cortesía en tu próximo plan',
+        requiredStamps: 1,
+        isClaimed: false,
+        isEligible: unlockedCount >= 1
+      },
+      {
+        id: 'perk_drink',
+        partner: 'Rooftop Lounge Colonial',
+        offer: 'Trago de autor 2x1 presentando tu Pasaporte EventNow',
+        requiredStamps: 2,
+        isClaimed: false,
+        isEligible: unlockedCount >= 2
+      },
+      {
+        id: 'perk_art',
+        partner: 'Taller & Galería Arte al Parque',
+        offer: 'Kit de pinceles y lienzo libre en eventos de pintura',
+        requiredStamps: 3,
+        isClaimed: false,
+        isEligible: unlockedCount >= 3
+      }
+    ];
+
+    res.json({
+      success: true,
+      data: {
+        passportNumber: 'RD-EN-' + req.user.id.slice(-6).toUpperCase(),
+        holderName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.username || 'Explorador',
+        tier: passportTier,
+        unlockedCount,
+        totalStamps: stamps.length,
+        progressPercent: Math.round((unlockedCount / stamps.length) * 100),
+        stamps,
+        perks
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching passport:', error);
+    res.status(500).json({ success: false, message: 'Error al consultar pasaporte cultural' });
+  }
+});
 
 module.exports = router;

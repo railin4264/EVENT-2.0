@@ -1,9 +1,14 @@
 'use client'
 
+import { analyticsProperties, analyticsEventId } from './privacy'
+
 import { API_BASE_URL } from '@/lib/constants'
+import { apiClient } from '@/lib/api/client'
 
 // Analytics and event tracking system
 export interface AnalyticsEvent {
+  eventId?: string;
+  platform?: string;
   name: string
   properties?: Record<string, any>
   timestamp?: number
@@ -46,6 +51,8 @@ class AnalyticsTracker {
   private userId: string | null = null
   private isEnabled: boolean = true
   private queue: AnalyticsEvent[] = []
+  private isFlushing = false
+  private flushTimer: ReturnType<typeof setTimeout> | null = null
   private performanceMetrics: Map<string, PerformanceMetrics> = new Map()
   private pageStartTime: number = Date.now()
   private isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -122,6 +129,7 @@ class AnalyticsTracker {
 
   // Public methods
   setUserId(userId: string): void {
+    if (this.userId !== userId) this.queue = []
     this.userId = userId
   }
 
@@ -143,10 +151,12 @@ class AnalyticsTracker {
 
     const event: AnalyticsEvent = {
       name: eventName,
+      eventId: analyticsEventId(),
+      platform: 'web',
       properties: {
         ...properties,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-        url: typeof window !== 'undefined' ? window.location.href : '',
+        url: typeof window !== 'undefined' ? window.location.pathname : '',
         pathname: typeof window !== 'undefined' ? window.location.pathname : '',
         referrer: typeof document !== 'undefined' ? document.referrer : '',
         language: typeof navigator !== 'undefined' ? navigator.language : '',
@@ -162,6 +172,8 @@ class AnalyticsTracker {
       sessionId: this.sessionId
     }
 
+    event.properties = analyticsProperties(event.properties || {})
+    this.queue = this.queue.slice(-999)
     this.queue.push(event)
     this.processQueue()
   }
@@ -307,35 +319,20 @@ class AnalyticsTracker {
 
   // Queue processing
   private processQueue(): void {
-    if (!this.isOnline || this.queue.length === 0) return
-
-    // Process queue in batches
-    const batchSize = 10
-    if (this.queue.length >= batchSize) {
-      this.flushQueue()
-    } else {
-      // Debounced flush
-      setTimeout(() => this.flushQueue(), 1000)
-    }
+    if (!this.isOnline || this.queue.length === 0 || this.isFlushing) return;
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = setTimeout(() => { this.flushTimer = null; void this.flushQueue(); }, this.queue.length >= 10 ? 0 : 2000);
   }
 
   private async flushQueue(): Promise<void> {
-    if (this.queue.length === 0) return
-
-    const events = [...this.queue]
-    this.queue = []
-
-    try {
-      // Send to analytics endpoint
-      await this.sendEvents(events)
-    } catch (error) {
-      // Use console.warn instead of console.error to avoid triggering error reporter
-      console.warn('Failed to send analytics events:', error)
-      // Re-queue events if send failed (but limit retries)
-      if (events.length < 50) { // Prevent infinite growth
-        this.queue.unshift(...events)
-      }
-    }
+    if (this.isFlushing || this.queue.length === 0) return;
+    this.isFlushing = true;
+    const events = this.queue.splice(0, 50).map(event => ({ ...event, properties: analyticsProperties(event.properties || {}) }));
+    let sent = false;
+    try { await this.sendEvents(events); sent = true; }
+    catch { this.queue = [...events, ...this.queue].slice(-1000); }
+    finally { this.isFlushing = false; }
+    if (sent && this.queue.length) this.processQueue();
   }
 
   private async sendEvents(events: AnalyticsEvent[]): Promise<void> {
@@ -363,20 +360,11 @@ class AnalyticsTracker {
 
     if (API_BASE_URL && shouldSendToBackend) {
       try {
-        const response = await fetch(`${API_BASE_URL}/analytics/track`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ events })
-        })
-
-        if (!response.ok) {
-          console.warn(`Analytics API returned ${response.status}, events stored locally`)
-        }
+        await apiClient.post('/analytics/track', { events, ownerId: this.userId || undefined })
       } catch (error) {
         // In development or when backend is down, just log and continue
         console.warn('Analytics backend unavailable, events stored locally only')
+        if (process.env.NODE_ENV === 'production') throw error
         // Don't throw in development - this is expected when backend isn't running
       }
     }

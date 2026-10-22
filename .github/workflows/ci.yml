@@ -1,6 +1,7 @@
-name: CI/CD Pipeline
+name: Quality checks
 
 on:
+  workflow_call:
   push:
     branches: [ main, develop ]
   pull_request:
@@ -9,150 +10,106 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 25
     strategy:
+      fail-fast: false
       matrix:
-        node-version: [18.x, 20.x]
-    
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: password123
-          MONGO_INITDB_DATABASE: eventconnect_test
-      
-      redis:
-        image: redis:7.2-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+        project: [backend-api, eventconnect-frontend, mobile-app]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    env:
+      CI: 'true'
+      NODE_ENV: test
+      JWT_SECRET: ci-only-access-secret-not-for-production
+      JWT_REFRESH_SECRET: ci-only-refresh-secret-not-for-production
+      # MongoMemoryServer 9 otherwise defaults to MongoDB 6, unavailable on Ubuntu 24.
+      MONGOMS_VERSION: '7.0.14'
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
       with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm run install:all
-
+        node-version: '22.x'
+        cache: npm
+        cache-dependency-path: ${{ matrix.project }}/package-lock.json
+    - name: Install locked dependencies
+      run: npm ci
     - name: Run ESLint
       run: npm run lint
-
-    - name: Run Prettier check
-      run: npm run format
-
-    - name: Run TypeScript check
+    - name: Check formatting without changing files
+      if: matrix.project != 'backend-api'
+      run: npm run format:check
+    - name: Check TypeScript
+      if: matrix.project != 'backend-api'
       run: npm run type-check
-
-    - name: Run tests
-      run: npm run test:coverage
-      env:
-        NODE_ENV: test
-        MONGODB_URI: mongodb://admin:password123@localhost:27017/eventconnect_test?authSource=admin
-        REDIS_URL: redis://localhost:6379
-        JWT_SECRET: test-jwt-secret
-        JWT_REFRESH_SECRET: test-refresh-secret
-
-    - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
+    - name: Run backend and mobile coverage gates
+      if: matrix.project != 'eventconnect-frontend'
+      # Both Jest configurations retain their 70% global coverage thresholds.
+      run: npm run test:coverage -- --ci --runInBand
+    - name: Run frontend coverage
+      if: matrix.project == 'eventconnect-frontend'
+      run: npm run test:coverage -- --run
+    - name: Preserve coverage reports
+      if: always()
+      uses: actions/upload-artifact@v4
       with:
-        directory: ./coverage
-        flags: unittests
-        name: codecov-umbrella
+        name: coverage-${{ matrix.project }}
+        path: ${{ matrix.project }}/coverage
+        if-no-files-found: warn
 
   build:
     needs: test
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Use Node.js 18.x
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
       with:
-        node-version: '24'.x
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm run install:all
-
-    - name: Build backend
-      run: npm run build:backend
-
+        node-version: '22.x'
+        cache: npm
+        cache-dependency-path: |
+          backend-api/package-lock.json
+          eventconnect-frontend/package-lock.json
+    - name: Install backend dependencies
+      run: npm ci --prefix backend-api
+    - name: Install frontend dependencies
+      run: npm ci --prefix eventconnect-frontend
+    - name: Validate backend entry point
+      run: node --check backend-api/src/server.js
     - name: Build web
-      run: npm run build:web
+      run: npm run build --prefix eventconnect-frontend
       env:
-        NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api' }}
         NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY }}
-
     - name: Archive build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: build-files
+        include-hidden-files: true
         path: |
-          backend/dist
-          web/.next
+          backend-api/src
+          eventconnect-frontend/.next
+          !eventconnect-frontend/.next/cache
 
   security:
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [backend-api, eventconnect-frontend, mobile-app]
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Use Node.js 18.x
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
       with:
-        node-version: '24'.x
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm run install:all
-
-    - name: Run security audit
-      run: npm run security:audit
-
-    - name: Run Snyk to check for vulnerabilities
+        node-version: '22.x'
+    - name: Audit locked dependencies
+      working-directory: ${{ matrix.project }}
+      run: npm audit --audit-level=high
+    - name: Run Snyk vulnerability scan
       uses: snyk/actions/node@master
+      with:
+        args: --file=${{ matrix.project }}/package.json --package-manager=npm
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-  deploy:
-    needs: [test, build, security]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Use Node.js 18.x
-      uses: actions/setup-node@v4
-      with:
-        node-version: '24'.x
-        cache: 'npm'
-
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: build-files
-
-    - name: Deploy to production
-      run: echo "Deploy to production server"
-      # Add your deployment steps here
 
   mobile-build:
     runs-on: ubuntu-latest
@@ -168,21 +125,25 @@ jobs:
         expo-version: latest
         token: ${{ secrets.EXPO_TOKEN }}
 
-    - name: Use Node.js 18.x
+    - name: Use Node.js 22.x
       uses: actions/setup-node@v4
       with:
-        node-version: '24'.x
+        node-version: '22.x'
         cache: 'npm'
+        cache-dependency-path: |
+          backend-api/package-lock.json
+          eventconnect-frontend/package-lock.json
+          mobile-app/package-lock.json
 
     - name: Install dependencies
-      run: cd mobile && npm install
+      run: npm ci --prefix mobile-app
 
     - name: Build Android APK
-      run: cd mobile && eas build --platform android --non-interactive
+      run: cd mobile-app && eas build --platform android --non-interactive
       env:
         EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
     - name: Build iOS IPA
-      run: cd mobile && eas build --platform ios --non-interactive
+      run: cd mobile-app && eas build --platform ios --non-interactive
       env:
         EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

@@ -75,6 +75,7 @@ describe('Events API', () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.event).toHaveProperty('title', validEvent.title);
+      expect(res.body.event.status).toBe('pending_review');
     });
 
     it('debería rechazar sin autenticación', async () => {
@@ -165,7 +166,9 @@ describe('Events API', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send(validEvent);
 
+      expect(res.status).toBe(201);
       eventId = res.body.event._id;
+      await require('../src/models/Event').findByIdAndUpdate(eventId, { status: 'published' });
     });
 
     it('debería obtener evento por ID', async () => {
@@ -192,7 +195,9 @@ describe('Events API', () => {
         .set('Authorization', `Bearer ${authToken}`)
         .send(validEvent);
 
+      expect(res.status).toBe(201);
       eventId = res.body.event._id;
+      await require('../src/models/Event').findByIdAndUpdate(eventId, { status: 'published' });
     });
 
     it('debería unirse a un evento', async () => {
