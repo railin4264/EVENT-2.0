@@ -33,6 +33,11 @@ const api = axios.create({
 // Request interceptor for auth token, rate limiting, and performance monitoring
 api.interceptors.request.use(
   (config) => {
+    // Normalize URL to prevent double /api/ prefix if callers pass '/api/...'
+    if (config.url && config.url.startsWith('/api/')) {
+      config.url = config.url.replace(/^\/api\//, '/')
+    }
+
     // Rate limiting check
     const now = Date.now()
     const endpoint = config.url || 'unknown'

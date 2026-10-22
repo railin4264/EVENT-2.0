@@ -50,7 +50,7 @@ export default function AutoFillFlyerModal({ isOpen, onClose, onApply }: AutoFil
         formData.append('text', flyerText.trim())
       }
 
-      const response = await apiClient.post('/api/events/ai-extract-flyer', formData, {
+      const response = await apiClient.post('/events/ai-extract-flyer', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
 

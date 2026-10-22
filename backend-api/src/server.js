@@ -382,6 +382,10 @@ app.use('/api', (req, res, next) => {
     res.setHeader('Deprecation', 'true');
     res.setHeader('Link', '</api/v1>; rel="successor-version"');
   }
+  // Tolerant routing for clients passing duplicate /api prefix
+  if (req.url.startsWith('/api/')) {
+    req.url = req.url.slice(4);
+  }
   next();
 }, apiV1Router);
 

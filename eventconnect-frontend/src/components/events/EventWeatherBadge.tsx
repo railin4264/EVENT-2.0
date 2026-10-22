@@ -36,7 +36,7 @@ export default function EventWeatherBadge({ eventId, isVirtual }: EventWeatherBa
     }
 
     let isMounted = true;
-    apiClient.get(`/api/events/${eventId}/weather`)
+    apiClient.get(`/events/${eventId}/weather`)
       .then(res => {
         if (isMounted && res.data?.success && res.data?.available && res.data?.data) {
           setWeather(res.data.data);
