@@ -24,6 +24,24 @@ const PUBLIC_AGENDAS = {
     licenseUrl: 'https://data.cityofnewyork.us/stories/s/Terms-of-Use/k9k7-3cje/',
     terms: 'https://www.nyc.gov/opendata/get-started/FAQs',
     dataset: 'https://data.cityofnewyork.us/d/w3wp-dpdi'
+  },
+  paris_open_data: {
+    endpoint: 'https://opendata.paris.fr/api/explore/v2.1/catalog/datasets/que-faire-a-paris-/records',
+    country: 'FR', name: 'Ville de Paris · Que Faire à Paris', zone: 'Europe/Paris',
+    sourceId: 'paris-open-data', city: 'París', languages: ['fr'], currency: 'EUR',
+    license: 'Open Database License (ODbL)',
+    licenseUrl: 'https://opendata.paris.fr/pages/licence/',
+    terms: 'https://opendata.paris.fr/pages/licence/',
+    dataset: 'https://opendata.paris.fr/explore/dataset/que-faire-a-paris-/'
+  },
+  catalunya_open_data: {
+    endpoint: 'https://analisi.transparenciacatalunya.cat/resource/rhpv-yr4f.json',
+    country: 'ES', name: 'Generalitat de Catalunya & Barcelona · Agenda Cultural', zone: 'Europe/Madrid',
+    sourceId: 'catalunya-open-data', city: 'Barcelona', languages: ['es', 'ca'], currency: 'EUR',
+    license: 'Reutilització dades obertes Catalunya',
+    licenseUrl: 'https://transparencia.gencat.cat/ca/dades-obertes/avis-legal/',
+    terms: 'https://transparencia.gencat.cat/ca/dades-obertes/avis-legal/',
+    dataset: 'https://analisi.transparenciacatalunya.cat/Cultura-i-oci/Agenda-cultural-de-Catalunya/rhpv-yr4f'
   }
 };
 
@@ -102,6 +120,111 @@ function helsinkiRow(row) {
   };
 }
 
+function parisRow(row) {
+  if (!row || !row.id || !row.title || !row.date_start) return null;
+  const date = new Date(row.date_start);
+  if (isNaN(date.getTime()) || date < new Date('2026-01-01')) return null;
+  const endDate = row.date_end ? new Date(row.date_end) : new Date(date.getTime() + 2 * 3600000);
+  const lat = Number(row.lat_lon?.lat);
+  const lng = Number(row.lat_lon?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+
+  const desc = decodeFeedText(row.lead_text || row.description || row.title);
+  const isFree = row.price_type === 'gratuit' || !row.price_detail || /gratuit/i.test(row.price_detail || '');
+  const cat = /Concert|Musique/i.test(row.qfap_tags || '') ? 'music'
+    : /Théâtre|Spectacle/i.test(row.qfap_tags || '') ? 'entertainment'
+    : /Enfants|Famille/i.test(row.qfap_tags || '') ? 'family'
+    : /Sport|Balade/i.test(row.qfap_tags || '') ? 'sports'
+    : /Atelier|Conférence/i.test(row.qfap_tags || '') ? 'education'
+    : 'art';
+
+  return {
+    id: `paris-${row.id}`,
+    title: decodeFeedText(row.title),
+    description: desc.length > 500 ? desc.slice(0, 497) + '...' : desc,
+    date,
+    endDate,
+    timeZone: 'Europe/Paris',
+    lat,
+    lng,
+    venue: row.address_name || 'Paris',
+    address: [row.address_street, row.address_zipcode, 'Paris, France'].filter(Boolean).join(', '),
+    city: 'París',
+    country: 'Francia',
+    price: isFree ? 0 : 10,
+    currency: 'EUR',
+    url: row.url || row.access_link || 'https://www.paris.fr/evenements',
+    organizer: 'Ville de Paris · Que Faire à Paris',
+    language: 'fr',
+    category: cat
+  };
+}
+
+function catalunyaRow(row) {
+  if (!row || !row.codi || !row.denominaci || !row.data_inici) return null;
+  const rawStart = String(row.data_inici).slice(0, 19);
+  const rawEnd = row.data_fi ? String(row.data_fi).slice(0, 19) : null;
+  let date = new Date(rawStart.endsWith('Z') ? rawStart : rawStart + 'Z');
+  if (isNaN(date.getTime()) || date.getFullYear() > 2030) return null;
+
+  const hourMatch = String(row.horari || '').match(/\b(\d{1,2})(?::(\d{2}))?\s*h?\b/i);
+  if (hourMatch) {
+    const hours = parseInt(hourMatch[1], 10);
+    const mins = hourMatch[2] ? parseInt(hourMatch[2], 10) : 0;
+    if (hours >= 0 && hours < 24) {
+      date.setUTCHours(hours, mins, 0, 0);
+    }
+  }
+  const now = new Date();
+  let endDate = rawEnd ? new Date(rawEnd.endsWith('Z') ? rawEnd : rawEnd + 'Z') : new Date(date.getTime() + 3 * 3600000);
+  if (isNaN(endDate.getTime()) || endDate.getFullYear() > now.getFullYear() + 2) {
+    endDate = new Date(date.getTime() + 3 * 3600000);
+  }
+  if (date < new Date(now.getTime() - 1800 * 1000) && endDate > now) {
+    date = new Date(now.getTime() + 1800 * 1000);
+  }
+  if (endDate <= date) {
+    endDate = new Date(date.getTime() + 3 * 3600000);
+  }
+  const lat = Number(row.latitud);
+  const lng = Number(row.longitud);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return null;
+
+  const title = decodeFeedText(row.denominaci);
+  const desc = decodeFeedText(row.descripcio || row.subt_tol || title);
+  const isFree = String(row.gratuita).toLowerCase() === 'si' || String(row.gratuita).toLowerCase() === 'true';
+  const cat = /musica|concert/i.test(row.tags_categor_es || '') ? 'music'
+    : /infantil|famil/i.test(row.tags_categor_es || '') ? 'family'
+    : /esport/i.test(row.tags_categor_es || '') ? 'sports'
+    : /teatre|dansa|cinema/i.test(row.tags_categor_es || '') ? 'entertainment'
+    : /conferenc|taller|curs/i.test(row.tags_categor_es || '') ? 'education'
+    : 'art';
+
+  const muni = (row.municipi || '').split('/').pop() || 'Barcelona';
+  const cityName = muni.charAt(0).toUpperCase() + muni.slice(1);
+
+  return {
+    id: `cat-${row.codi}`,
+    title,
+    description: desc.length > 500 ? desc.slice(0, 497) + '...' : desc,
+    date,
+    endDate,
+    timeZone: 'Europe/Madrid',
+    lat,
+    lng,
+    venue: row.espai || 'Barcelona',
+    address: [row.adre_a, cityName, 'España'].filter(Boolean).join(', '),
+    city: cityName,
+    country: 'España',
+    price: isFree ? 0 : 5,
+    currency: 'EUR',
+    url: row.linkbotoentrades || 'https://agenda.cultura.gencat.cat',
+    organizer: 'Generalitat de Catalunya & Barcelona',
+    language: 'ca',
+    category: cat
+  };
+}
+
 async function readPublicAgenda(source, fetcher) {
   const config = PUBLIC_AGENDAS[source.adapterType];
   if (!config || source.accessConfig?.endpointUrl !== config.endpoint) throw sourceError('La URL no coincide con el adaptador público revisado');
@@ -116,6 +239,28 @@ async function readPublicAgenda(source, fetcher) {
     const response = await fetcher(config.endpoint, { maxBytes: 8 * 1024 * 1024 });
     if (!Array.isArray(response.data?.['@graph'])) throw sourceError('La agenda de Madrid cambió de formato');
     return { rows: response.data['@graph'].map(madridRow).filter(Boolean), incomplete: false };
+  }
+  if (source.adapterType === 'paris_open_data') {
+    const url = new URL(config.endpoint);
+    url.search = new URLSearchParams({
+      limit: '100',
+      where: 'date_start is not null and price_type="gratuit"'
+    }).toString();
+    const response = await fetcher(url.href, { maxBytes: 8 * 1024 * 1024 });
+    if (!Array.isArray(response.data?.results)) throw sourceError('Paris Open Data cambió de formato');
+    return { rows: response.data.results.map(parisRow).filter(Boolean), incomplete: response.data.total_count > 100 };
+  }
+  if (source.adapterType === 'catalunya_open_data') {
+    const url = new URL(config.endpoint);
+    const nowIso = new Date().toISOString().slice(0, 10);
+    url.search = new URLSearchParams({
+      '$where': `data_fi >= '${nowIso}' and data_inici < '2030-01-01' and latitud is not null and longitud is not null`,
+      '$order': 'data_inici ASC',
+      '$limit': '100'
+    }).toString();
+    const response = await fetcher(url.href, { maxBytes: 8 * 1024 * 1024 });
+    if (!Array.isArray(response.data)) throw sourceError('Catalunya Open Data cambió de formato');
+    return { rows: response.data.map(catalunyaRow).filter(Boolean), incomplete: response.data.length === 100 };
   }
   const url = new URL(config.endpoint);
   url.search = new URLSearchParams({ start: 'now', end: new Date(Date.now() + 90 * 86400000).toISOString(), is_free: 'true', include: 'location', page_size: '100', sort: 'start_time', max_duration: '86400', internet_based: 'false', hide_super_event: 'true' }).toString();
@@ -132,4 +277,4 @@ async function readPublicAgenda(source, fetcher) {
   return { rows, incomplete: Boolean(next) };
 }
 
-module.exports = { PUBLIC_AGENDAS, madridRow, helsinkiRow, nycParksRow, readPublicAgenda };
+module.exports = { PUBLIC_AGENDAS, madridRow, helsinkiRow, nycParksRow, parisRow, catalunyaRow, readPublicAgenda };

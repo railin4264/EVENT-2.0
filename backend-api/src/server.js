@@ -132,6 +132,10 @@ const startServer = async () => {
       try {
         const { seedPlanetaryEvents } = require('./services/eventIngestion/planetaryEventHarvester');
         await seedPlanetaryEvents();
+        const { syncClinicalTrials } = require('./services/eventIngestion/clinicalTrialsHarvester');
+        await syncClinicalTrials();
+        const { syncRDTickets } = require('./services/eventIngestion/rdTicketsHarvester');
+        await syncRDTickets();
       } catch (planetErr) {
         logger.warn('Seed planetary ecosystem skipped/error: ' + planetErr.message);
       }

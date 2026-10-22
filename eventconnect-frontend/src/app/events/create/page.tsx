@@ -21,6 +21,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { ImportPlanDraft } from '@/components/planning/ImportPlanDraft'
 import { CATEGORY_LIST } from '@/lib/categories'
 import ConnectAgendaModal from '@/components/events/ConnectAgendaModal'
+import AutoFillFlyerModal from '@/components/events/AutoFillFlyerModal'
 import FriendPlanDraftCard, { type FriendPlanDraft } from '@/components/events/FriendPlanDraftCard'
 
 const categories = CATEGORY_LIST.map(c => ({
@@ -62,6 +63,7 @@ function CreateEventForm() {
   const [isSearchingLocation, setIsSearchingLocation] = useState(false)
   const [images, setImages] = useState<File[]>([])
   const [isConnectAgendaOpen, setIsConnectAgendaOpen] = useState(false)
+  const [isAutoFillFlyerOpen, setIsAutoFillFlyerOpen] = useState(false)
   const [friendDraftApplied, setFriendDraftApplied] = useState(false)
   const [friendDraftReviewed, setFriendDraftReviewed] = useState(false)
 
@@ -87,6 +89,41 @@ function CreateEventForm() {
       setValue('isPrivate', draft.isPrivate, { shouldValidate: true })
     }
   }
+  const handleApplyFlyerData = (extracted: any) => {
+    if (!accountIsCurrent() || !extracted) return
+    if (extracted.title) setValue('title', extracted.title, { shouldValidate: true })
+    if (extracted.description) setValue('description', extracted.description, { shouldValidate: true })
+    if (extracted.category) setValue('category', extracted.category as any, { shouldValidate: true })
+    if (extracted.date) {
+      const d = new Date(extracted.date)
+      if (!isNaN(d.getTime())) {
+        setValue('date', d.toISOString().slice(0, 10), { shouldValidate: true })
+      }
+    }
+    if (extracted.time) setValue('time', extracted.time, { shouldValidate: true })
+    if (extracted.venue) {
+      setValue('location.venue', extracted.venue, { shouldValidate: true })
+      setValue('location.address', extracted.address || extracted.venue, { shouldValidate: true })
+      setLocationQuery(extracted.address || extracted.venue)
+    }
+    if (extracted.city) setValue('location.city', extracted.city, { shouldValidate: true })
+    if (extracted.country) setValue('location.country', extracted.country, { shouldValidate: true })
+    if (Array.isArray(extracted.coordinates) && extracted.coordinates.length === 2) {
+      setValue('location.coordinates', extracted.coordinates as [number, number], { shouldValidate: true })
+      setCoordinateDraft({ latitude: String(extracted.coordinates[1]), longitude: String(extracted.coordinates[0]) })
+    }
+    if (extracted.price?.amount != null) {
+      setValue('price.amount', extracted.price.amount, { shouldValidate: true })
+      if (extracted.price.currency) setValue('price.currency', extracted.price.currency as any, { shouldValidate: true })
+    }
+    if (Array.isArray(extracted.tags) && extracted.tags.length > 0) {
+      setValue('tags', extracted.tags, { shouldValidate: true })
+    }
+    if (extracted.coverUrl) {
+      setImagePreviews(prev => [extracted.coverUrl, ...prev.filter(u => u !== extracted.coverUrl)])
+    }
+  }
+
   const [isEnhancing, setIsEnhancing] = useState(false)
   const [coordinateDraft, setCoordinateDraft] = useState({ latitude: '', longitude: '' })
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
@@ -682,7 +719,37 @@ function CreateEventForm() {
                   />
 
                   <div>
-                    <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="create-event-title">
+                    {/* AI Flyer Scanner Card */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-rose-500/30 bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-primary/10 p-5 shadow-lg mb-6">
+                    <div className="flex items-center gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-rose-500 text-white shadow-md shadow-rose-500/20">
+                        <Sparkles className="h-6 w-6" aria-hidden="true" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <span>¿Tienes un Afiche o Flyer de tu Evento?</span>
+                          <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-400">IA Instantánea</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">Sube la foto del afiche o pega el copy de Instagram / WhatsApp y la IA completará título, fecha, hora, lugar y precios en 3 segundos.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAutoFillFlyerOpen(true)}
+                      className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 px-5 text-sm font-bold text-white shadow-lg shadow-rose-500/25 hover:opacity-95 transition-all"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      <span>Escanear Afiche</span>
+                    </button>
+                  </div>
+
+                  <AutoFillFlyerModal
+                    isOpen={isAutoFillFlyerOpen}
+                    onClose={() => setIsAutoFillFlyerOpen(false)}
+                    onApply={handleApplyFlyerData}
+                  />
+
+                  <label className="block text-sm font-semibold text-foreground mb-2" htmlFor="create-event-title">
                       Título del Evento *
                     </label>
                     <input

@@ -2,6 +2,7 @@ const express = require('express');
 const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
 const { protect, optionalAuth, restrictTo } = require('../middleware/auth');
+const { upload } = require('../middleware/upload');
 const { invalidateCache } = require('../middleware/cache');
 const logger = require('../utils/logger');
 const { paymentsEnabled } = require('../config/features');
@@ -3022,6 +3023,41 @@ router.post('/ingest/flyer', protect, async (req, res) => {
   } catch (err) {
     logger.error('Flyer ingestion error:', err);
     res.status(500).json({ success: false, message: err.message || 'Error al procesar flyer' });
+  }
+});
+
+// ─── EXTRACTOR IA DE AFICHE / FLYER PARA AUTO-RELLENO ──────────────────────────
+router.post('/ai-extract-flyer', protect, upload.any(), async (req, res) => {
+  try {
+    const { extractEventFromText } = require('../services/flyerAiExtractor');
+    let text = req.body.text || req.body.flyerText || req.body.rawText || '';
+    let coverUrl = req.body.imageUrl || '';
+
+    const uploadedFile = (req.files && req.files[0]) || req.file;
+    if (uploadedFile) {
+      coverUrl = `/uploads/events/${uploadedFile.filename}`;
+      if (!text && uploadedFile.originalname) {
+        text = uploadedFile.originalname.replace(/[-_.]/g, ' ');
+      }
+    }
+
+    if (!text && !coverUrl) {
+      return res.status(400).json({
+        success: false,
+        message: 'Por favor proporciona una imagen del afiche o el texto descriptivo del evento'
+      });
+    }
+
+    const extracted = extractEventFromText(text, { coverUrl });
+
+    res.status(200).json({
+      success: true,
+      message: 'Afiche procesado con IA exitosamente',
+      data: extracted
+    });
+  } catch (err) {
+    logger.error('Error in ai-extract-flyer:', err);
+    res.status(500).json({ success: false, message: 'Error procesando el afiche' });
   }
 });
 

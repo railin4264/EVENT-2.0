@@ -132,6 +132,10 @@ class CronService {
           await seedPlanetaryEvents();
           const { syncVirtualStreams } = require('./eventIngestion/virtualEventHarvester');
           await syncVirtualStreams();
+          const { syncClinicalTrials } = require('./eventIngestion/clinicalTrialsHarvester');
+          await syncClinicalTrials();
+          const { syncRDTickets } = require('./eventIngestion/rdTicketsHarvester');
+          await syncRDTickets();
           logger.info('Planetary & virtual streams rolling refresh completed');
         } catch (planErr) {
           logger.warn('Planetary scheduled refresh warning: ' + planErr.message);

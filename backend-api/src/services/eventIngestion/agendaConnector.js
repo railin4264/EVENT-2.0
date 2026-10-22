@@ -110,7 +110,7 @@ async function syncAgenda(agendaUrl, organizerId, options = {}) {
   const response = publicAgenda ? { data: null } : await fetchSource(agendaUrl);
   const type = requested === 'unknown' ? detectAgendaType(agendaUrl, response.headers?.['content-type']) : requested;
   if (!publicAgenda && !['ics', 'json', 'wp_the_events_calendar'].includes(type)) throw sourceError('Formato de agenda todavía no compatible', 422);
-  const rows = publicResult ? publicResult.rows.filter(row => new Date(row.date) > new Date()).sort((a, b) => new Date(a.date) - new Date(b.date)) : rowsFromFeed(response.data, type);
+  const rows = publicResult ? publicResult.rows.filter(row => new Date(row.endDate || row.date) >= new Date(Date.now() - 3600000)).sort((a, b) => new Date(a.date) - new Date(b.date)) : rowsFromFeed(response.data, type);
   const result = { success: true, detectedCount: rows.length, syncedCount: 0, created: 0, updated: 0,
     unchanged: 0, skipped: 0, failedWrites: 0, previewCount: 0,
     incomplete: Boolean(publicResult?.incomplete) || rows.length >= 200 || Boolean(response.data?.next_rest_url || response.data?.next || response.data?.total > rows.length), events: [] };
