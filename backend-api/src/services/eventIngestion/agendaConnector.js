@@ -131,9 +131,24 @@ async function syncAgenda(agendaUrl, organizerId, options = {}) {
         if (String(existing.createdBy) !== String(organizerId) || existing.archivedAt) { result.skipped++; continue; }
         delete doc.status;
         if (doc.publicSource?.providerStatus === 'EventCancelled') existing.status = 'cancelled';
+        const normalizeCompare = val => {
+          if (!val) return val;
+          if (Array.isArray(val)) {
+            return val.map(item => {
+              if (item && typeof item === 'object') {
+                const copy = item.toObject ? item.toObject() : { ...item };
+                delete copy._id; delete copy.id;
+                return copy;
+              }
+              return item;
+            });
+          }
+          if (val instanceof Date) return val.toISOString();
+          return val;
+        };
         const meaningful = Object.entries(doc).filter(([key]) => !['importedAt', 'pipelineMeta', 'publicSource'].includes(key));
         const object = existing.toObject();
-        if (!existing.isModified() && meaningful.every(([key, value]) => JSON.stringify(object[key]) === JSON.stringify(value))) { result.unchanged++; continue; }
+        if (!existing.isModified() && meaningful.every(([key, value]) => JSON.stringify(normalizeCompare(object[key])) === JSON.stringify(normalizeCompare(value)))) { result.unchanged++; continue; }
         existing.set(doc);
         await existing.save();
         result.updated++;

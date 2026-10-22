@@ -4,6 +4,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const https = require('https');
 const tls = require('tls');
+const zlib = require('zlib');
 const axios = require('axios');
 
 function sourceError(message, statusCode = 400) {
@@ -28,13 +29,49 @@ function publicAddress(address) {
 }
 
 function sourceUrl(value) {
+  if (typeof value !== 'string') throw sourceError('La fuente necesita una URL HTTPS válida');
+  // Mitigate CVE-2026-105482 (NUL byte truncation in DNS/URL)
+  if (value.includes('\0') || value.includes('%00') || /[\x00-\x1f\x7f]/.test(value)) {
+    throw sourceError('La URL contiene caracteres nulos o de control no permitidos (CVE-2026-105482)');
+  }
+  // Mitigate CVE-2026-105483 & CVE-2026-106069 (Fullwidth Unicode digit/dot evasion)
+  if (/[\uff01-\uffee]/.test(value)) {
+    throw sourceError('La URL contiene caracteres de ancho completo (fullwidth) no permitidos (CVE-2026-105483)');
+  }
+  // Mitigate CVE-2026-106072 (Non-canonical IPv4 representations: octal, hex, dword, leading zeros before URL normalization)
+  if (/\/\/(?:[^/@:]*@)?(?:0x[0-9a-f]+|(?:\d+\.){0,3}0\d+)/i.test(value)) {
+    throw sourceError('Formato de dirección IP no canónico o inválido (CVE-2026-106072)');
+  }
+
   let url;
   try { url = new URL(value); } catch { throw sourceError('La fuente necesita una URL HTTPS válida'); }
   if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443') ||
       !url.hostname || url.hostname.endsWith('.') || /(?:^|\.)(?:localhost|local|internal|test|invalid)$/i.test(url.hostname)) {
     throw sourceError('La fuente debe usar HTTPS público, sin credenciales ni puertos internos');
   }
+
   const host = url.hostname.replace(/^\[|\]$/g, '');
+
+  // Mitigate CVE-2026-106072 on parsed host
+  if (/^0x/i.test(host) || /(?:^|\.)0[0-7]+(?:\.|$)/.test(host)) {
+    throw sourceError('Formato de dirección IP no canónico o inválido (CVE-2026-106072)');
+  }
+  if (/^(?:[0-9]+(?:\.|$)){1,4}/.test(host)) {
+    const parts = host.split('.');
+    if (parts.every(p => /^[0-9]+$/.test(p))) {
+      if (parts.length !== 4 || parts.some(p => (p.length > 1 && p.startsWith('0')) || Number(p) > 255)) {
+        throw sourceError('Formato de dirección IP no canónico o inválido (CVE-2026-106072)');
+      }
+    }
+  }
+
+  // Enforce canonical ASCII hostname characters for non-IP hosts
+  if (!net.isIP(host)) {
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(host)) {
+      throw sourceError('Nombre de host no válido o contiene caracteres no estándar (CVE-2026-105483)');
+    }
+  }
+
   if (net.isIP(host) && !publicAddress(host)) throw sourceError('La fuente debe resolver únicamente a direcciones públicas');
   url.hash = '';
   return url;
@@ -50,8 +87,11 @@ async function fetchSource(value, { maxBytes = 2 * 1024 * 1024 } = {}) {
   if (!addresses.length || addresses.some(item => !publicAddress(item.address))) {
     throw sourceError('La fuente debe resolver únicamente a direcciones públicas');
   }
-  // Pin the validated resolution for the request, including dual-stack lookups.
+
+  // Mitigate CVE-2026-105481: explicitly disable socket reuse (keepAlive: false) for untrusted outbound fetching
   const agent = new https.Agent({
+    keepAlive: false,
+    maxSockets: 10,
     // Include the OS trust store (e.g. a managed workstation CA), preserving
     // certificate verification and Node's default trusted authorities.
     ...(tls.getCACertificates ? { ca: [...tls.getCACertificates('default'), ...tls.getCACertificates('system')] } : {}),
@@ -63,13 +103,61 @@ async function fetchSource(value, { maxBytes = 2 * 1024 * 1024 } = {}) {
       callback(null, allowed[0].address, allowed[0].family);
     }
   });
+
   try {
-    return await axios.get(url.href, {
-      httpsAgent: agent, proxy: false, maxRedirects: 0,
-      timeout: 12000, maxContentLength: maxBytes, maxBodyLength: maxBytes,
-      headers: { 'User-Agent': 'EventNow-AuthorizedAgenda/1.0' }
+    // Mitigate CVE-2026-111497: explicitly disable Brotli ('br') in Accept-Encoding and decompress safely.
+    // Mitigate CVE-2026-105481: enforce 'Connection': 'close' to guarantee single-use sockets.
+    const res = await axios.get(url.href, {
+      httpsAgent: agent,
+      proxy: false,
+      maxRedirects: 0,
+      timeout: 12000,
+      maxContentLength: maxBytes,
+      maxBodyLength: maxBytes,
+      decompress: false,
+      responseType: 'arraybuffer',
+      headers: {
+        'User-Agent': 'EventNow-AuthorizedAgenda/1.0',
+        'Accept': 'application/json, text/calendar, application/xml, text/plain;q=0.9, */*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'close'
+      }
     });
-  } finally { agent.destroy(); }
+
+    let data = res.data;
+    const encoding = ((res.headers && res.headers['content-encoding']) || '').toLowerCase().trim();
+
+    // Defend against rogue servers responding with Brotli despite not requesting it
+    if (encoding === 'br' || encoding.includes('brotli')) {
+      throw sourceError('Codificación Brotli rechazada por política de seguridad (CVE-2026-111497)', 415);
+    }
+
+    if (Buffer.isBuffer(data) || (typeof ArrayBuffer !== 'undefined' && data instanceof ArrayBuffer)) {
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      let decompressed = buf;
+      if (encoding === 'gzip') {
+        decompressed = zlib.gunzipSync(buf);
+      } else if (encoding === 'deflate') {
+        decompressed = zlib.inflateSync(buf);
+      }
+      const text = decompressed.toString('utf8');
+      const contentType = ((res.headers && res.headers['content-type']) || '').toLowerCase();
+      if (contentType.includes('json') || /^\s*[{\[]/.test(text)) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+      } else {
+        data = text;
+      }
+    }
+
+    res.data = data;
+    return res;
+  } finally {
+    agent.destroy();
+  }
 }
 
 module.exports = { fetchSource, publicAddress, sourceUrl, sourceError };
