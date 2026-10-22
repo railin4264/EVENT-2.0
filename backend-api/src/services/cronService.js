@@ -140,6 +140,8 @@ class CronService {
           await syncUniversityAgendas();
           const { syncCivicPoliticalAgendas } = require('./eventIngestion/civicPoliticalAgendaHarvester');
           await syncCivicPoliticalAgendas();
+          const { syncAstronomyEvents } = require('./eventIngestion/astronomyEventsHarvester');
+          await syncAstronomyEvents();
           logger.info('Planetary & virtual streams rolling refresh completed');
         } catch (planErr) {
           logger.warn('Planetary scheduled refresh warning: ' + planErr.message);

@@ -1317,12 +1317,24 @@ router.get('/:id/solo-attendees', optionalAuth, async (req, res) => {
     if (['draft', 'pending_review'].includes(event.status) && !manager) return res.status(404).json({ success: false, message: 'Evento no encontrado' });
     if (event.isPrivate && !manager && !await hasEventParticipation(event, req.user?._id)) return res.status(403).json({ success: false, message: 'Este evento es privado' });
     if (!manager && !ageIsAllowed(event, req.user)) return res.status(403).json({ success: false, message: 'No cumples los requisitos de edad del evento' });
-    const soloList = summarizeAttendance((event.attendees || []).filter(a => a.isSolo)).visibleAttendees
-      .map(person => ({ _id: person.id, firstName: person.firstName, username: person.username, avatar: person.avatar }));
+    const soloMatches = (event.attendees || []).filter(a => a.isSolo && a.user);
+    const soloList = soloMatches.map(a => {
+      const u = a.user || {};
+      return {
+        _id: u._id || u.id,
+        firstName: u.firstName || u.username || 'Explorador',
+        username: u.username,
+        avatar: u.avatar,
+        soloNote: a.soloNote || '',
+        languages: Array.isArray(a.languages) ? a.languages : [],
+        travelOrigin: a.travelOrigin || ''
+      };
+    });
 
-    const isUserSolo = req.user
-      ? (event.attendees || []).some(a => a.isSolo && a.user?._id?.toString() === req.user.id)
-      : false;
+    const currentUserAttendee = req.user
+      ? (event.attendees || []).find(a => a.user && a.user._id?.toString() === req.user.id)
+      : null;
+    const isUserSolo = Boolean(currentUserAttendee?.isSolo);
 
     res.json({
       success: true,
@@ -1332,12 +1344,83 @@ router.get('/:id/solo-attendees', optionalAuth, async (req, res) => {
         welcomeHost: event.soloWelcomeHost,
         count: soloList.length,
         attendees: soloList,
-        isUserSolo
+        isUserSolo,
+        currentUserBuddyProfile: isUserSolo ? {
+          soloNote: currentUserAttendee?.soloNote || '',
+          languages: currentUserAttendee?.languages || [],
+          travelOrigin: currentUserAttendee?.travelOrigin || ''
+        } : null
       }
     });
   } catch (error) {
     logger.error('Get solo attendees error:', error);
     res.status(500).json({ success: false, message: 'Error al consultar asistentes solos' });
+  }
+});
+
+// @desc    Register or update Cultural Buddy / Solo Traveler profile for an event
+// @route   POST /api/events/:id/solo-buddy
+// @access  Private
+router.post('/:id/solo-buddy', protect, async (req, res) => {
+  try {
+    const { languages, travelOrigin, soloNote, status } = req.body;
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+
+    let attendee = event.attendees.find(a => a.user && a.user.toString() === req.user.id);
+    if (!attendee) {
+      attendee = {
+        user: req.user.id,
+        status: status || 'confirmed',
+        isSolo: true,
+        joinedAt: new Date()
+      };
+      event.attendees.push(attendee);
+      // Reference to newly pushed item
+      attendee = event.attendees[event.attendees.length - 1];
+    } else {
+      attendee.isSolo = true;
+    }
+
+    if (Array.isArray(languages)) {
+      attendee.languages = languages.map(l => String(l).trim().slice(0, 10)).filter(Boolean).slice(0, 5);
+    }
+    if (travelOrigin !== undefined) {
+      attendee.travelOrigin = String(travelOrigin || '').trim().slice(0, 60);
+    }
+    if (soloNote !== undefined) {
+      attendee.soloNote = String(soloNote || '').trim().slice(0, 200);
+    }
+
+    await event.save();
+    await event.populate('attendees.user', PROFILE_FIELDS);
+
+    const soloList = event.attendees
+      .filter(a => a.isSolo && a.user)
+      .map(a => ({
+        _id: a.user._id,
+        firstName: a.user.firstName || a.user.username,
+        username: a.user.username,
+        avatar: a.user.avatar,
+        soloNote: a.soloNote || '',
+        languages: a.languages || [],
+        travelOrigin: a.travelOrigin || ''
+      }));
+
+    res.json({
+      success: true,
+      message: '¡Perfil de Cultural Buddy actualizado con éxito!',
+      buddyProfile: {
+        languages: attendee.languages || [],
+        travelOrigin: attendee.travelOrigin || '',
+        soloNote: attendee.soloNote || ''
+      },
+      soloCount: soloList.length,
+      soloAttendees: soloList
+    });
+  } catch (error) {
+    logger.error('Solo buddy update error:', error);
+    res.status(500).json({ success: false, message: 'Error al actualizar perfil de Cultural Buddy' });
   }
 });
 
@@ -1692,6 +1775,50 @@ router.post('/:id/view', async (req, res) => {
       success: false,
       message: 'Server error'
     });
+  }
+});
+
+// @desc    Get real-time weather and forecast for event
+// @route   GET /api/events/:id/weather
+// @access  Public
+router.get('/:id/weather', async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id).select('location title category date');
+    if (!event) {
+      return res.status(404).json({ success: false, message: 'Evento no encontrado' });
+    }
+
+    const coords = event.location?.coordinates;
+    const lng = coords && coords[0];
+    const lat = coords && coords[1];
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+      return res.status(200).json({
+        success: true,
+        available: false,
+        message: 'Evento virtual o sin coordenadas físicas exactas'
+      });
+    }
+
+    const { getWeatherForCoordinates } = require('../services/weatherService');
+    const weather = await getWeatherForCoordinates(lat, lng);
+
+    if (!weather) {
+      return res.status(200).json({
+        success: true,
+        available: false,
+        message: 'Pronóstico no disponible temporalmente'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      available: true,
+      data: weather
+    });
+  } catch (error) {
+    logger.error('Weather forecast error:', error);
+    res.status(500).json({ success: false, message: 'Error consultando pronóstico' });
   }
 });
 

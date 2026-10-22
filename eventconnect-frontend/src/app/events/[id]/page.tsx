@@ -33,6 +33,8 @@ import HostOperationsPanel from '@/components/events/HostOperationsPanel'
 import TouristGuideModal from '@/components/events/TouristGuideModal'
 import { VirtualStagePlayer, type VirtualDetails } from '@/components/events/VirtualStagePlayer'
 import { TripBudgetCalculator } from '@/components/events/TripBudgetCalculator'
+import UniversalTimezoneClock from '@/components/events/UniversalTimezoneClock'
+import SoloTravelerBuddySection from '@/components/events/SoloTravelerBuddySection'
 import { Baby, HeartHandshake, ShieldCheck as ShieldCheckIcon, Stethoscope } from 'lucide-react'
 import { useLocaleStore } from '@/stores/localeStore'
 
@@ -953,17 +955,20 @@ export default function EventDetailPage() {
               </h3>
 
               {event.isVirtual ? (
-                <VirtualStagePlayer
-                  eventId={String(id)}
-                  eventTitle={event.title}
-                  eventDate={event.date}
-                  eventEndDate={event.endDate}
-                  virtualPlatform={event.virtualPlatform}
-                  virtualLink={event.virtualLink}
-                  virtualDetails={event.virtualDetails}
-                  isAttendee={Boolean(optimisticState.isAttending ?? event.isAttending)}
-                  onAttendRequest={handleJoinEvent}
-                />
+                <>
+                  <VirtualStagePlayer
+                    eventId={String(id)}
+                    eventTitle={event.title}
+                    eventDate={event.date}
+                    eventEndDate={event.endDate}
+                    virtualPlatform={event.virtualPlatform}
+                    virtualLink={event.virtualLink}
+                    virtualDetails={event.virtualDetails}
+                    isAttendee={Boolean(optimisticState.isAttending ?? event.isAttending)}
+                    onAttendRequest={handleJoinEvent}
+                  />
+                  <UniversalTimezoneClock eventDate={event.date} isVirtual={true} />
+                </>
               ) : (
                 <>
                   <div className="space-y-2 mb-6">
@@ -987,6 +992,7 @@ export default function EventDetailPage() {
                       {event.isSecretLocation && !event.isAttending ? 'El mapa estará disponible cuando se confirme tu asistencia.' : 'El organizador publicará la ubicación cuando esté confirmada.'}
                     </p>
                   )}
+                  <UniversalTimezoneClock eventDate={event.date} isVirtual={false} />
                 </>
               )}
             </motion.div>
@@ -1024,6 +1030,9 @@ export default function EventDetailPage() {
               startDate={event.date}
               endDate={event.endDate}
             />
+
+            {/* Cultural Buddy & Solo Traveler / Nomad Table */}
+            <SoloTravelerBuddySection eventId={String(id)} />
 
             <EventSectionDisclosure title="Música y compañía" description="Propón canciones y encuentra personas con quienes ir.">
               <EventSongVotingSection eventId={String(id)} />

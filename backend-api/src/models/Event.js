@@ -205,6 +205,21 @@ const eventSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
+    soloNote: {
+      type: String,
+      trim: true,
+      maxlength: 200
+    },
+    languages: [{
+      type: String,
+      trim: true,
+      maxlength: 10
+    }],
+    travelOrigin: {
+      type: String,
+      trim: true,
+      maxlength: 60
+    },
     promoter: {
       type: String,
       trim: true,
