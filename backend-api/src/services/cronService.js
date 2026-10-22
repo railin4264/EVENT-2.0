@@ -148,6 +148,8 @@ class CronService {
           await syncActionSportsAndCrafts();
           const fashionHarvester = require('./eventIngestion/fashionAndEditorialHarvester');
           await fashionHarvester.syncAll();
+          const globalMetropolisHarvester = require('./eventIngestion/globalMetropolisAndNichesHarvester');
+          await globalMetropolisHarvester.syncAll();
           logger.info('Planetary & virtual streams rolling refresh completed');
         } catch (planErr) {
           logger.warn('Planetary scheduled refresh warning: ' + planErr.message);

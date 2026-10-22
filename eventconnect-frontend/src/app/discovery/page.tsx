@@ -471,6 +471,41 @@ export default function DiscoveryPage() {
           >
             🛠️ Talleres & Oficios
           </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'esports' ? '' : 'esports')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'esports' ? 'border-amber-400 bg-amber-500/25 text-amber-100 shadow-sm shadow-amber-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-amber-500/40 hover:text-white')}
+          >
+            🎮 Esports & Gaming
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'mascotas' ? '' : 'mascotas')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'mascotas' ? 'border-yellow-400 bg-yellow-500/25 text-yellow-100 shadow-sm shadow-yellow-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-yellow-500/40 hover:text-white')}
+          >
+            🐾 Mascotas & Pets
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'kpop' ? '' : 'kpop')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'kpop' ? 'border-purple-400 bg-purple-500/25 text-purple-100 shadow-sm shadow-purple-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-purple-500/40 hover:text-white')}
+          >
+            ✨ K-Pop & Asia
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'libro' ? '' : 'libro')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'libro' ? 'border-sky-400 bg-sky-500/25 text-sky-100 shadow-sm shadow-sky-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-sky-500/40 hover:text-white')}
+          >
+            📚 Ferias del Libro
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'aurora' ? '' : 'aurora')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'aurora' ? 'border-teal-400 bg-teal-500/25 text-teal-100 shadow-sm shadow-teal-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-teal-500/40 hover:text-white')}
+          >
+            🌌 Ártico & Auroras
+          </button>
         </div>
 
         {/* Global & Regional Quick-Jump Hotspots Rail */}

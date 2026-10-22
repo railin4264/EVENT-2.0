@@ -148,6 +148,8 @@ const startServer = async () => {
         await syncActionSportsAndCrafts();
         const fashionHarvester = require('./services/eventIngestion/fashionAndEditorialHarvester');
         await fashionHarvester.syncAll();
+        const globalMetropolisHarvester = require('./services/eventIngestion/globalMetropolisAndNichesHarvester');
+        await globalMetropolisHarvester.syncAll();
       } catch (planetErr) {
         logger.warn('Seed planetary ecosystem skipped/error: ' + planetErr.message);
       }

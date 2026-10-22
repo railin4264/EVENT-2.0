@@ -71,6 +71,14 @@ const FALLBACK_IMAGE_MAP = {
   modeling: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=1200&q=80',
   digital_magazine: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=1200&q=80',
 
+  // Metropolis, Esports, Pets & Books
+  esports: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=1200&q=80',
+  pets: 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=1200&q=80',
+  literature: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=1200&q=80',
+  nordic: 'https://images.unsplash.com/photo-1517411032315-54ef2cb783bb?w=1200&q=80',
+  dubai: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=1200&q=80',
+  kpop: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1200&q=80',
+
   // Standard Categories
   music: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=1200&q=80',
   art: 'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=1200&q=80',
@@ -142,6 +150,24 @@ function getCategoryFallbackImage({ category = '', activityType = '', tags = [],
   }
   if (text.includes('moda') || text.includes('fashion') || text.includes('ropa') || text.includes('haute couture') || text.includes('diseno textil')) {
     return FALLBACK_IMAGE_MAP.fashion;
+  }
+  if (text.includes('esports') || text.includes('gaming') || text.includes('torneo') || text.includes('gamer') || text.includes('twitch')) {
+    return FALLBACK_IMAGE_MAP.esports;
+  }
+  if (text.includes('mascota') || text.includes('perro') || text.includes('gato') || text.includes('pet') || text.includes('canin')) {
+    return FALLBACK_IMAGE_MAP.pets;
+  }
+  if (text.includes('libro') || text.includes('feria del libro') || text.includes('literatur') || text.includes('poesia') || text.includes('autor')) {
+    return FALLBACK_IMAGE_MAP.literature;
+  }
+  if (text.includes('kpop') || text.includes('k-pop') || text.includes('seoul') || text.includes('corea')) {
+    return FALLBACK_IMAGE_MAP.kpop;
+  }
+  if (text.includes('dubai') || text.includes('emirates') || text.includes('abu dhabi') || text.includes('egipto') || text.includes('piramide')) {
+    return FALLBACK_IMAGE_MAP.dubai;
+  }
+  if (text.includes('nordic') || text.includes('copenhague') || text.includes('aurora') || text.includes('tromso') || text.includes('nieve')) {
+    return FALLBACK_IMAGE_MAP.nordic;
   }
   if (text.includes('cafe') || text.includes('barista') || text.includes('gastronomia') || text.includes('comida') || text.includes('culinaria')) {
     return FALLBACK_IMAGE_MAP.food;
