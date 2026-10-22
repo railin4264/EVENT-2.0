@@ -95,7 +95,7 @@ export default function RootLayout({
   return (
     <html lang="es" data-scroll-behavior="smooth" suppressHydrationWarning className="dark">
       <head><script id="asset-recovery" dangerouslySetInnerHTML={{ __html: assetRecoveryScript }} /></head>
-      <body className={`${inter.variable} ${outfit.variable} font-sans antialiased bg-background text-foreground`}>
+      <body suppressHydrationWarning className={`${inter.variable} ${outfit.variable} font-sans antialiased bg-background text-foreground`}>
         <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded-lg focus:bg-background focus:p-4 focus:text-foreground">Saltar al contenido</a>
         <Providers>
           <ErrorBoundary>
