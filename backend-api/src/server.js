@@ -146,6 +146,8 @@ const startServer = async () => {
         await syncSpecializedGlobalEvents();
         const { syncActionSportsAndCrafts } = require('./services/eventIngestion/actionSportsAndCraftsHarvester');
         await syncActionSportsAndCrafts();
+        const fashionHarvester = require('./services/eventIngestion/fashionAndEditorialHarvester');
+        await fashionHarvester.syncAll();
       } catch (planetErr) {
         logger.warn('Seed planetary ecosystem skipped/error: ' + planetErr.message);
       }

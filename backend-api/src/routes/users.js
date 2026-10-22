@@ -209,6 +209,7 @@ router.put('/profile', [
 
     const allowedFields = [
       'firstName', 'lastName', 'bio', 'phone', 'interests',
+      'gender', 'country', 'countryCode', 'preferredCurrency', 'preferredLocale',
       'location', 'socialLinks', 'isPrivate'
     ];
 
@@ -691,6 +692,7 @@ router.put('/me/profile', [
 
     const allowedFields = [
       'firstName', 'lastName', 'username', 'bio', 'phone', 'interests',
+      'gender', 'country', 'countryCode', 'preferredCurrency', 'preferredLocale',
       'location', 'socialLinks', 'isPrivate'
     ];
 

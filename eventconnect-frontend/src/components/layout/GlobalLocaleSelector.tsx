@@ -6,9 +6,11 @@ import { useLocaleStore, SupportedLocale } from '@/stores/localeStore'
 
 const LOCALE_OPTIONS: { id: SupportedLocale; flag: string; label: string; currency: string }[] = [
   { id: 'es-DO', flag: '🇩🇴', label: 'Rep. Dominicana', currency: 'DOP (RD$)' },
+  { id: 'en-US', flag: '🇺🇸', label: 'Global / EE.UU.', currency: 'USD ($)' },
   { id: 'es-ES', flag: '🇪🇸', label: 'España', currency: 'EUR (€)' },
   { id: 'es-MX', flag: '🇲🇽', label: 'México', currency: 'MXN ($)' },
-  { id: 'en-US', flag: '🇺🇸', label: 'Global / English', currency: 'USD ($)' },
+  { id: 'es-CO', flag: '🇨🇴', label: 'Colombia', currency: 'COP ($)' },
+  { id: 'es-AR', flag: '🇦🇷', label: 'Argentina', currency: 'ARS ($)' },
 ]
 
 export default function GlobalLocaleSelector() {

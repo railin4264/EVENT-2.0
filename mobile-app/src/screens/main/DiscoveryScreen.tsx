@@ -25,6 +25,7 @@ const CATEGORIES: { id: CategoryFilterId; label: string; icon: keyof typeof Ioni
   { id: 'technology', label: 'Tecnología & IA', icon: 'code-slash-outline' },
   { id: 'wellness', label: 'Bienestar', icon: 'leaf-outline' },
   { id: 'social', label: 'Social & Coros', icon: 'people-outline' },
+  { id: 'fashion' as any, label: '👗 Moda & Pasarelas', icon: 'shirt-outline' },
   { id: 'other', label: 'Otros', icon: 'ellipsis-horizontal' },
 ];
 function place(event: Event) {

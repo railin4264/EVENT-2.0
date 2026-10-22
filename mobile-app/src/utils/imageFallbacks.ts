@@ -40,6 +40,18 @@ export function getEventFallbackImage(category?: string, title?: string, activit
   if (text.includes('ufo') || text.includes('ovni') || text.includes('astronomia') || text.includes('alien') || text.includes('espacio')) {
     return 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=1200&q=80'
   }
+  if (text.includes('maquillaje') || text.includes('makeup') || text.includes('skincare') || text.includes('cosmetica') || text.includes('belleza')) {
+    return 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=1200&q=80'
+  }
+  if (text.includes('pasarela') || text.includes('runway') || text.includes('modelaje') || text.includes('model') || text.includes('casting')) {
+    return 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=1200&q=80'
+  }
+  if (text.includes('revista') || text.includes('magazine') || text.includes('editorial') || text.includes('lookbook')) {
+    return 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=1200&q=80'
+  }
+  if (text.includes('moda') || text.includes('fashion') || text.includes('ropa') || text.includes('haute couture') || text.includes('textil')) {
+    return 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&q=80'
+  }
   if (text.includes('music') || text.includes('concierto') || text.includes('rock') || text.includes('jazz') || text.includes('festival')) {
     return 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=1200&q=80'
   }

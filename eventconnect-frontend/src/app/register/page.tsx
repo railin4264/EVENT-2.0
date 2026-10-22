@@ -15,11 +15,35 @@ const inputClass = 'w-full rounded-xl border border-border bg-background px-4 py
 
 const COUNTRIES = [
   { code: 'DO', name: 'República Dominicana', flag: '🇩🇴', label: 'Rep. Dominicana', terms: 'Coros · Boletas · RD$' },
+  { code: 'US', name: 'Estados Unidos', flag: '🇺🇸', label: 'EE.UU. / Global', terms: 'Hangouts · Tickets · USD$' },
   { code: 'ES', name: 'España', flag: '🇪🇸', label: 'España', terms: 'Quedadas · Entradas · €' },
   { code: 'MX', name: 'México', flag: '🇲🇽', label: 'México', terms: 'Planes · Boletos · MXN$' },
   { code: 'CO', name: 'Colombia', flag: '🇨🇴', label: 'Colombia', terms: 'Parches · Boletas · COP$' },
   { code: 'AR', name: 'Argentina', flag: '🇦🇷', label: 'Argentina', terms: 'Juntadas · Entradas · ARS$' },
-  { code: 'US', name: 'Estados Unidos', flag: '🇺🇸', label: 'EE.UU. / Global', terms: 'Hangouts · Tickets · USD$' },
+  { code: 'CL', name: 'Chile', flag: '🇨🇱', label: 'Chile', terms: 'Carretes · Entradas · CLP$' },
+  { code: 'PE', name: 'Perú', flag: '🇵🇪', label: 'Perú', terms: 'Planes · Entradas · PEN S/' },
+  { code: 'FR', name: 'Francia', flag: '🇫🇷', label: 'Francia', terms: 'Sorties · Billets · €' },
+  { code: 'GB', name: 'Reino Unido', flag: '🇬🇧', label: 'Reino Unido', terms: 'Hangouts · Tickets · £' },
+  { code: 'JP', name: 'Japón', flag: '🇯🇵', label: 'Japón', terms: 'イベント · チケット · ¥' },
+  { code: 'GLOBAL', name: 'Cualquier otro país', flag: '🌐', label: 'Internacional', terms: 'Global · Virtual · USD$' },
+]
+
+const GENDER_OPTIONS = [
+  { id: 'female', label: 'Mujer', icon: '👩' },
+  { id: 'male', label: 'Hombre', icon: '👨' },
+  { id: 'non_binary', label: 'No binario', icon: '🌈' },
+  { id: 'prefer_not_to_say', label: 'Sin especificar', icon: '🤍' },
+]
+
+const INTEREST_OPTIONS = [
+  { id: 'fashion', label: '👗 Moda & Ropa Fashion' },
+  { id: 'makeup', label: '💄 Maquillaje & Belleza' },
+  { id: 'modeling', label: '👠 Pasarelas & Modelaje' },
+  { id: 'digital_magazines', label: '📖 Revistas Digitales & Editorial' },
+  { id: 'sports', label: '🏃 Fitness & Deportes' },
+  { id: 'technology', label: '💻 Tecnología & IA' },
+  { id: 'music', label: '🎵 Música & Conciertos' },
+  { id: 'food', label: '🍔 Gastronomía & Café' },
 ]
 
 function RegisterForm() {
@@ -33,6 +57,14 @@ function RegisterForm() {
   // Locale and regional psychology store
   const { config, setLocaleByCountry } = useLocaleStore()
   const [selectedCountryCode, setSelectedCountryCode] = useState(config.countryCode || 'DO')
+  const [selectedGender, setSelectedGender] = useState<'female' | 'male' | 'non_binary' | 'other' | 'prefer_not_to_say'>('prefer_not_to_say')
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([])
+
+  const toggleInterest = (id: string) => {
+    setSelectedInterests(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    )
+  }
 
   const { register, handleSubmit, setError, clearErrors, watch, setValue, formState: { errors, isSubmitting, dirtyFields } } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -69,6 +101,8 @@ function RegisterForm() {
         acceptTerms: data.acceptTerms,
         country: data.country || activeCountry.name,
         countryCode: data.countryCode || activeCountry.code,
+        gender: selectedGender,
+        interests: selectedInterests,
         preferredLocale: config.locale,
         preferredCurrency: config.currency
       })
@@ -192,7 +226,7 @@ function RegisterForm() {
                 </label>
                 <span className="text-xs text-muted-foreground">Adapta la jerga y moneda</span>
               </div>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 max-h-52 overflow-y-auto pr-1">
                 {COUNTRIES.map(c => {
                   const isSelected = selectedCountryCode === c.code
                   return (
@@ -291,6 +325,71 @@ function RegisterForm() {
                 Nos permite comprobar las restricciones de edad de cada evento.
               </p>
               {fieldError('birthDate')}
+            </div>
+
+            {/* Selector de Género / Identidad para sugerencias afines */}
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <Sparkles className="h-4 w-4 text-pink-500" />
+                  ¿Cómo te identificas? <span className="text-xs text-muted-foreground font-normal">(Opcional)</span>
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Nos ayuda a sugerirte pasarelas de moda, eventos de maquillaje, modelaje, estilo de vida y recomendaciones acordes a ti.
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 pt-1">
+                {GENDER_OPTIONS.map(g => {
+                  const isSelected = selectedGender === g.id
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => setSelectedGender(g.id as any)}
+                      className={`flex items-center justify-center gap-1.5 rounded-xl border p-2 text-center transition-all text-xs ${
+                        isSelected
+                          ? 'border-pink-500 bg-pink-500/15 text-pink-600 dark:text-pink-300 font-bold ring-1 ring-pink-500 shadow-sm'
+                          : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      <span className="text-base">{g.icon}</span>
+                      <span>{g.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Preferencias de contenido: Moda, Maquillaje, Revistas Digitales */}
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <span>✨ ¿Qué eventos y temas te apasionan?</span>
+                </label>
+                <span className="text-xs text-muted-foreground">Opcional</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Selecciona tus favoritos para recibir convocatorias de modelaje, revistas digitales interactivas, maquillaje o pasarelas.
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {INTEREST_OPTIONS.map(interest => {
+                  const isChecked = selectedInterests.includes(interest.id)
+                  return (
+                    <button
+                      key={interest.id}
+                      type="button"
+                      onClick={() => toggleInterest(interest.id)}
+                      className={`rounded-full px-3 py-1.5 text-xs transition-all border ${
+                        isChecked
+                          ? 'border-primary bg-primary text-primary-foreground font-semibold shadow-sm'
+                          : 'border-border bg-background hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {interest.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <div>

@@ -341,6 +341,18 @@ class AIRecommendationService {
       const userInterests = user?.interests || [];
       const eventCategory = event.category;
 
+      // Score by user gender & lifestyle preferences (Fashion, Runway, Makeup, Modeling, Digital Magazines)
+      const isFashionOrBeautyEvent = eventCategory === 'fashion' ||
+        ['maquillaje', 'pasarela', 'runway', 'modelaje', 'belleza', 'revista', 'editorial', 'lookbook', 'moda', 'cosmetica']
+          .some(term => `${event.title || ''} ${event.activityType || ''} ${(event.tags || []).join(' ')}`.toLowerCase().includes(term));
+
+      if (isFashionOrBeautyEvent) {
+        if (user?.gender === 'female' || (userInterests && userInterests.some(i => ['fashion', 'moda', 'makeup', 'belleza', 'modeling', 'modelaje', 'revistas', 'digital_magazines'].includes(String(i).toLowerCase())))) {
+          score += 25;
+          reasons.push('Recomendado para ti: Moda, Pasarelas & Editorial');
+        }
+      }
+
       if (userInterests.includes(eventCategory)) {
         let categoryScore = 20;
         if (userPrefs?.categories?.[eventCategory]) {

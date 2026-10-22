@@ -19,6 +19,8 @@ export const registerSchema = z.object({
     .regex(/[@$!%*?&]/, 'Añade un símbolo: @$!%*?&'),
   countryCode: z.string().default('DO').optional(),
   country: z.string().default('República Dominicana').optional(),
+  gender: z.enum(['female', 'male', 'non_binary', 'other', 'prefer_not_to_say']).default('prefer_not_to_say').optional(),
+  interests: z.array(z.string()).default([]).optional(),
   acceptTerms: z.boolean().refine(value => value, 'Debes aceptar los términos y la privacidad'),
 })
 

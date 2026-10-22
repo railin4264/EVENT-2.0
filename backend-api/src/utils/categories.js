@@ -30,6 +30,7 @@ const CATEGORIES = [
   { slug: 'religion', label: 'Religión & Espiritualidad', emoji: '🙏', activityTypes: ['misa comunitaria', 'culto al aire libre', 'retiro espiritual', 'vigilia de oración', 'estudio bíblico', 'meditación interreligiosa', 'conferencia de fe'] },
   { slug: 'politics', label: 'Política & Civismo', emoji: '🏛️', activityTypes: ['debate político', 'foro cívico ciudadano', 'asamblea comunitaria', 'marcha pacífica', 'presentación de propuestas', 'cabildo abierto'] },
   { slug: 'charity', label: 'Causas & Voluntariado', emoji: '🎗️', activityTypes: ['colecta benéfica', 'rescate animal', 'jornada de donación', 'reforestación comunitaria'] },
+  { slug: 'fashion', label: 'Moda & Belleza', emoji: '👗', activityTypes: ['pasarela de moda', 'masterclass de maquillaje', 'casting de modelaje', 'revista digital', 'editorial de moda', 'lanzamiento lookbook', 'diseño textil', 'expo belleza', 'skincare'] },
   { slug: 'science', label: 'Ciencia & Astronomía', emoji: '🔬', activityTypes: ['noche de telescopios', 'divulgación científica', 'laboratorio abierto', 'observación astronómica'] },
   { slug: 'party', label: 'Fiestas', emoji: '🎉', activityTypes: ['fiesta temática', 'festival'] },
   { slug: 'social', label: 'Social', emoji: '💬', activityTypes: ['encuentro social', 'speed friending'] },
@@ -40,7 +41,8 @@ const CATEGORIES = [
 const LEGACY_ALIASES = [
   'música', 'deportes', 'sociales', 'tecnologia', 'tecnología', 'tech', 'comida', 'gastronomía',
   'arte', 'negocios', 'empresarial', 'educación', 'educacion', 'fiesta', 'salud', 'otro',
-  'religión', 'religion', 'espiritualidad', 'política', 'politica', 'civismo', 'voluntariado', 'ciencia'
+  'religión', 'religion', 'espiritualidad', 'política', 'politica', 'civismo', 'voluntariado', 'ciencia',
+  'fashion', 'moda', 'beauty', 'belleza', 'lifestyle', 'editorial', 'magazine'
 ];
 
 const CATEGORY_SLUGS = CATEGORIES.map(c => c.slug);

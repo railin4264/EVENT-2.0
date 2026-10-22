@@ -351,6 +351,7 @@ export interface RegisterForm {
   name?: string;
   interests?: string[];
   birthDate?: string;
+  gender?: string;
   acceptTerms?: boolean;
 }
 

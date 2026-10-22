@@ -64,6 +64,13 @@ const FALLBACK_IMAGE_MAP = {
   university: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1200&q=80',
   education: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=1200&q=80',
 
+  // Fashion, Modeling, Makeup & Digital Magazines
+  fashion: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&q=80',
+  runway: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=1200&q=80',
+  makeup: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=1200&q=80',
+  modeling: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=1200&q=80',
+  digital_magazine: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=1200&q=80',
+
   // Standard Categories
   music: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=1200&q=80',
   art: 'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=1200&q=80',
@@ -123,6 +130,18 @@ function getCategoryFallbackImage({ category = '', activityType = '', tags = [],
   }
   if (text.includes('taller') || text.includes('workshop') || text.includes('carpinteria') || text.includes('ceramica') || text.includes('oficio')) {
     return FALLBACK_IMAGE_MAP.workshop;
+  }
+  if (text.includes('maquillaje') || text.includes('makeup') || text.includes('cosmetica') || text.includes('skincare') || text.includes('belleza')) {
+    return FALLBACK_IMAGE_MAP.makeup;
+  }
+  if (text.includes('pasarela') || text.includes('runway') || text.includes('modelaje') || text.includes('model') || text.includes('casting')) {
+    return FALLBACK_IMAGE_MAP.runway;
+  }
+  if (text.includes('revista') || text.includes('magazine') || text.includes('editorial') || text.includes('lookbook')) {
+    return FALLBACK_IMAGE_MAP.digital_magazine;
+  }
+  if (text.includes('moda') || text.includes('fashion') || text.includes('ropa') || text.includes('haute couture') || text.includes('diseno textil')) {
+    return FALLBACK_IMAGE_MAP.fashion;
   }
   if (text.includes('cafe') || text.includes('barista') || text.includes('gastronomia') || text.includes('comida') || text.includes('culinaria')) {
     return FALLBACK_IMAGE_MAP.food;

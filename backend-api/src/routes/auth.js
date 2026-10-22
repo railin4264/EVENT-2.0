@@ -88,7 +88,7 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
   }
   try {
     logger.info('Registration attempt:', { email: req.body.email, username: req.body.username });
-    const { username, email, password, firstName, lastName, name, interests, bio, location, acceptTerms, birthDate } = req.body;
+    const { username, email, password, firstName, lastName, name, interests, bio, location, acceptTerms, birthDate, gender } = req.body;
 
     // Accept a single `name` and split into firstName/lastName for convenience.
     let resolvedFirst = firstName;
@@ -124,10 +124,24 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
     // Create user with country & locale resolution
     const rawCountryCode = String(req.body.countryCode || '').toUpperCase();
     const rawCountry = req.body.country || '';
-    const countryCode = rawCountryCode || (rawCountry === 'España' ? 'ES' : rawCountry === 'México' ? 'MX' : rawCountry === 'Estados Unidos' ? 'US' : rawCountry === 'Colombia' ? 'CO' : rawCountry === 'Argentina' ? 'AR' : 'DO');
-    const country = rawCountry || (countryCode === 'ES' ? 'España' : countryCode === 'MX' ? 'México' : countryCode === 'US' ? 'Estados Unidos' : countryCode === 'CO' ? 'Colombia' : countryCode === 'AR' ? 'Argentina' : 'República Dominicana');
-    const preferredLocale = req.body.preferredLocale || (countryCode === 'ES' ? 'es-ES' : countryCode === 'MX' ? 'es-MX' : countryCode === 'US' ? 'en-US' : countryCode === 'CO' ? 'es-CO' : countryCode === 'AR' ? 'es-AR' : 'es-DO');
-    const preferredCurrency = req.body.preferredCurrency || (countryCode === 'ES' ? 'EUR' : countryCode === 'MX' ? 'MXN' : countryCode === 'US' ? 'USD' : countryCode === 'CO' ? 'COP' : countryCode === 'AR' ? 'ARS' : 'DOP');
+    const COUNTRY_MAP = {
+      ES: { name: 'España', locale: 'es-ES', currency: 'EUR', coords: [-3.7038, 40.4168] },
+      MX: { name: 'México', locale: 'es-MX', currency: 'MXN', coords: [-99.1332, 19.4326] },
+      US: { name: 'Estados Unidos', locale: 'en-US', currency: 'USD', coords: [-74.006, 40.7128] },
+      CO: { name: 'Colombia', locale: 'es-CO', currency: 'COP', coords: [-74.0721, 4.7110] },
+      AR: { name: 'Argentina', locale: 'es-AR', currency: 'ARS', coords: [-58.3816, -34.6037] },
+      CL: { name: 'Chile', locale: 'es-CL', currency: 'CLP', coords: [-70.6693, -33.4489] },
+      PE: { name: 'Perú', locale: 'es-PE', currency: 'PEN', coords: [-77.0428, -12.0464] },
+      FR: { name: 'Francia', locale: 'fr-FR', currency: 'EUR', coords: [2.3522, 48.8566] },
+      GB: { name: 'Reino Unido', locale: 'en-GB', currency: 'GBP', coords: [-0.1278, 51.5074] },
+      JP: { name: 'Japón', locale: 'ja-JP', currency: 'JPY', coords: [139.6917, 35.6895] },
+      DO: { name: 'República Dominicana', locale: 'es-DO', currency: 'DOP', coords: [-69.9312, 18.4861] }
+    };
+    const resolvedCountryConfig = COUNTRY_MAP[rawCountryCode] || Object.values(COUNTRY_MAP).find(c => c.name.toLowerCase() === rawCountry.toLowerCase()) || COUNTRY_MAP.DO;
+    const countryCode = rawCountryCode || (Object.keys(COUNTRY_MAP).find(k => COUNTRY_MAP[k].name === rawCountry) || 'DO');
+    const country = rawCountry || resolvedCountryConfig.name;
+    const preferredLocale = req.body.preferredLocale || resolvedCountryConfig.locale;
+    const preferredCurrency = req.body.preferredCurrency || resolvedCountryConfig.currency;
 
     const userData = {
       username,
@@ -136,13 +150,14 @@ router.post('/register', sanitizeBody, validateRegister, async (req, res) => {
       firstName: resolvedFirst,
       lastName: resolvedLast,
       birthDate,
+      gender: ['female', 'male', 'non_binary', 'other', 'prefer_not_to_say'].includes(gender) ? gender : 'prefer_not_to_say',
       country,
       countryCode,
       preferredLocale,
       preferredCurrency,
       location: {
         type: 'Point',
-        coordinates: location?.coordinates || (countryCode === 'ES' ? [-3.7038, 40.4168] : countryCode === 'MX' ? [-99.1332, 19.4326] : countryCode === 'US' ? [-74.006, 40.7128] : [-69.9312, 18.4861]),
+        coordinates: location?.coordinates || resolvedCountryConfig.coords,
         country,
         countryCode
       }

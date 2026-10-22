@@ -41,6 +41,7 @@ export interface RegisterData {
   phone?: string;
   country?: string;
   countryCode?: string;
+  gender?: 'female' | 'male' | 'non_binary' | 'other' | 'prefer_not_to_say';
   preferredLocale?: string;
   preferredCurrency?: string;
 }
@@ -64,6 +65,7 @@ export interface User {
   avatar?: string;
   country?: string;
   countryCode?: string;
+  gender?: 'female' | 'male' | 'non_binary' | 'other' | 'prefer_not_to_say';
   preferredLocale?: string;
   preferredCurrency?: string;
   bio?: string;

@@ -438,6 +438,34 @@ export default function DiscoveryPage() {
           </button>
           <button
             type="button"
+            onClick={() => setSearchQuery(searchQuery === 'moda' ? '' : 'moda')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'moda' ? 'border-pink-400 bg-pink-500/25 text-pink-100 shadow-sm shadow-pink-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-pink-500/40 hover:text-white')}
+          >
+            👗 Moda & Fashion
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'maquillaje' ? '' : 'maquillaje')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'maquillaje' ? 'border-rose-400 bg-rose-500/25 text-rose-100 shadow-sm shadow-rose-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-rose-500/40 hover:text-white')}
+          >
+            💄 Maquillaje & Belleza
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'modelaje' ? '' : 'modelaje')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'modelaje' ? 'border-fuchsia-400 bg-fuchsia-500/25 text-fuchsia-100 shadow-sm shadow-fuchsia-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-fuchsia-500/40 hover:text-white')}
+          >
+            👠 Pasarelas & Modelaje
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchQuery(searchQuery === 'revistadigital' ? '' : 'revistadigital')}
+            className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'revistadigital' ? 'border-violet-400 bg-violet-500/25 text-violet-100 shadow-sm shadow-violet-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-violet-500/40 hover:text-white')}
+          >
+            📖 Revistas Digitales
+          </button>
+          <button
+            type="button"
             onClick={() => setSearchQuery(searchQuery === 'workshop' ? '' : 'workshop')}
             className={'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all ' + (searchQuery === 'workshop' ? 'border-orange-400 bg-orange-500/25 text-orange-100 shadow-sm shadow-orange-500/25' : 'border-slate-800 bg-slate-900/90 text-slate-300 hover:border-orange-500/40 hover:text-white')}
           >

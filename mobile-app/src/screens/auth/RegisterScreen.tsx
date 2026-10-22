@@ -31,6 +31,7 @@ export default function RegisterScreen() {
     firstName: '', lastName: '', username: '',
     email: '', password: '', confirmPassword: '',
     birthDate: '', acceptTerms: false,
+    gender: 'prefer_not_to_say',
   });
   const [showPass, setShowPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
@@ -101,6 +102,7 @@ export default function RegisterScreen() {
         password: form.password,
         confirmPassword: form.confirmPassword,
         birthDate: form.birthDate,
+        gender: form.gender,
         acceptTerms: true,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -243,6 +245,34 @@ export default function RegisterScreen() {
                     <>
                       <Text style={styles.stepTitle}>Un poco más...</Text>
                       {field('birthDate', 'AAAA-MM-DD', 'calendar-outline', { hint: 'Fecha de nacimiento (ej: 1995-06-15)', keyboard: 'numeric' })}
+
+                      <Text style={[styles.fieldHint, { marginTop: 4, marginBottom: 8 }]}>¿Cómo te identificas? (Para sugerencias afines)</Text>
+                      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 16 }}>
+                        {[
+                          { id: 'female', label: '👩 Mujer' },
+                          { id: 'male', label: '👨 Hombre' },
+                          { id: 'non_binary', label: '🌈 No binario' },
+                          { id: 'prefer_not_to_say', label: '🤍 Omitir' },
+                        ].map(g => (
+                          <TouchableOpacity
+                            key={g.id}
+                            onPress={() => update('gender', g.id)}
+                            style={{
+                              flex: 1,
+                              paddingVertical: 9,
+                              borderRadius: 10,
+                              borderWidth: 1,
+                              borderColor: form.gender === g.id ? PINK : 'rgba(255,255,255,0.1)',
+                              backgroundColor: form.gender === g.id ? 'rgba(236,72,153,0.15)' : 'rgba(255,255,255,0.03)',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Text style={{ fontSize: 11, color: form.gender === g.id ? '#fff' : 'rgba(255,255,255,0.6)', fontWeight: '600' }}>
+                              {g.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
 
                       <TouchableOpacity
                         style={styles.termsRow}
