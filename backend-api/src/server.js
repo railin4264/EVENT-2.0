@@ -380,6 +380,8 @@ apiV1Router.use('/sources', require('./routes/sources'));
 apiV1Router.use('/event-buddy', require('./routes/eventBuddy'));
 apiV1Router.use('/carpools', require('./routes/carpools'));
 apiV1Router.use('/itineraries', require('./routes/itineraries'));
+apiV1Router.use('/ticket-transfers', require('./routes/ticketTransfer'));
+apiV1Router.use('/venue-compass', require('./routes/venueCompass'));
 apiV1Router.get('/config', (req, res) => res.json({ success: true, data: require('./config/features').getPublicConfig() }));
 
 // Mount versioned router — /api/v1 is canonical; /api is backward-compatible (deprecated)

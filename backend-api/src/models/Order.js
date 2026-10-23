@@ -22,7 +22,14 @@ const orderItemSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0
-  }
+  },
+  transferPasscode: { type: String, trim: true },
+  transferredFrom: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  transferredTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  transferredAt: { type: Date },
+  transferNote: { type: String, trim: true },
+  invalidatedPass: { type: Boolean, default: false },
+  status: { type: String }
 });
 
 const orderSchema = new mongoose.Schema({
@@ -98,7 +105,7 @@ const orderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['card', 'bank_transfer', 'bank_transfer_rd', 'cardnet', 'azul', 'cash_at_door', 'paypal', 'free']
+    enum: ['card', 'bank_transfer', 'bank_transfer_rd', 'cardnet', 'azul', 'cash_at_door', 'paypal', 'free', 'p2p_transfer']
   },
   bankTransferProof: {
     bankName: { type: String, trim: true },
