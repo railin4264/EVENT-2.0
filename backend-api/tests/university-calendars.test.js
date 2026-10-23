@@ -135,3 +135,44 @@ test('the generic schema.org normalizer leaves missing dates, places and currenc
   expect(located.endDate).toBeUndefined();
   expect(JSON.stringify(located)).not.toMatch(/República Dominicana|-69\.9312|DOP/);
 });
+
+describe('OpenAgenda', () => {
+  const { openAgendaRows, isoOffset, readOpenAgenda } = require('../src/services/eventIngestion/openAgendaAdapter');
+  const now = Date.parse('2027-01-01T00:00:00Z');
+  const event = (over = {}) => ({ uid: 42, state: 2, status: 1, attendanceMode: 1, title: { fr: 'Concert au parc', es: 'Concierto en el parque' },
+    conditions: { fr: 'Entrée libre' }, timezone: 'Europe/Paris', canonicalUrl: 'https://agenda.example.fr/concert',
+    location: { name: 'Parc', address: '1 rue du Parc', city: 'Lyon', countryCode: 'FR', latitude: 45.76, longitude: 4.83 },
+    timings: [{ begin: '2027-02-01T20:00:00+0100', end: '2027-02-01T22:00:00+0100' }, { begin: '2026-12-01T20:00:00+0100', end: '2026-12-01T22:00:00+0100' }],
+    ...over });
+
+  test('normalizes compact offsets for the shared connector', () => {
+    expect(isoOffset('2027-02-01T20:00:00+0100')).toBe('2027-02-01T20:00:00+01:00');
+    expect(isoOffset('2027-02-01T20:00:00')).toBeNull();
+  });
+
+  test('keeps free, in-person, published, upcoming occurrences at a located venue', () => {
+    const rows = openAgendaRows([event()], { now });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ title: 'Concierto en el parque', date: '2027-02-01T20:00:00+01:00', lat: 45.76, city: 'Lyon', price: 0 });
+  });
+
+  test('never imports cancelled, online, paid or unlocated events', () => {
+    expect(openAgendaRows([event({ status: 6 }), event({ attendanceMode: 2 }), event({ conditions: { fr: 'Tarif : 12 €' } }),
+      event({ location: { name: 'Parc' } }), event({ state: 0 })], { now })).toHaveLength(0);
+  });
+
+  test('reads with the key header, follows the cursor and needs the platform key', async () => {
+    const calls = [];
+    const fetcher = async (url, options) => {
+      calls.push({ url, key: options.headers.key });
+      return { data: calls.length === 1 ? { events: [event()], after: [0, 123] } : { events: [], after: null } };
+    };
+    const source = { name: 'Agenda Lyon', accessConfig: { endpointUrl: 'https://api.openagenda.com/v2/agendas/123' } };
+    const result = await readOpenAgenda(source, fetcher, { key: 'secret-key' });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].key).toBe('secret-key');
+    expect(calls[1].url).toContain('after%5B%5D=0&after%5B%5D=123');
+    expect(result.incomplete).toBe(false);
+    await expect(readOpenAgenda(source, fetcher, { key: '' })).rejects.toThrow(/OPENAGENDA_API_KEY/);
+  });
+});

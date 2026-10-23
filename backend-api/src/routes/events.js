@@ -3091,36 +3091,39 @@ router.get('/deals/nearby', optionalAuth, async (req, res) => {
 // ─── 3. BOT INGESTOR DE FLYERS / INSTAGRAM CON IA ─────────────────────────────
 router.post('/ingest/flyer', protect, async (req, res) => {
   try {
-    const FlyerIngestionService = require('../services/FlyerIngestionService');
+    const { extractEventFromText } = require('../services/flyerAiExtractor');
+    const { parseIcsDate } = require('../services/feedImporter');
     const flyerInput = req.body.flyerText || req.body.rawText || req.body.text;
-    const { imageUrl, organizerName, autoPublish } = req.body;
-
-    if (!flyerInput) {
+    const { imageUrl, autoPublish } = req.body;
+    if (!flyerInput || typeof flyerInput !== 'string') {
       return res.status(400).json({ success: false, message: 'Se requiere el texto o pie de foto del flyer' });
     }
 
-    const parsedEventData = FlyerIngestionService.parseFlyerContent(
-      flyerInput,
-      imageUrl,
-      organizerName || req.user.username || 'Promotor Verificado'
-    );
-
-    parsedEventData.createdBy = req.user.id;
-    if (autoPublish && req.user.role === 'admin') {
-      parsedEventData.status = 'published';
-      parsedEventData.isOfficial = true;
+    // Only what the announcement states becomes the event; anything missing is asked for.
+    const extracted = extractEventFromText(flyerInput.slice(0, 5000));
+    const zone = extracted.country === 'España' ? 'Europe/Madrid' : extracted.country === 'República Dominicana' ? 'America/Santo_Domingo' : null;
+    const currency = extracted.price?.currency || (extracted.price?.isFree ? (zone === 'Europe/Madrid' ? 'EUR' : 'DOP') : null);
+    const missing = [...extracted.missing, ...(!zone ? ['country'] : []), ...(extracted.price && !currency ? ['currency'] : [])];
+    const date = !missing.length ? parseIcsDate(`${extracted.date.replace(/-/g, '')}T${extracted.time.replace(':', '')}00`, zone) : null;
+    if (missing.length || !date) {
+      return res.status(422).json({ success: false, message: 'Al anuncio le faltan datos: ' + [...new Set(missing)].join(', ') + '. Complétalos al crear el evento.', data: extracted });
     }
 
-    const createdEvent = await Event.create(parsedEventData);
-
-    res.status(201).json({
-      success: true,
-      message: 'Flyer procesado e importado exitosamente',
-      data: createdEvent
+    const createdEvent = await Event.create({
+      title: extracted.title, description: extracted.description || extracted.title, category: extracted.category || 'community',
+      tags: extracted.tags, date, timeZone: zone,
+      location: { type: 'Point', coordinates: extracted.coordinates, venue: extracted.venue, address: extracted.address, city: extracted.city, country: extracted.country },
+      price: { amount: extracted.price.amount, currency },
+      images: typeof imageUrl === 'string' && imageUrl.startsWith('https://') ? [{ url: imageUrl }] : [],
+      createdBy: req.user.id, isOfficial: false,
+      status: autoPublish && req.user.role === 'admin' ? 'published' : 'pending_review',
+      source: 'flyer_ai_ingestion'
     });
+
+    res.status(201).json({ success: true, message: 'Flyer importado; revisa el evento antes de publicarlo', data: createdEvent, event: createdEvent });
   } catch (err) {
     logger.error('Flyer ingestion error:', err);
-    res.status(500).json({ success: false, message: err.message || 'Error al procesar flyer' });
+    res.status(500).json({ success: false, message: 'Error al procesar flyer' });
   }
 });
 
@@ -3134,23 +3137,29 @@ router.post('/ai-extract-flyer', protect, upload.any(), async (req, res) => {
     const uploadedFile = (req.files && req.files[0]) || req.file;
     if (uploadedFile) {
       coverUrl = `/uploads/events/${uploadedFile.filename}`;
-      if (!text && uploadedFile.originalname) {
-        text = uploadedFile.originalname.replace(/[-_.]/g, ' ');
-      }
     }
 
-    if (!text && !coverUrl) {
-      return res.status(400).json({
+    // The image is read with a vision model when one is configured; pasted text fills any gap.
+    const { readFlyerImage, fieldsFromVision } = require('../services/flyerVisionExtractor');
+    const fromImage = uploadedFile ? fieldsFromVision(await readFlyerImage(uploadedFile)) : null;
+    if (!text && !fromImage) {
+      return res.status(422).json({
         success: false,
-        message: 'Por favor proporciona una imagen del afiche o el texto descriptivo del evento'
+        message: 'Pega el texto del anuncio (pie de foto o mensaje) para completar el evento. La imagen se usará como portada.',
+        data: { coverUrl }
       });
     }
 
-    const extracted = extractEventFromText(text, { coverUrl });
+    const fromText = text ? extractEventFromText(text, { coverUrl }) : {};
+    const extracted = { ...fromText, coverUrl };
+    for (const [field, value] of Object.entries(fromImage || {})) {
+      if (value !== null && value !== undefined && (extracted[field] === null || extracted[field] === undefined)) extracted[field] = value;
+    }
+    extracted.missing = ['title', 'date', 'time', 'venue', 'price'].filter(field => !extracted[field]);
 
     res.status(200).json({
       success: true,
-      message: 'Afiche procesado con IA exitosamente',
+      message: extracted.missing.length ? 'Revisa y completa: ' + extracted.missing.join(', ') : 'Datos del anuncio listos para revisar',
       data: extracted
     });
   } catch (err) {

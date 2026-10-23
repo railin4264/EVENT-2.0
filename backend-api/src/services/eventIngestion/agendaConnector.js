@@ -8,6 +8,7 @@ const { computeH3Hierarchy } = require('./h3SpatialIndexer');
 const { fetchSource, sourceError } = require('./safeSourceFetch');
 const { PUBLIC_AGENDAS, readPublicAgenda } = require('./publicAgendaAdapters');
 const { UNIVERSITY_ADAPTERS, readUniversityCalendar } = require('./universityCalendarAdapters');
+const { readOpenAgenda } = require('./openAgendaAdapter');
 
 function detectAgendaType(url = '', contentType = '') {
   const u = String(url).toLowerCase(), ct = String(contentType).toLowerCase();
@@ -97,7 +98,7 @@ function normalizeAgendaRow(row, url, source) {
     doc.pipelineMeta.language = row.language || 'es';
     const credit = `\n\nOrigen de los datos: ${config.name}. ${doc.publicSource.license} (${doc.publicSource.licenseUrl}). Consulta: ${checkedAt.toISOString().slice(0, 10)}. Adaptación de formato por EventNow; sin afiliación ni patrocinio de la fuente. Consulta inscripción y cambios: ${row.url || config.dataset}`;
     doc.description = doc.description.slice(0, Math.max(10, 2000 - credit.length)) + credit;
-  } else if (UNIVERSITY_ADAPTERS[source.adapterType]) {
+  } else if (UNIVERSITY_ADAPTERS[source.adapterType] || source.adapterType === 'openagenda') {
     // The institution is the publisher: credit it and link back to its own listing.
     if (/^[A-Z]{2}$/.test(source.coverage?.country || '')) doc.location.countryCode = source.coverage.country;
     doc.publicSource = { name: source.name, datasetUrl: source.accessConfig?.endpointUrl, license: source.license?.licenseType || 'Publicación institucional',
@@ -109,11 +110,13 @@ function normalizeAgendaRow(row, url, source) {
 async function syncAgenda(agendaUrl, organizerId, options = {}) {
   if (!organizerId) throw sourceError('La agenda necesita un organizador responsable', 400);
   const requested = options.type || detectAgendaType(agendaUrl);
-  if (requested === 'openagenda') throw sourceError('OpenAgenda necesita un adaptador y acceso validados; todavía no está habilitado', 422);
   const source = options.source || {};
-  const publicAgenda = PUBLIC_AGENDAS[source.adapterType] || UNIVERSITY_ADAPTERS[source.adapterType];
+  const isOpenAgenda = source.adapterType === 'openagenda';
+  if (requested === 'openagenda' && !isOpenAgenda) throw sourceError('Registra la agenda de OpenAgenda como fuente para importarla', 422);
+  const publicAgenda = PUBLIC_AGENDAS[source.adapterType] || UNIVERSITY_ADAPTERS[source.adapterType] || isOpenAgenda;
   const publicResult = PUBLIC_AGENDAS[source.adapterType] ? await readPublicAgenda(source, fetchSource)
-    : UNIVERSITY_ADAPTERS[source.adapterType] ? await readUniversityCalendar(source, fetchSource) : null;
+    : UNIVERSITY_ADAPTERS[source.adapterType] ? await readUniversityCalendar(source, fetchSource)
+      : isOpenAgenda ? await readOpenAgenda(source, fetchSource) : null;
   const response = publicAgenda ? { data: null } : await fetchSource(agendaUrl);
   const type = requested === 'unknown' ? detectAgendaType(agendaUrl, response.headers?.['content-type']) : requested;
   if (!publicAgenda && !['ics', 'json', 'wp_the_events_calendar'].includes(type)) throw sourceError('Formato de agenda todavía no compatible', 422);

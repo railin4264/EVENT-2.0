@@ -178,6 +178,35 @@ router.patch('/:id/status', protect, restrictTo('admin'), async (req, res) => {
 });
 
 
+// @route   POST /api/sources/propose
+// @desc    An organizer proposes their own public calendar; it waits for administrator review.
+const PROPOSAL_ADAPTERS = { ics: 'ics_feed', json: 'json_feed', wp_the_events_calendar: 'wp_events_calendar' };
+const MAX_PENDING_PROPOSALS = 5;
+router.post('/propose', protect, async (req, res) => {
+  try {
+    const { name, endpointUrl, country } = req.body || {};
+    if (typeof name !== 'string' || !name.trim() || name.trim().length > 120) return res.status(400).json({ success: false, message: 'Indica el nombre de tu agenda' });
+    if (country !== undefined && (typeof country !== 'string' || !/^[A-Z]{2}$/.test(country))) return res.status(400).json({ success: false, message: 'El país debe ser un código de dos letras' });
+    const endpoint = sourceUrl(endpointUrl);
+    const openAgenda = /^https:\/\/api\.openagenda\.com\/v2\/agendas\/\d+\/?$/.test(endpoint.href);
+    const adapterType = openAgenda ? 'openagenda' : PROPOSAL_ADAPTERS[require('../services/eventIngestion/agendaConnector').detectAgendaType(endpoint.href)];
+    if (!adapterType) return res.status(400).json({ success: false, message: 'Usa el enlace iCalendar (.ics), JSON o WordPress The Events Calendar de tu agenda' });
+    const owner = req.user.id;
+    if (await Source.countDocuments({ responsibleOrganizer: owner, status: 'evaluating' }) >= MAX_PENDING_PROPOSALS) {
+      return res.status(429).json({ success: false, message: 'Ya tienes agendas pendientes de revisión. Espera la respuesta antes de proponer más.' });
+    }
+    if (await Source.exists({ 'accessConfig.endpointUrl': endpoint.href })) return res.status(409).json({ success: false, message: 'Esa agenda ya está registrada' });
+    const sourceId = 'org-' + require('crypto').createHash('sha256').update(owner + endpoint.href).digest('hex').slice(0, 20);
+    const source = await Source.create({ sourceId, name: name.trim(), domain: endpoint.hostname, adapterType, classification: 'O', status: 'evaluating',
+      accessConfig: { endpointUrl: endpoint.href }, responsibleOrganizer: owner, coverage: { country: country || undefined }, syncSchedule: { frequencyHours: 24 },
+      license: { licenseType: 'Agenda propia del organizador', commercialAllowed: false, displayAllowed: false, attributionRequired: false } });
+    return res.status(201).json({ success: true, message: 'Recibimos tu agenda. Te avisaremos cuando un administrador la apruebe.',
+      source: { sourceId: source.sourceId, name: source.name, adapterType, status: source.status } });
+  } catch (err) {
+    return res.status(err.code === 11000 ? 409 : 400).json({ success: false, message: err.message && /pública|HTTPS|URL|dirección/i.test(err.message) ? err.message : 'No se pudo registrar la agenda; comprueba el enlace' });
+  }
+});
+
 router.post('/', protect, restrictTo('admin'), async (req, res) => {
   try {
     const { sourceId, name, endpointUrl, adapterType, classification = 'W', country, frequencyHours = 24 } = req.body || {};

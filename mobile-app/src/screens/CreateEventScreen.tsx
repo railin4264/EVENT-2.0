@@ -252,6 +252,53 @@ function OwnedCreateEvent() {
     }
   };
 
+  // Reads a flyer photo (and any pasted text) on the server; only what the flyer states fills the form.
+  const [isReadingFlyer, setIsReadingFlyer] = useState(false);
+  const handleReadFlyer = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permiso denegado', 'Necesitas dar permiso para acceder a tus fotos');
+      return;
+    }
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    if (picked.canceled || !picked.assets?.[0]) return;
+    const asset = picked.assets[0];
+    const ticket = ++friendDraftRequest.current;
+    setIsReadingFlyer(true);
+    try {
+      const form = new FormData();
+      form.append('eventImage', { uri: asset.uri, name: asset.fileName || 'afiche.jpg', type: asset.mimeType || 'image/jpeg' } as any);
+      if (friendDraftText.trim()) form.append('text', friendDraftText.trim());
+      const res = await api.post('/events/ai-extract-flyer', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      if (!alive.current || ticket !== friendDraftRequest.current) return;
+      const f = res.data?.data;
+      if (!res.data?.success || !f) throw Error('No se pudo leer el afiche.');
+      const place = [f.venue, f.address].filter(Boolean).join(', ');
+      const price = f.price ? (f.price.isFree ? 'Gratis' : `${f.price.amount}${f.price.currency ? ' ' + f.price.currency : ' (moneda por confirmar)'}`) : 'por confirmar';
+      Alert.alert(
+        'Revisa lo que dice el afiche',
+        `Título: ${f.title || 'por confirmar'}\nFecha: ${f.date || 'por confirmar'}\nHora: ${f.time || 'por confirmar'}\nLugar: ${place || 'por confirmar'}\nPrecio: ${price}\n\nAplicar llena solo lo que el afiche indica. No se publica al aplicar.`,
+        [{ text: 'Cancelar', style: 'cancel' }, { text: 'Aplicar', onPress: () => {
+          if (!alive.current || ticket !== friendDraftRequest.current) return;
+          if (f.title) setValue('title', f.title);
+          if (f.description) setValue('description', f.description);
+          if (f.date) setValue('date', f.date);
+          if (f.time) setValue('time', f.time);
+          if (place) setValue('location', place);
+          if (f.price) setValue('price', String(f.price.amount));
+          setDetails(old => ({ ...old, city: f.city || old.city, currency: f.price?.currency || old.currency }));
+          if (f.category) { setSelectedCategory(f.category); setValue('category', f.category); }
+          setEventImage(asset.uri);
+        } }]
+      );
+    } catch (err: any) {
+      if (alive.current && ticket === friendDraftRequest.current)
+        Alert.alert('No se pudo leer el afiche', err.response?.data?.message || err.message || 'Pega el texto del anuncio y vuelve a intentarlo.');
+    } finally {
+      if (alive.current && ticket === friendDraftRequest.current) setIsReadingFlyer(false);
+    }
+  };
+
   const onSubmit = async (data: CreateEventForm) => {
     if (!alive.current || !user || submitLock.current) return;
     submitLock.current = true;
@@ -487,6 +534,16 @@ function OwnedCreateEvent() {
             onPress={handleExtractFriendDraft}
           >
             {draftParsedSuccess ? 'Revisar otro texto' : 'Preparar borrador'}
+          </Button>
+          <Button
+            variant="secondary"
+            loading={isReadingFlyer}
+            disabled={isReadingFlyer || isParsingDraft}
+            icon="image"
+            onPress={handleReadFlyer}
+            style={{ marginTop: 10 }}
+          >
+            Leer afiche (foto)
           </Button>
           {draftParsedSuccess && <>
             <Text style={{ color: theme.colors.textSecondary, marginTop: 12, lineHeight: 20 }}>Confirma fecha, zona horaria, ubicación, precio y moneda en el formulario. No se publica al aplicar.</Text>

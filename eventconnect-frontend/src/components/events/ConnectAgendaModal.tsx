@@ -15,6 +15,17 @@ export default function ConnectAgendaModal({ isOpen, onClose, onSuccess }: { isO
   const sequence = useRef(0), lock = useRef(false)
   const [agendas, setAgendas] = useState<Agenda[]>([]), [selected, setSelected] = useState(''), [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [result, setResult] = useState<Result | null>(null)
+  const [proposal, setProposal] = useState({ name: '', url: '' }), [proposalState, setProposalState] = useState<{ busy: boolean; message: string; error: string }>({ busy: false, message: '', error: '' })
+  // An organizer proposes their own calendar link; an administrator reviews it before any import.
+  const propose = async () => {
+    if (proposalState.busy || !proposal.name.trim() || !proposal.url.trim()) return
+    setProposalState({ busy: true, message: '', error: '' })
+    try {
+      const response = await apiClient.post('/sources/propose', { name: proposal.name.trim(), endpointUrl: proposal.url.trim() })
+      setProposalState({ busy: false, message: response.data?.message || 'Recibimos tu agenda.', error: '' })
+      setProposal({ name: '', url: '' })
+    } catch (err) { setProposalState({ busy: false, message: '', error: sourceErrorMessage(err, 'No se pudo enviar la agenda. Revisa el enlace.') }) }
+  }
   const load = async () => {
     const ticket = ++sequence.current; setLoading(true); setError('')
     try {
@@ -50,8 +61,17 @@ export default function ConnectAgendaModal({ isOpen, onClose, onSuccess }: { isO
     {loading ? <p role="status" className="text-sm text-muted-foreground">Cargando agendas…</p> : agendas.length ? <>
       <label className="text-sm font-medium">Agenda<select disabled={busy} value={selected} onChange={event => { setSelected(event.target.value); setResult(null); setError('') }} className={sourceInput}><option value="">Elige una agenda</option>{agendas.map(item => <option key={item.sourceId} value={item.sourceId}>{item.name}</option>)}</select></label>
       {agenda && <p className="text-sm text-muted-foreground">{adapterNames[agenda.adapterType] || 'Formato aprobado'}. La consulta es manual; la actualización programada requiere el servidor en producción.</p>}
-    </> : !error && <p className="rounded-xl border border-border p-4 text-sm leading-6">Todavía no tienes agendas aprobadas. Un administrador debe registrar la fuente, revisar sus permisos y habilitar un formato compatible antes de consultarla.</p>}
-    <p className="text-xs leading-5 text-muted-foreground">Formatos disponibles: iCalendar (.ics), JSON y WordPress The Events Calendar. OpenAgenda y otras APIs siguen pendientes de integración.</p>
+    </> : !error && <p className="rounded-xl border border-border p-4 text-sm leading-6">Todavía no tienes agendas aprobadas. Propón la tuya abajo: un administrador la revisa y, al aprobarla, tus eventos se sincronizan solos cada día.</p>}
+    <p className="text-xs leading-5 text-muted-foreground">Formatos disponibles: iCalendar (.ics, por ejemplo la dirección pública de Google Calendar), JSON, WordPress The Events Calendar y agendas de OpenAgenda.</p>
+    <section aria-labelledby="propose-agenda-title" className="space-y-3 rounded-xl border border-border p-4">
+      <h3 id="propose-agenda-title" className="font-semibold">Proponer mi agenda</h3>
+      <p className="text-xs leading-5 text-muted-foreground">En Google Calendar: Configuración → tu calendario → «Dirección pública en formato iCal». El calendario debe ser público.</p>
+      <label className="block text-sm font-medium">Nombre<input value={proposal.name} maxLength={120} onChange={event => setProposal(current => ({ ...current, name: event.target.value }))} className={sourceInput} placeholder="Agenda de mi local" /></label>
+      <label className="block text-sm font-medium">Enlace del calendario<input type="url" inputMode="url" value={proposal.url} onChange={event => setProposal(current => ({ ...current, url: event.target.value }))} className={sourceInput} placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" /></label>
+      <button type="button" disabled={proposalState.busy || !proposal.name.trim() || !proposal.url.trim()} onClick={() => void propose()} className={sourceButton}>{proposalState.busy ? 'Enviando…' : 'Enviar a revisión'}</button>
+      {proposalState.message && <p role="status" className="text-sm text-primary">{proposalState.message}</p>}
+      {proposalState.error && <p role="alert" className="text-sm text-destructive">{proposalState.error}</p>}
+    </section>
     {error && <div role="alert" className="text-sm text-destructive">{error}{!agendas.length && <button type="button" className={`${sourceButton} mt-3`} onClick={() => void load()}>Volver a cargar agendas</button>}</div>}
     {result && <section aria-label="Resultado de la agenda" className="space-y-3 rounded-xl border border-border bg-muted/40 p-4"><h3 className="font-semibold">{result.dryRun ? 'Vista previa · sin guardar eventos' : 'Lote enviado a revisión'}</h3>
       <p className="text-sm">{result.dryRun ? `${result.previewCount || 0} registros válidos en este lote.` : `${result.created || 0} nuevos, ${result.updated || 0} actualizados y ${result.unchanged || 0} sin cambios.`}</p>

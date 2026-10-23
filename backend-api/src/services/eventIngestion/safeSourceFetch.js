@@ -77,8 +77,11 @@ function sourceUrl(value) {
   return url;
 }
 
-async function fetchSource(value, { maxBytes = 2 * 1024 * 1024 } = {}) {
+async function fetchSource(value, { maxBytes = 2 * 1024 * 1024, headers: extraHeaders = {} } = {}) {
   if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 8 * 1024 * 1024) throw sourceError('Límite de descarga inválido');
+  // Only credential headers a provider documents (e.g. OpenAgenda `key`); transport headers stay fixed.
+  const credentials = Object.fromEntries(Object.entries(extraHeaders || {}).filter(([name, val]) =>
+    /^(key|authorization|x-api-key)$/i.test(name) && typeof val === 'string' && val && !val.includes(String.fromCharCode(10)) && !val.includes(String.fromCharCode(13))));
   const url = sourceUrl(value);
   const host = url.hostname.replace(/^\[|\]$/g, '');
   const addresses = net.isIP(host)
@@ -120,7 +123,8 @@ async function fetchSource(value, { maxBytes = 2 * 1024 * 1024 } = {}) {
         'User-Agent': 'EventNow-AuthorizedAgenda/1.0',
         'Accept': 'application/json, text/calendar, application/xml, text/plain;q=0.9, */*;q=0.8',
         'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'close'
+        'Connection': 'close',
+        ...credentials
       }
     });
 

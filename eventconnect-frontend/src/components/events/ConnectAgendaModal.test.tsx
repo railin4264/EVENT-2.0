@@ -37,3 +37,14 @@ it('does not announce a complete import when the returned batch is partial', asy
   fireEvent.click(screen.getByRole('button', { name: 'Previsualizar agenda' }))
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Lectura parcial: este lote no representa toda la agenda.')
 });
+it('lets an organizer send their own calendar link to review', async () => {
+  mocks.get.mockResolvedValue({ data: { success: true, data: [] } })
+  mocks.post.mockResolvedValue({ data: { success: true, message: 'Recibimos tu agenda.' } })
+  render(<ConnectAgendaModal isOpen onClose={vi.fn()} />)
+  await screen.findByText(/Todavía no tienes agendas aprobadas/)
+  fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Agenda del bar' } })
+  fireEvent.change(screen.getByLabelText('Enlace del calendario'), { target: { value: 'https://calendar.google.com/calendar/ical/bar/public/basic.ics' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar a revisión' }))
+  expect(await screen.findByText('Recibimos tu agenda.')).toBeTruthy()
+  expect(mocks.post).toHaveBeenCalledWith('/sources/propose', { name: 'Agenda del bar', endpointUrl: 'https://calendar.google.com/calendar/ical/bar/public/basic.ics' })
+})

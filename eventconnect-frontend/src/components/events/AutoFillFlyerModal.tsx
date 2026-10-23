@@ -56,7 +56,8 @@ export default function AutoFillFlyerModal({ isOpen, onClose, onApply }: AutoFil
 
       const data = response.data?.data
       if (data) {
-        toast.success(`✨ ¡Evento detectado: "${data.title}"!`)
+        if (Array.isArray(data.missing) && data.missing.length) toast(response.data?.message || 'Revisa los datos que faltan antes de publicar.')
+        else toast.success('Datos del anuncio listos para revisar')
         onApply(data)
         onClose()
       } else {

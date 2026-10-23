@@ -728,9 +728,9 @@ function CreateEventForm() {
                       <div>
                         <p className="font-bold text-sm text-foreground flex items-center gap-2">
                           <span>¿Tienes un Afiche o Flyer de tu Evento?</span>
-                          <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-400">IA Instantánea</span>
+                          <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-400">Autocompletar</span>
                         </p>
-                        <p className="text-xs text-muted-foreground">Sube la foto del afiche o pega el copy de Instagram / WhatsApp y la IA completará título, fecha, hora, lugar y precios en 3 segundos.</p>
+                        <p className="text-xs text-muted-foreground">Sube el afiche o pega el texto de Instagram o WhatsApp. Completamos lo que diga el anuncio y te marcamos lo que falta antes de publicar.</p>
                       </div>
                     </div>
                     <button

@@ -271,3 +271,18 @@ test('every public open-data adapter can be registered for administrator review'
     expect(saved.license.commercialAllowed).toBe(false);
   }
 });
+
+test('organizers can propose their own calendar for review, within limits', async () => {
+  const propose = body => request(app).post('/sources/propose').set('Authorization', `Bearer ${otherToken}`).send(body);
+  const ok = await propose({ name: 'Agenda del Club de Jazz', endpointUrl: 'https://calendar.jazzclub.example/agenda.ics', country: 'DO' });
+  expect(ok.status).toBe(201);
+  const saved = await Source.findOne({ sourceId: ok.body.source.sourceId });
+  expect(saved).toMatchObject({ status: 'evaluating', adapterType: 'ics_feed', classification: 'O' });
+  expect(String(saved.responsibleOrganizer)).toBe(String(other._id));
+  expect(sourceBlockers(saved)).toContain('source_not_approved');
+  expect((await propose({ name: 'Otra vez', endpointUrl: 'https://calendar.jazzclub.example/agenda.ics' })).status).toBe(409);
+  expect((await propose({ name: 'Página', endpointUrl: 'https://jazzclub.example/sobre-nosotros' })).status).toBe(400);
+  expect((await propose({ name: 'Interna', endpointUrl: 'https://127.0.0.1/agenda.ics' })).status).toBe(400);
+  for (let i = 0; i < 5; i++) await propose({ name: `Agenda ${i}`, endpointUrl: `https://cal${i}.example.org/feed.ics` });
+  expect((await propose({ name: 'Una más', endpointUrl: 'https://extra.example.org/feed.ics' })).status).toBe(429);
+});
