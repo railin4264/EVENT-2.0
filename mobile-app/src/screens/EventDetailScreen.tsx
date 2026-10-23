@@ -33,6 +33,7 @@ import { eventSectionPlan, eventCoordinates } from '@/utils/eventSectionPlan';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button, Card, Badge, Avatar } from '@/components/ui';
+import { regionalFor } from '@/utils/regional';
 
 const { width, height } = Dimensions.get('window');
 
@@ -148,7 +149,7 @@ export default function EventDetailScreen() {
     if (!event) return;
     const url = `https://eventnow.do/events/${event._id}`;
     const dateFormatted = format(new Date(event.date), "dd 'de' MMMM, HH:mm", { locale: es });
-    const message = `🔥 ¡Actívate pal coro! Vamos para "${event.title}".\n📅 Fecha: ${dateFormatted}\n📍 Ubicación: ${locationAddress}\n🎟️ Entrada: ${priceText}\n\n👉 Confirma tu asistencia aquí: ${url}`;
+    const message = `🔥 ¡Vamos para "${event.title}"!\n📅 Fecha: ${dateFormatted}\n📍 Ubicación: ${locationAddress}\n🎟️ Entrada: ${priceText}\n\n👉 Confirma tu asistencia aquí: ${url}`;
     const waUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
     try {
       const canOpen = await Linking.canOpenURL(waUrl);
@@ -250,6 +251,8 @@ export default function EventDetailScreen() {
   // Which sections fit this event (virtual vs in person, music, phase, country).
   const sections = eventSectionPlan(event as any);
   const point = eventCoordinates(event as any);
+  // Wording of the place the event happens (Serrucho, Bote, Vaca, Split…).
+  const regional = regionalFor(event as any, user as any);
 
   const categoryGradient: [string, string] =
     (theme.gradients as any)[event.category?.toLowerCase()] ||
@@ -427,7 +430,7 @@ export default function EventDetailScreen() {
           )}
           {event.category === 'sports' && (
             <Badge variant="gradient" gradient={['#10b981', '#047857']} size="sm" style={styles.badgeItem}>
-              ⚾ Deportes & LIDOM
+              🏅 Deportes
             </Badge>
           )}
           {event.category === 'art' && (
@@ -501,7 +504,7 @@ export default function EventDetailScreen() {
           </Card>
         )}
 
-        {/* ── Deportes & LIDOM Banner ── */}
+        {/* ── Deportes Banner ── */}
         {event.category === 'sports' && (
           <Card variant="glass" glassIntensity="medium" padding={16} style={[styles.section, { borderColor: '#10b981', borderWidth: 1, backgroundColor: 'rgba(16,185,129,0.12)' }] as any}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -509,9 +512,9 @@ export default function EventDetailScreen() {
                 <Ionicons name="trophy" size={22} color="#34d399" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Deporte, Salud & Fanatismo Quisqueyano</Text>
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Deporte y aire libre</Text>
                 <Text style={{ color: '#a7f3d0', fontSize: 12, marginTop: 2, lineHeight: 17 }}>
-                  Béisbol invernal LIDOM, pádel, running o baloncesto. ¡Llega temprano para coger buen puesto!
+                  Llega con tiempo para encontrar buen lugar y revisa las indicaciones del organizador.
                 </Text>
               </View>
             </View>
@@ -780,7 +783,7 @@ export default function EventDetailScreen() {
                   )}
                 </View>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginLeft: 14, flex: 1 }}>
-                  {isAttending ? '¡Tú y ' + (attendeesCount - 1 > 0 ? `${attendeesCount - 1} panas más van!` : 'el coro están listos!') : 'Ya confirmaron asistencia. ¡Súmate al coro!'}
+                  {isAttending ? '¡Tú y ' + (attendeesCount - 1 > 0 ? `${attendeesCount - 1} ${regional.friends} más van!` : 'tu plan están listos!') : 'Ya confirmaron asistencia. ¡Súmate!'}
                 </Text>
               </View>
 
@@ -857,7 +860,7 @@ export default function EventDetailScreen() {
             >
               <Ionicons name="pie-chart-outline" size={18} color="#ec4899" />
               <Text style={{ color: '#ec4899', fontSize: 13, fontWeight: '800' }}>
-                Hacer Serrucho
+                {regional.splitBillAction}
               </Text>
             </TouchableOpacity>
           </View>
@@ -873,7 +876,7 @@ export default function EventDetailScreen() {
               </LinearGradient>
               <View>
                 <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>DJ Crowd Request</Text>
-                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Pide y vota temas en vivo pal coro</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Pide y vota las canciones del evento</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -908,10 +911,10 @@ export default function EventDetailScreen() {
               <View style={{ flex: 1, paddingRight: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                   <Ionicons name="card-outline" size={18} color="#06B6D4" />
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Transferencia RD (Directa)</Text>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Transferencia directa</Text>
                 </View>
                 <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>
-                  Paga a Banco Popular, BHD, Banreservas o Qik sin pasarela ni comisiones.
+                  Paga a las cuentas que publicó el organizador, sin pasarela ni comisiones.
                 </Text>
               </View>
               <TouchableOpacity
@@ -933,16 +936,16 @@ export default function EventDetailScreen() {
         )}
 
         {sections.splitCosts && (<>
-        {/* Serrucho Digital RD Card */}
+        {/* Split-the-bill card */}
         <Card variant="glass" glassIntensity="medium" padding={16} style={[styles.section, { borderColor: '#f59e0b', borderWidth: 1, backgroundColor: 'rgba(245,158,11,0.08)' }] as any}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flex: 1, paddingRight: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <Ionicons name="pie-chart" size={18} color="#f59e0b" />
-                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>El Serrucho Digital 🇩🇴</Text>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{regional.splitBill}</Text>
               </View>
               <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
-                Divide la mesa, bebidas o transporte entre panas y recibe confirmaciones por WhatsApp.
+                Divide la mesa, bebidas o transporte entre {regional.friends} y recibe confirmaciones por WhatsApp.
               </Text>
             </View>
             <TouchableOpacity
@@ -961,7 +964,7 @@ export default function EventDetailScreen() {
               }}
             >
               <Ionicons name="people" size={16} color="#000" />
-              <Text style={{ color: '#000', fontWeight: '800', fontSize: 13 }}>Armar Vaca</Text>
+              <Text style={{ color: '#000', fontWeight: '800', fontSize: 13 }}>{regional.splitBillAction}</Text>
             </TouchableOpacity>
           </View>
         </Card>
@@ -1124,7 +1127,7 @@ export default function EventDetailScreen() {
               <Ionicons name="calculator" size={20} color="#c084fc" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Calculadora de Viaje & Serrucho</Text>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '800' }}>Calculadora de viaje</Text>
               <Text style={{ color: '#c084fc', fontSize: 11, fontWeight: '600' }}>Vuelos, Barcos, Gasolina & Hotel</Text>
             </View>
           </View>
@@ -1141,7 +1144,7 @@ export default function EventDetailScreen() {
               }}
             >
               <Ionicons name="people" size={16} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Dividir Serrucho</Text>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{regional.splitBillAction}</Text>
             </TouchableOpacity>
 
             {Boolean((event.location as any)?.city) && <TouchableOpacity

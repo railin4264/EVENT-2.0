@@ -33,7 +33,7 @@ const CATEGORIES = [
   { id: 'all',        label: 'Descubrir',            icon: 'sparkles' },
   { id: 'recurring',  label: '🔁 Fijos Semanales',   icon: 'repeat' },
   { id: 'education',  label: '🎓 Cursos & IA',       icon: 'school' },
-  { id: 'sports',     label: '⚾ Deportes & LIDOM',  icon: 'baseball' },
+  { id: 'sports',     label: '🏅 Deportes',  icon: 'baseball' },
   { id: 'art',        label: '🎨 Arte & Museos',     icon: 'color-palette' },
   { id: 'travel',     label: '🚌 Tours & Escapadas', icon: 'compass' },
   { id: 'music',      label: '🎵 Música',            icon: 'musical-notes' },

@@ -1,14 +1,21 @@
 'use strict';
 
 const { sourceError } = require('./safeSourceFetch');
+const { extractJsonLdBlocks } = require('./schemaOrgExtractor');
 
 // Calendar platforms that many universities publish without a key. A source stores
 // only the calendar origin (https://events.example.edu); the adapter builds the
 // documented read-only API paths from it.
 const UNIVERSITY_ADAPTERS = {
   localist_calendar: { label: 'Localist', maxPages: 5 },
-  livewhale_calendar: { label: 'LiveWhale', maxPages: 5 }
+  livewhale_calendar: { label: 'LiveWhale', maxPages: 5 },
+  // An events page that publishes schema.org Event data (JSON-LD); the source stores the page URL.
+  schema_org_page: { label: 'Página con datos schema.org', maxPages: 1 }
 };
+
+const OFFSET_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+const EVENT_TYPES = /event$|^festival$/i;
+const EVENTS_LINK = /\/(eventos?|events?|agenda|calendari[oa]?|calendar|actividades|activities)(\/|$)/i;
 
 const FREE_COST = /^\s*(free|gratis|gratuit[oa]?|no cost|sin costo|free admission|free and open to the public)\b/i;
 const DAYS_AHEAD = 60;
@@ -80,12 +87,58 @@ function livewhaleRows(items, { organizer, currency = 'USD' } = {}) {
   return rows;
 }
 
+function eventType(item) {
+  return String(Array.isArray(item?.['@type']) ? item['@type'][0] : item?.['@type'] || '');
+}
+
+/**
+ * schema.org Event rows with the same strict rule: exact start with a time zone, a venue
+ * with coordinates and an explicit free offer. Anything missing is skipped, never filled in.
+ */
+function schemaOrgRows(blocks, { organizer, currency = 'USD', pageUrl } = {}) {
+  const rows = [];
+  for (const item of Array.isArray(blocks) ? blocks : []) {
+    if (!EVENT_TYPES.test(eventType(item)) || !OFFSET_DATE.test(String(item.startDate || ''))) continue;
+    if (/Cancelled|Postponed|Rescheduled/i.test(String(item.eventStatus || '')) || /Online/i.test(String(item.eventAttendanceMode || ''))) continue;
+    const place = Array.isArray(item.location) ? item.location[0] : item.location;
+    const lat = coordinate(place?.geo?.latitude, 90), lng = coordinate(place?.geo?.longitude, 180);
+    if (lat === null || lng === null) continue;
+    const offers = Array.isArray(item.offers) ? item.offers : item.offers ? [item.offers] : [];
+    const free = item.isAccessibleForFree === true || String(item.isAccessibleForFree).toLowerCase() === 'true' ||
+      (offers.length > 0 && offers.every(offer => offer && offer.price !== undefined && offer.price !== '' && Number(offer.price) === 0));
+    if (!free) continue;
+    const postal = place.address && typeof place.address === 'object' ? place.address : {};
+    const address = typeof place.address === 'string' ? place.address
+      : [postal.streetAddress, postal.addressLocality, postal.addressCountry].filter(value => typeof value === 'string').join(', ');
+    const url = typeof item.url === 'string' && /^https:\/\//.test(item.url) ? item.url : pageUrl;
+    const image = typeof item.image === 'string' ? item.image : Array.isArray(item.image) ? (typeof item.image[0] === 'string' ? item.image[0] : item.image[0]?.url) : item.image?.url;
+    rows.push({
+      id: String(item['@id'] || `${url}#${item.startDate}#${clean(item.name, 80)}`),
+      title: clean(item.name, 100), description: clean(item.description) || clean(item.name),
+      date: item.startDate, endDate: OFFSET_DATE.test(String(item.endDate || '')) ? item.endDate : undefined,
+      lat, lng, venue: clean(place.name, 100), address: clean(address, 200) || clean(place.name, 200),
+      city: clean(postal.addressLocality, 100), country: clean(typeof postal.addressCountry === 'string' ? postal.addressCountry : '', 100),
+      price: 0, currency, url, image: typeof image === 'string' && /^https:\/\//.test(image) ? image : undefined,
+      category: 'education', organizer: organizer || 'Calendario universitario'
+    });
+  }
+  return rows;
+}
+
 async function readUniversityCalendar(source, fetcher) {
   const adapter = UNIVERSITY_ADAPTERS[source.adapterType];
   if (!adapter) throw sourceError('Adaptador universitario no compatible');
-  const origin = calendarOrigin(source);
   const organizer = source.name;
   const currency = source.eventDefaults?.currency || 'USD';
+  if (source.adapterType === 'schema_org_page') {
+    let page;
+    try { page = new URL(source.accessConfig?.endpointUrl); } catch { throw sourceError('La fuente necesita la URL de su página de eventos'); }
+    if (page.protocol !== 'https:' || page.username || page.password) throw sourceError('La página de eventos debe usar HTTPS');
+    const response = await fetcher(page.href, { maxBytes: 4 * 1024 * 1024 });
+    if (typeof response.data !== 'string') throw sourceError('La página de eventos no devolvió HTML');
+    return { rows: schemaOrgRows(extractJsonLdBlocks(response.data), { organizer, currency, pageUrl: page.href }), incomplete: false };
+  }
+  const origin = calendarOrigin(source);
   const rows = [];
   let incomplete = false;
   for (let page = 1; page <= adapter.maxPages; page++) {
@@ -145,4 +198,42 @@ async function probeUniversityCalendar(website, fetcher) {
   return null;
 }
 
-module.exports = { UNIVERSITY_ADAPTERS, localistRows, livewhaleRows, readUniversityCalendar, calendarCandidates, probeUniversityCalendar, calendarOrigin };
+function sameSite(url, host) {
+  return url.hostname === host || url.hostname.endsWith('.' + host);
+}
+
+/**
+ * Looks at a university homepage for an ICS calendar it links to, or an events page that
+ * publishes schema.org Event data. Only links on the university's own domain are followed.
+ */
+async function probeHomepageFeeds(website, fetcher) {
+  let home;
+  try { home = new URL(website); } catch { return null; }
+  const host = home.hostname.replace(/^www\./, '');
+  let html;
+  try { html = (await fetcher(home.href, { maxBytes: 3 * 1024 * 1024 })).data; } catch { return null; }
+  if (typeof html !== 'string') return null;
+  const links = [...html.matchAll(/<(?:a|link)\b[^>]*href=["']([^"'#]+)["'][^>]*>/gi)]
+    .map(match => match[1].replace(/^webcal:/i, 'https:'))
+    .map(href => { try { return new URL(href, home); } catch { return null; } })
+    .filter(url => url && url.protocol === 'https:' && sameSite(url, host));
+  const ics = links.find(url => /\.ics$/i.test(url.pathname) || /ical/i.test(url.pathname + url.search));
+  if (ics) {
+    try {
+      const response = await fetcher(ics.href, { maxBytes: 4 * 1024 * 1024 });
+      const count = typeof response.data === 'string' ? (response.data.match(/BEGIN:VEVENT/g) || []).length : 0;
+      if (count) return { adapterType: 'ics_feed', origin: ics.origin, endpoint: ics.href, upcoming: count };
+    } catch { /* Not a readable calendar; keep looking. */ }
+  }
+  const pages = [...new Set(links.filter(url => EVENTS_LINK.test(url.pathname)).map(url => url.origin + url.pathname))].slice(0, 3);
+  for (const href of pages) {
+    try {
+      const response = await fetcher(href, { maxBytes: 4 * 1024 * 1024 });
+      const events = typeof response.data === 'string' ? extractJsonLdBlocks(response.data).filter(item => EVENT_TYPES.test(eventType(item))) : [];
+      if (events.length) return { adapterType: 'schema_org_page', origin: new URL(href).origin, endpoint: href, upcoming: events.length };
+    } catch { /* Try the next events page. */ }
+  }
+  return null;
+}
+
+module.exports = { UNIVERSITY_ADAPTERS, schemaOrgRows, probeHomepageFeeds, localistRows, livewhaleRows, readUniversityCalendar, calendarCandidates, probeUniversityCalendar, calendarOrigin };

@@ -107,8 +107,10 @@ function normalizeSchemaOrgEvent(item, sourceUrl = '') {
   if (!title || typeof title !== 'string' || title.trim().length < 3) return null;
 
   const startDateStr = item.startDate || item.doorTime || item.datePublished;
-  const startDate = startDateStr ? new Date(startDateStr) : new Date();
-  const endDate = item.endDate ? new Date(item.endDate) : new Date(startDate.getTime() + 3 * 3600 * 1000);
+  // Missing facts stay missing: no invented start, end, place or currency.
+  const startDate = startDateStr ? new Date(startDateStr) : null;
+  if (!startDate || !Number.isFinite(startDate.getTime())) return null;
+  const endDate = item.endDate && Number.isFinite(new Date(item.endDate).getTime()) ? new Date(item.endDate) : undefined;
 
   // Extract location
   let venueName = '';
@@ -138,7 +140,7 @@ function normalizeSchemaOrgEvent(item, sourceUrl = '') {
 
   // Extract offers / price
   let priceAmount = 0;
-  let priceCurrency = 'DOP';
+  let priceCurrency = null;
   let ticketUrl = '';
 
   const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
@@ -162,14 +164,17 @@ function normalizeSchemaOrgEvent(item, sourceUrl = '') {
     imageUrl = item.image.url;
   }
 
-  const coordinates = (Number.isFinite(lng) && Number.isFinite(lat)) ? [lng, lat] : [-69.9312, 18.4861];
-  const h3Hierarchy = computeH3Hierarchy(coordinates[1], coordinates[0]);
+  const located = Number.isFinite(lng) && Number.isFinite(lat);
 
   // Check attendance mode & virtual location
   const attendanceMode = String(item.eventAttendanceMode || '').toLowerCase();
   const isVirtualLocation = loc && (loc['@type'] === 'VirtualLocation' || loc.type === 'VirtualLocation');
   const isVirtual = attendanceMode.includes('online') || attendanceMode.includes('mixed') || Boolean(isVirtualLocation) || Boolean(item.virtualLocation);
   const eventType = attendanceMode.includes('mixed') ? 'hybrid' : (isVirtual ? 'virtual' : 'in_person');
+  if (!isVirtual && !located) return null;
+  if (priceAmount > 0 && !priceCurrency) return null;
+  const coordinates = located ? [lng, lat] : undefined;
+  const h3Hierarchy = located ? computeH3Hierarchy(lat, lng) : undefined;
   const rawVirtualLink = loc?.url || item.url || (isVirtual ? sourceUrl : '');
   const virtualLink = rawVirtualLink && (rawVirtualLink.startsWith('http://') || rawVirtualLink.startsWith('https://')) ? rawVirtualLink : '';
 
@@ -197,21 +202,21 @@ function normalizeSchemaOrgEvent(item, sourceUrl = '') {
       isWorkshop: Boolean(cleanType.includes('course') || title.toLowerCase().includes('taller') || title.toLowerCase().includes('workshop')),
       isWebinar: Boolean(cleanType.includes('conference') || title.toLowerCase().includes('webinar') || title.toLowerCase().includes('summit'))
     } : undefined,
-    location: {
+    location: coordinates ? {
       type: 'Point',
       coordinates,
-      address: isVirtual ? 'Evento Online / Global' : (addressText || venueName || 'República Dominicana'),
-      venue: venueName || (isVirtual ? 'Virtual Room / Stream' : 'Recinto / Venue')
-    },
+      address: addressText || venueName,
+      venue: venueName || undefined
+    } : undefined,
     price: {
       amount: priceAmount,
-      currency: priceCurrency
+      currency: priceCurrency || 'USD'
     },
     images: imageUrl ? [{ url: imageUrl }] : [],
     externalUrl: sourceUrl || item.url || '',
     ticketUrl: ticketUrl || '',
     source: 'schema_org_json_ld',
-    sourceId: item['@id'] || (sourceUrl ? `${sourceUrl}#${encodeURIComponent(title)}` : `schema-${Date.now()}`),
+    sourceId: item['@id'] || `${sourceUrl}#${startDate.toISOString()}#${encodeURIComponent(title)}`,
     h3: h3Hierarchy,
     pipelineMeta: {
       tier: 3,

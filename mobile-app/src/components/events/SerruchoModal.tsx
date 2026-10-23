@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { apiClient } from '@/services/apiClient';
 import type { Event, User } from '@/types';
+import { regionalFor, formatMoney } from '@/utils/regional';
 
 interface SerruchoModalProps {
   visible: boolean;
@@ -25,23 +26,22 @@ interface SerruchoModalProps {
   user: User | null;
 }
 
-const BANKS = ['Banco Popular', 'Banco BHD', 'Banreservas', 'Qik Banco Digital', 'Efectivo'];
 const PARTICIPANT_OPTIONS = [2, 3, 4, 5, 6, 8, 10];
 
 export default function SerruchoModal({ visible, onClose, event, user }: SerruchoModalProps) {
-  const defaultAmount = typeof event.price === 'object' && event.price !== null
-    ? event.price.amount || 500
-    : typeof event.price === 'number' && event.price > 0
-      ? event.price
-      : 500;
+  // Money and wording of the place the event happens; amounts start from the real ticket price or empty.
+  const regional = regionalFor(event, user);
+  const money = (amount: number) => formatMoney(amount, regional);
+  const ticketPrice = typeof event.price === 'object' && event.price !== null ? event.price.amount : typeof event.price === 'number' ? event.price : 0;
+  const defaultAmount = ticketPrice > 0 ? String(ticketPrice) : '';
 
-  const [title, setTitle] = useState(`Coro para ${event.title}`);
+  const [title, setTitle] = useState(`${regional.splitBill}: ${event.title}`);
   const [isCarpool, setIsCarpool] = useState(false);
   const [participantsCount, setParticipantsCount] = useState(4);
-  const [perPersonAmount, setPerPersonAmount] = useState(String(defaultAmount));
-  const [tollsAmount, setTollsAmount] = useState('200');
-  const [fuelAmount, setFuelAmount] = useState('1800');
-  const [selectedBank, setSelectedBank] = useState('Banco Popular');
+  const [perPersonAmount, setPerPersonAmount] = useState(defaultAmount);
+  const [tollsAmount, setTollsAmount] = useState('');
+  const [fuelAmount, setFuelAmount] = useState('');
+  const [selectedBank, setSelectedBank] = useState(regional.banks[0]);
   const [accountNumber, setAccountNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [createdPool, setCreatedPool] = useState<{ shareCode: string; targetAmount: number } | null>(null);
@@ -49,16 +49,16 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
   const carpoolTotal = (parseFloat(tollsAmount) || 0) + (parseFloat(fuelAmount) || 0);
   const carpoolPerPerson = Math.ceil(carpoolTotal / Math.max(1, participantsCount));
 
-  const parsedAmount = isCarpool ? carpoolPerPerson : Math.max(1, parseFloat(perPersonAmount) || 0);
+  const parsedAmount = isCarpool ? carpoolPerPerson : parseFloat(perPersonAmount) || 0;
   const totalAmount = isCarpool ? carpoolTotal : Math.round(participantsCount * parsedAmount);
 
   const resetState = () => {
-    setTitle(`Coro para ${event.title}`);
+    setTitle(`${regional.splitBill}: ${event.title}`);
     setIsCarpool(false);
     setParticipantsCount(4);
-    setPerPersonAmount(String(defaultAmount));
-    setTollsAmount('200');
-    setFuelAmount('1800');
+    setPerPersonAmount(defaultAmount);
+    setTollsAmount('');
+    setFuelAmount('');
     setAccountNumber('');
     setCreatedPool(null);
     setLoading(false);
@@ -71,7 +71,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
 
   const handleCreateSerrucho = async () => {
     if (!user) {
-      Alert.alert('Inicia sesión', 'Debes iniciar sesión para armar un serrucho.');
+      Alert.alert('Inicia sesión', `Debes iniciar sesión para ${regional.splitBillAction.toLowerCase()}.`);
       return;
     }
 
@@ -85,11 +85,11 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const res = await apiClient.post('/serrucho', {
         eventId: event._id,
-        title: title.trim() || `Coro para ${event.title}`,
+        title: title.trim() || `${regional.splitBill}: ${event.title}`,
         targetParticipants: participantsCount,
         perPersonAmount: parsedAmount,
         targetAmount: totalAmount,
-        currency: 'DOP',
+        currency: regional.currency,
         paymentInstructions: {
           bankName: selectedBank,
           accountNumber: accountNumber.trim() || 'Solicitar cuenta por WhatsApp',
@@ -103,11 +103,11 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
           targetAmount: totalAmount,
         });
       } else {
-        throw new Error(res.data?.message || 'No se pudo crear el serrucho.');
+        throw new Error(res.data?.message || 'No se pudo crear la colecta.');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Error al crear el serrucho.';
-      Alert.alert('No se pudo armar el serrucho', msg);
+      const msg = err.response?.data?.message || err.message || 'Error al crear la colecta.';
+      Alert.alert(`No se pudo ${regional.splitBillAction.toLowerCase()}`, msg);
     } finally {
       setLoading(false);
     }
@@ -117,8 +117,8 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
     if (!createdPool) return;
     const shareUrl = `https://eventnow.do/serrucho/${createdPool.shareCode}`;
     const message = isCarpool
-      ? `🚗 *Serrucho de Gasolina & Peajes (Carpool RD)* 🇩🇴\n🎉 *Ruta al evento:* "${event.title}"\n👥 *Pasajeros:* ${participantsCount} panas\n⛽ *Gasolina:* RD$ ${(parseFloat(fuelAmount) || 0).toLocaleString('es-DO')}\n🛣️ *Peajes:* RD$ ${(parseFloat(tollsAmount) || 0).toLocaleString('es-DO')}\n🎯 *Costo Total:* RD$ ${carpoolTotal.toLocaleString('es-DO')}\n💰 *Nos toca a:* RD$ ${carpoolPerPerson.toLocaleString('es-DO')} c/u\n\n💳 Banco: ${selectedBank}${accountNumber ? `\n📌 Cuenta: ${accountNumber}` : ''}\n\n👉 Confirma aquí: ${shareUrl}`
-      : `🔥 ¡Actívate pal coro! Armamos el serrucho para "${event.title}".\n👥 Somos ${participantsCount} personas, nos toca de RD$ ${parsedAmount.toLocaleString('es-DO')} cada uno.\n\n💳 Banco: ${selectedBank}${accountNumber ? `\n📌 Cuenta: ${accountNumber}` : ''}\n\n👉 Confirma tu parte aquí: ${shareUrl}`;
+      ? `🚗 *${regional.splitBill} de gasolina y peajes*\n🎉 *Ruta al evento:* "${event.title}"\n👥 *Pasajeros:* ${participantsCount} ${regional.friends}\n⛽ *Gasolina:* ${money(parseFloat(fuelAmount) || 0)}\n🛣️ *Peajes:* ${money(parseFloat(tollsAmount) || 0)}\n🎯 *Costo total:* ${money(carpoolTotal)}\n💰 *Nos toca a:* ${money(carpoolPerPerson)} c/u\n\n💳 Banco: ${selectedBank}${accountNumber ? `\n📌 Cuenta: ${accountNumber}` : ''}\n\n👉 Confirma aquí: ${shareUrl}`
+      : `🔥 ${regional.splitBill} para "${event.title}".\n👥 Somos ${participantsCount} personas, nos toca de ${money(parsedAmount)} cada uno.\n\n💳 Banco: ${selectedBank}${accountNumber ? `\n📌 Cuenta: ${accountNumber}` : ''}\n\n👉 Confirma tu parte aquí: ${shareUrl}`;
 
     const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
     try {
@@ -126,18 +126,18 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
       if (canOpen) {
         await Linking.openURL(whatsappUrl);
       } else {
-        await Share.share({ message, title: 'Serrucho EventNow' });
+        await Share.share({ message, title: `${regional.splitBill} · EventNow` });
       }
     } catch {
-      await Share.share({ message, title: 'Serrucho EventNow' });
+      await Share.share({ message, title: `${regional.splitBill} · EventNow` });
     }
   };
 
   const handleGeneralShare = async () => {
     if (!createdPool) return;
     const shareUrl = `https://eventnow.do/serrucho/${createdPool.shareCode}`;
-    const message = `¡Armamos el serrucho para "${event.title}"! Nos toca de RD$ ${parsedAmount.toLocaleString('es-DO')}. Únete al coro: ${shareUrl}`;
-    await Share.share({ message, title: 'Serrucho EventNow' });
+    const message = `${regional.splitBill} para "${event.title}": nos toca de ${money(parsedAmount)}. Únete: ${shareUrl}`;
+    await Share.share({ message, title: `${regional.splitBill} · EventNow` });
   };
 
   return (
@@ -156,7 +156,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
                 <Ionicons name="people" size={20} color="#ec4899" />
               </View>
               <View>
-                <Text style={styles.headerTitle}>Hacer Serrucho</Text>
+                <Text style={styles.headerTitle}>{regional.splitBillAction}</Text>
                 <Text style={styles.headerSubtitle}>Divide los gastos del coro</Text>
               </View>
             </View>
@@ -171,20 +171,20 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
               <LinearGradient colors={['#ec4899', '#8b5cf6']} style={styles.celebrationCircle}>
                 <Ionicons name="checkmark-circle" size={48} color="#fff" />
               </LinearGradient>
-              <Text style={styles.successTitle}>¡Serrucho Armado!</Text>
+              <Text style={styles.successTitle}>¡{regional.splitBill} listo!</Text>
               <Text style={styles.successDesc}>
-                Comparte este enlace con tus panas para que confirmen y aporten su parte.
+                Comparte este enlace con tus {regional.friends} para que confirmen y aporten su parte.
               </Text>
 
               <View style={styles.summaryCard}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Meta total:</Text>
-                  <Text style={styles.summaryValue}>RD$ {totalAmount.toLocaleString('es-DO')}</Text>
+                  <Text style={styles.summaryValue}>{money(totalAmount)}</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Por persona ({participantsCount}):</Text>
                   <Text style={[styles.summaryValue, { color: '#ec4899' }]}>
-                    RD$ {parsedAmount.toLocaleString('es-DO')}
+                    {money(parsedAmount)}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
@@ -275,7 +275,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
 
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: '#94a3b8', fontSize: 11, marginBottom: 4 }}>Peajes (RD$)</Text>
+                      <Text style={{ color: '#94a3b8', fontSize: 11, marginBottom: 4 }}>Peajes ({regional.currencySymbol})</Text>
                       <TextInput
                         style={[styles.textInput, { marginBottom: 0 }]}
                         value={tollsAmount}
@@ -284,7 +284,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: '#94a3b8', fontSize: 11, marginBottom: 4 }}>Gasolina (RD$)</Text>
+                      <Text style={{ color: '#94a3b8', fontSize: 11, marginBottom: 4 }}>Gasolina ({regional.currencySymbol})</Text>
                       <TextInput
                         style={[styles.textInput, { marginBottom: 0 }]}
                         value={fuelAmount}
@@ -302,7 +302,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
                 style={styles.textInput}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="Ej. Entradas + Coro en la zona"
+                placeholder="Ej. Entradas y transporte"
                 placeholderTextColor="rgba(255,255,255,0.4)"
               />
 
@@ -321,7 +321,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
                       style={[styles.chip, active && styles.chipActive]}
                     >
                       <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                        {count} panas
+                        {count} {regional.friends}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -329,7 +329,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
               </View>
 
               {/* Amount per person */}
-              <Text style={styles.inputLabel}>Monto por persona (RD$)</Text>
+              <Text style={styles.inputLabel}>Monto por persona ({regional.currencySymbol})</Text>
               <TextInput
                 style={styles.textInput}
                 value={perPersonAmount}
@@ -343,15 +343,15 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
               <LinearGradient colors={['rgba(236,72,153,0.15)', 'rgba(139,92,246,0.15)']} style={styles.totalBanner}>
                 <View>
                   <Text style={styles.totalBannerLabel}>Total a juntar:</Text>
-                  <Text style={styles.totalBannerSub}>{participantsCount} personas × RD$ {parsedAmount.toLocaleString('es-DO')}</Text>
+                  <Text style={styles.totalBannerSub}>{participantsCount} personas × {money(parsedAmount)}</Text>
                 </View>
-                <Text style={styles.totalBannerValue}>RD$ {totalAmount.toLocaleString('es-DO')}</Text>
+                <Text style={styles.totalBannerValue}>{money(totalAmount)}</Text>
               </LinearGradient>
 
               {/* Bank Selection */}
               <Text style={styles.inputLabel}>Banco receptor / Método</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.banksRow}>
-                {BANKS.map((b) => {
+                {regional.banks.map((b) => {
                   const active = selectedBank === b;
                   return (
                     <TouchableOpacity
@@ -398,7 +398,7 @@ export default function SerruchoModal({ visible, onClose, event, user }: Serruch
                   ) : (
                     <>
                       <Ionicons name="flash" size={18} color="#fff" />
-                      <Text style={styles.createBtnText}>¡Crear Serrucho del Coro!</Text>
+                      <Text style={styles.createBtnText}>{regional.splitBillAction}</Text>
                     </>
                   )}
                 </LinearGradient>

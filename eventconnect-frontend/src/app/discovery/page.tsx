@@ -128,14 +128,10 @@ export default function DiscoveryPage() {
     })
   }, [config.countryCode])
 
-  const hubsLabel = useMemo(() => {
-    switch (config.countryCode) {
-      case 'ES': return 'Zonas de España & Radar:'
-      case 'MX': return 'Zonas de México & Radar:'
-      case 'US': return 'Global Hubs & US:'
-      default: return 'Zonas de RD & Radar:'
-    }
-  }, [config.countryCode])
+  // Name the user's country only when it has zones; otherwise the list is the global one.
+  const hubsLabel = useMemo(() => RD_HUBS.some(hub => hub.country === config.countryCode)
+    ? `Zonas de ${config.countryName} y del mundo:`
+    : 'Zonas destacadas:', [config.countryCode, config.countryName])
 
   const selectHub = (hub: RDHub | null) => {
     if (!hub) {

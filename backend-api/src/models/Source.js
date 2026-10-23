@@ -67,7 +67,8 @@ const sourceSchema = new mongoose.Schema({
       'paris_open_data',
       'catalunya_open_data',
       'localist_calendar',
-      'livewhale_calendar'
+      'livewhale_calendar',
+      'schema_org_page'
     ],
     default: 'rest_api'
   },

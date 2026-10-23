@@ -81,3 +81,57 @@ describe('university calendar sources', () => {
     expect(blockers).not.toContain('adapter_not_ready');
   });
 });
+
+describe('schema.org pages and homepage feeds', () => {
+  const { schemaOrgRows, probeHomepageFeeds } = require('../src/services/eventIngestion/universityCalendarAdapters');
+  const event = (over = {}) => ({ '@type': 'Event', '@id': 'https://uni.example.edu/eventos/1', name: 'Conferencia abierta',
+    startDate: '2027-04-10T18:00:00-04:00', isAccessibleForFree: true,
+    location: { '@type': 'Place', name: 'Aula Magna', geo: { latitude: 18.46, longitude: -69.91 }, address: { addressLocality: 'Santo Domingo', addressCountry: 'DO' } }, ...over });
+
+  test('keeps exact, free, located events and fills nothing in', () => {
+    expect(schemaOrgRows([event()], { currency: 'DOP' })[0]).toMatchObject({ lat: 18.46, lng: -69.91, price: 0, currency: 'DOP', city: 'Santo Domingo' });
+    expect(schemaOrgRows([
+      event({ startDate: '2027-04-10' }),
+      event({ startDate: '2027-04-10T18:00:00' }),
+      event({ location: { name: 'Aula Magna' } }),
+      event({ isAccessibleForFree: undefined, offers: { price: '500', priceCurrency: 'DOP' } }),
+      event({ isAccessibleForFree: undefined }),
+      event({ eventStatus: 'https://schema.org/EventCancelled' }),
+      event({ eventAttendanceMode: 'https://schema.org/OnlineEventAttendanceMode' }),
+      { '@type': 'Organization', name: 'Universidad' }
+    ])).toHaveLength(0);
+  });
+
+  test('finds an ICS calendar or an events page on the university domain only', async () => {
+    const pages = {
+      'https://www.uni.example.edu/': '<a href="https://evil.example.com/cal.ics">x</a><a href="/eventos/">Eventos</a>',
+      'https://www.uni.example.edu/eventos/': `<script type="application/ld+json">${JSON.stringify([event()])}</script>`
+    };
+    const fetcher = async url => { if (!(url in pages)) throw new Error('not found ' + url); return { data: pages[url] }; };
+    expect(await probeHomepageFeeds('https://www.uni.example.edu/', fetcher))
+      .toEqual({ adapterType: 'schema_org_page', origin: 'https://www.uni.example.edu', endpoint: 'https://www.uni.example.edu/eventos/', upcoming: 1 });
+    pages['https://www.uni.example.edu/'] = '<link rel="alternate" type="text/calendar" href="webcal://www.uni.example.edu/calendario.ics">';
+    pages['https://www.uni.example.edu/calendario.ics'] = 'BEGIN:VCALENDAR\nBEGIN:VEVENT\nEND:VEVENT\nEND:VCALENDAR';
+    expect(await probeHomepageFeeds('https://www.uni.example.edu/', fetcher)).toMatchObject({ adapterType: 'ics_feed', endpoint: 'https://www.uni.example.edu/calendario.ics', upcoming: 1 });
+  });
+
+  test('a schema.org page source reads through the shared connector with credit', async () => {
+    const { readUniversityCalendar } = require('../src/services/eventIngestion/universityCalendarAdapters');
+    const html = `<script type="application/ld+json">${JSON.stringify({ '@graph': [event()] })}</script>`;
+    const result = await readUniversityCalendar({ adapterType: 'schema_org_page', name: 'Universidad', accessConfig: { endpointUrl: 'https://uni.example.edu/eventos/' } }, async () => ({ data: html }));
+    expect(result.rows).toHaveLength(1);
+    await expect(readUniversityCalendar({ adapterType: 'schema_org_page', accessConfig: { endpointUrl: 'http://uni.example.edu/eventos/' } }, async () => ({ data: html }))).rejects.toThrow();
+  });
+});
+
+test('the generic schema.org normalizer leaves missing dates, places and currencies missing', () => {
+  const { normalizeSchemaOrgEvent } = require('../src/services/eventIngestion/schemaOrgExtractor');
+  const base = { '@type': 'MusicEvent', name: 'Concierto sin datos completos' };
+  expect(normalizeSchemaOrgEvent(base, 'https://venue.example.com')).toBeNull();
+  expect(normalizeSchemaOrgEvent({ ...base, startDate: '2027-05-01T20:00:00Z' }, 'https://venue.example.com')).toBeNull();
+  expect(normalizeSchemaOrgEvent({ ...base, startDate: '2027-05-01T20:00:00Z', location: { geo: { latitude: 40.4, longitude: -3.7 } }, offers: { price: '20' } }, 'https://venue.example.com')).toBeNull();
+  const located = normalizeSchemaOrgEvent({ ...base, startDate: '2027-05-01T20:00:00Z', location: { name: 'Sala', geo: { latitude: 40.4, longitude: -3.7 } } }, 'https://venue.example.com');
+  expect(located.location.coordinates).toEqual([-3.7, 40.4]);
+  expect(located.endDate).toBeUndefined();
+  expect(JSON.stringify(located)).not.toMatch(/República Dominicana|-69\.9312|DOP/);
+});

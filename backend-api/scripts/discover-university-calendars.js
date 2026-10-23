@@ -11,7 +11,7 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const Source = require('../src/models/Source');
 const { fetchSource } = require('../src/services/eventIngestion/safeSourceFetch');
-const { probeUniversityCalendar } = require('../src/services/eventIngestion/universityCalendarAdapters');
+const { probeUniversityCalendar, probeHomepageFeeds } = require('../src/services/eventIngestion/universityCalendarAdapters');
 
 const arg = name => process.argv.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const country = String(arg('country') || '').toUpperCase();
@@ -49,7 +49,8 @@ async function universities() {
   console.log(`${candidates.length} universidades con sitio web en ${country} (ROR)`);
   const found = [];
   for (const university of candidates) {
-    const calendar = await probeUniversityCalendar(university.website, fetchSource);
+    // Known calendar platforms first, then ICS links or schema.org events pages on the homepage.
+    const calendar = await probeUniversityCalendar(university.website, fetchSource) || await probeHomepageFeeds(university.website, fetchSource);
     if (calendar) {
       found.push({ ...university, ...calendar });
       console.log(`  ✓ ${university.name} · ${calendar.adapterType} · ${calendar.origin} · ${calendar.upcoming} próximos`);

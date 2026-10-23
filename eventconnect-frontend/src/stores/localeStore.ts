@@ -2,17 +2,19 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { neutralPreset, browserCountry } from '@/lib/regional-preset'
 
-export type SupportedLocale = 'es-DO' | 'es-ES' | 'es-MX' | 'es-CO' | 'es-AR' | 'en-US'
-export type SupportedCountry = 'DO' | 'ES' | 'MX' | 'CO' | 'AR' | 'US' | 'GLOBAL'
+// 'es' is neutral Spanish for countries without their own preset.
+export type SupportedLocale = 'es-DO' | 'es-ES' | 'es-MX' | 'es-CO' | 'es-AR' | 'en-US' | 'es'
+export type SupportedCountry = string
 
 export interface RegionalConfig {
   locale: SupportedLocale
   countryCode: SupportedCountry
   countryName: string
-  currency: 'DOP' | 'EUR' | 'MXN' | 'COP' | 'ARS' | 'USD'
+  currency: string
   currencySymbol: string
-  exchangeRateToUSD: number // for diaspora conversion
+  exchangeRateToUSD: number // for diaspora conversion; NaN when no verified rate exists
   terms: {
     hangout: string       // Coro vs Quedada vs Peda vs Parche vs Juntada vs Hangout
     hangoutPlural: string // Coros vs Quedadas vs Pedas vs Parches vs Juntadas vs Hangouts
@@ -27,7 +29,7 @@ export interface RegionalConfig {
   payoutMethods: { id: string; name: string; type: string }[]
 }
 
-export const REGIONAL_PRESETS: Record<SupportedLocale, RegionalConfig> = {
+export const REGIONAL_PRESETS: Record<Exclude<SupportedLocale, 'es'>, RegionalConfig> = {
   'es-DO': {
     locale: 'es-DO',
     countryCode: 'DO',
@@ -149,7 +151,7 @@ export const REGIONAL_PRESETS: Record<SupportedLocale, RegionalConfig> = {
   'en-US': {
     locale: 'en-US',
     countryCode: 'US',
-    countryName: 'United States & Global',
+    countryName: 'Estados Unidos',
     currency: 'USD',
     currencySymbol: '$',
     exchangeRateToUSD: 1.0,
@@ -179,7 +181,8 @@ export const TRANSLATIONS: Record<string, Record<SupportedLocale, string>> = {
     'es-MX': '¡Bienvenido a EventNow!',
     'es-CO': '¡Bienvenido al parche de EventNow!',
     'es-AR': '¡Bienvenido a EventNow!',
-    'en-US': 'Welcome to EventNow!'
+    'en-US': 'Welcome to EventNow!',
+    'es': '¡Bienvenido a EventNow!'
   },
   exploreEvents: {
     'es-DO': 'Descubre tu próximo coro',
@@ -187,7 +190,8 @@ export const TRANSLATIONS: Record<string, Record<SupportedLocale, string>> = {
     'es-MX': 'Descubre tu próximo plan',
     'es-CO': 'Descubre tu próximo parche',
     'es-AR': 'Descubre tu próxima juntada',
-    'en-US': 'Discover your next plan'
+    'en-US': 'Discover your next plan',
+    'es': 'Descubre tu próximo plan'
   },
   virtualEvents: {
     'es-DO': 'En Línea & Streams',
@@ -195,7 +199,8 @@ export const TRANSLATIONS: Record<string, Record<SupportedLocale, string>> = {
     'es-MX': 'En Línea & Streams',
     'es-CO': 'En Línea & Streams',
     'es-AR': 'En Línea & Streams',
-    'en-US': 'Online & Streams'
+    'en-US': 'Online & Streams',
+    'es': 'En Línea & Streams'
   },
   createEvent: {
     'es-DO': 'Armar Coro / Evento',
@@ -203,7 +208,8 @@ export const TRANSLATIONS: Record<string, Record<SupportedLocale, string>> = {
     'es-MX': 'Crear Plan / Evento',
     'es-CO': 'Armar Parche / Evento',
     'es-AR': 'Armar Juntada / Evento',
-    'en-US': 'Create Event / Hangout'
+    'en-US': 'Create Event / Hangout',
+    'es': 'Crear plan / evento'
   }
 }
 
@@ -227,21 +233,17 @@ export const useLocaleStore = create<LocaleState>()(
       config: REGIONAL_PRESETS['es-DO'],
 
       setLocale: (newLocale: SupportedLocale) => {
-        const config = REGIONAL_PRESETS[newLocale] || REGIONAL_PRESETS['es-DO']
+        const config = newLocale === 'es' ? get().config : REGIONAL_PRESETS[newLocale] || REGIONAL_PRESETS['es-DO']
         set({ locale: newLocale, config })
       },
 
       setLocaleByCountry: (countryCode: string) => {
-        const code = countryCode.toUpperCase()
-        let targetLocale: SupportedLocale = 'es-DO'
-        if (code === 'ES') targetLocale = 'es-ES'
-        else if (code === 'MX') targetLocale = 'es-MX'
-        else if (code === 'CO') targetLocale = 'es-CO'
-        else if (code === 'AR') targetLocale = 'es-AR'
-        else if (code === 'US' || code === 'GLOBAL') targetLocale = 'en-US'
-        
-        const config = REGIONAL_PRESETS[targetLocale] || REGIONAL_PRESETS['es-DO']
-        set({ locale: targetLocale, config })
+        const code = String(countryCode || '').toUpperCase()
+        // Only countries with a reviewed preset get local vocabulary and banks; any other
+        // country keeps its real name and currency instead of falling back to the Dominican Republic.
+        const preset = Object.values(REGIONAL_PRESETS).find(entry => entry.countryCode === code)
+        const config = preset || (code === 'GLOBAL' ? REGIONAL_PRESETS['en-US'] : /^[A-Z]{2}$/.test(code) ? neutralPreset(code) : REGIONAL_PRESETS['es-DO'])
+        set({ locale: config.locale, config })
       },
 
       toggleTouristMode: () => {
@@ -259,12 +261,12 @@ export const useLocaleStore = create<LocaleState>()(
         const { config, isTouristMode } = get()
         if (amount === 0) return 'Gratis / Free'
         
-        if (forceUSD || (isTouristMode && config.currency !== 'USD')) {
+        if ((forceUSD || (isTouristMode && config.currency !== 'USD')) && Number.isFinite(config.exchangeRateToUSD)) {
           const usdVal = config.currency === 'USD' ? amount : amount / config.exchangeRateToUSD
           return `$${usdVal.toFixed(2)} USD`
         }
 
-        return `${config.currencySymbol}${amount.toLocaleString()} ${config.currency}`
+        return `${config.currencySymbol}${amount.toLocaleString(config.locale === 'es' ? 'es' : config.locale)} ${config.currency}`
       },
 
       convertPrice: (amount: number, fromCurrency = 'DOP') => {
@@ -284,7 +286,15 @@ export const useLocaleStore = create<LocaleState>()(
       }
     }),
     {
-      name: 'eventconnect-locale-storage'
+      name: 'eventconnect-locale-storage',
+      // First visit: start in the country the browser names, not in a fixed default.
+      onRehydrateStorage: () => state => {
+        try {
+          if (!state || typeof window === 'undefined' || window.localStorage.getItem('eventconnect-locale-storage')) return
+          const country = browserCountry()
+          if (country) state.setLocaleByCountry(country)
+        } catch { /* Storage unavailable: keep the default preset. */ }
+      }
     }
   )
 )
