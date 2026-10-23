@@ -14,11 +14,21 @@ const { GLOBAL_VIRTUAL_EVENTS } = require('../src/services/eventIngestion/virtua
     const db = mongoose.connection.db;
     const virtualTitles = GLOBAL_VIRTUAL_EVENTS.map(e => e.title);
     const filter = { archivedAt: null, $or: [...FABRICATED_CATALOG_FILTERS, { isVirtual: true, title: { $in: virtualTitles }, 'location.country': 'Mundial' }] };
-    const events = await db.collection('events').find(filter).toArray();
+    const marked = await db.collection('events').find(filter).toArray();
+    // Older seed scripts wrote catalog events without any source marker. They are recognised by a
+    // title written in the codebase's catalogs, created by an admin or system account, never imported.
+    const catalogFiles = [path.join(__dirname, '../src/services/eventIngestion'), path.join(__dirname, '../src/services'), __dirname]
+      .flatMap(dir => fs.readdirSync(dir).filter(file => file.endsWith('.js') && file !== path.basename(__filename)).map(file => path.join(dir, file)));
+    const catalogText = catalogFiles.map(file => fs.readFileSync(file, 'utf8')).join('\n');
+    const staff = (await db.collection('users').find({ role: { $in: ['admin', 'system'] } }).project({ _id: 1 }).toArray()).map(user => user._id);
+    const markedIds = new Set(marked.map(event => String(event._id)));
+    const unmarked = (await db.collection('events').find({ archivedAt: null, createdBy: { $in: staff }, source: null, imported: { $ne: true } }).toArray())
+      .filter(event => typeof event.title === 'string' && event.title.length >= 8 && catalogText.includes(event.title) && !markedIds.has(String(event._id)));
+    const events = [...marked, ...unmarked];
     const withPeople = events.filter(e => (e.attendees || []).length > 0);
     console.log(JSON.stringify({
       eventCount: events.length,
-      bySource: events.reduce((acc, e) => { const k = e.source || e.publicSource?.platform || 'virtual_catalog'; acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
+      bySource: events.reduce((acc, e) => { const k = e.source || e.publicSource?.platform || (markedIds.has(String(e._id)) ? 'virtual_catalog' : 'catalogo_sin_marca'); acc[k] = (acc[k] || 0) + 1; return acc; }, {}),
       eventsWithAttendees: withPeople.map(e => ({ id: String(e._id), title: e.title, attendees: e.attendees.length }))
     }, null, 2));
     if (!process.argv.includes('--apply')) return;
