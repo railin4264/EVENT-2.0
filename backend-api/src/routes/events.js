@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
 const { protect, optionalAuth, restrictTo } = require('../middleware/auth');
@@ -1703,85 +1704,48 @@ router.post('/:id/comments/:commentId/like', protect, async (req, res) => {
 
 // NOTE: Duplicate POST /:id/view route removed (was shadowed by the one below at line ~1025)
 
+// Engagement counters feed trending. Only signed-in people count, once each, on
+// public published events: anonymous or repeated calls could fake a trend and grow
+// the event document without bound.
+async function recordEngagement(req, res, field, entry) {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ success: false, message: 'Identificador de evento inválido' });
+  const visible = { _id: req.params.id, status: 'published', isPrivate: { $ne: true } };
+  if (req.user) {
+    const userId = new mongoose.Types.ObjectId(String(req.user.id || req.user._id));
+    await Event.updateOne({ ...visible, [`${field}.user`]: { $ne: userId } }, { $push: { [field]: { ...entry, user: userId } } });
+  }
+  const [counted] = await Event.aggregate([{ $match: { _id: new mongoose.Types.ObjectId(req.params.id), status: 'published', isPrivate: { $ne: true } } },
+    { $project: { count: { $size: { $ifNull: [`$${field}`, []] } } } }]);
+  if (!counted) return res.status(404).json({ success: false, message: 'Event not found' });
+  return counted.count;
+}
+
 // @desc    Track event share
 // @route   POST /api/events/:id/share
-// @access  Private (optional)
-router.post('/:id/share', async (req, res) => {
+// @access  Public (counted only for signed-in people)
+router.post('/:id/share', optionalAuth, async (req, res) => {
   try {
-    const { platform } = req.body;
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        success: false,
-        message: 'Event not found'
-      });
-    }
-
-    // Add share tracking
-    const shareData = {
-      platform: platform || 'unknown',
-      sharedAt: new Date()
-    };
-
-    if (req.user) {
-      shareData.user = req.user.id;
-    }
-
-    event.shares.push(shareData);
-    await event.save();
-
-    res.json({
-      success: true,
-      sharesCount: event.shares.length
-    });
+    const platform = typeof req.body?.platform === 'string' ? req.body.platform.slice(0, 30) : 'unknown';
+    const count = await recordEngagement(req, res, 'shares', { platform, sharedAt: new Date() });
+    if (typeof count !== 'number') return;
+    res.json({ success: true, sharesCount: count });
   } catch (error) {
     logger.error('Track share error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// NOTE: Duplicate POST /:eventId/comments/:commentId/like and DELETE /:eventId/comments/:commentId
-// routes removed. The canonical versions are defined above (lines ~786 and ~731).
-
 // @desc    Track event view
 // @route   POST /api/events/:id/view
-// @access  Public
-router.post('/:id/view', async (req, res) => {
+// @access  Public (counted only for signed-in people)
+router.post('/:id/view', optionalAuth, async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({
-        success: false,
-        message: 'Event not found'
-      });
-    }
-
-    // Add view record
-    const viewRecord = {
-      user: req.user?.id || null,
-      viewedAt: new Date()
-    };
-
-    event.views.push(viewRecord);
-    await event.save();
-
-    res.json({
-      success: true,
-      data: {
-        viewsCount: event.views.length
-      }
-    });
+    const count = await recordEngagement(req, res, 'views', { viewedAt: new Date() });
+    if (typeof count !== 'number') return;
+    res.json({ success: true, data: { viewsCount: count } });
   } catch (error) {
     logger.error('Track view error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 

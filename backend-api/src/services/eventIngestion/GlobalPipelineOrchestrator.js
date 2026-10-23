@@ -9,8 +9,10 @@ async function runGlobalIngestionCycle({ dryRun = false, dueOnly = false } = {})
   const started = Date.now();
   const filter = { status: dueOnly ? 'active' : { $in: ['approved', 'active'] } };
   if (dueOnly) filter.$or = [{ 'syncSchedule.nextSyncDue': null }, { 'syncSchedule.nextSyncDue': { $lte: new Date() } }];
-  const found = await Source.find(filter).sort({ 'syncSchedule.nextSyncDue': 1, sourceId: 1 }).limit(51);
-  const sources = found.slice(0, 50);
+  // Sources due first; INGESTION_SOURCES_PER_CYCLE bounds one cycle so a large registry spreads over the day.
+  const perCycle = Math.min(Math.max(Number(process.env.INGESTION_SOURCES_PER_CYCLE) || 50, 1), 500);
+  const found = await Source.find(filter).sort({ 'syncSchedule.nextSyncDue': 1, sourceId: 1 }).limit(perCycle + 1);
+  const sources = found.slice(0, perCycle);
   const stats = { totalRawEvents: 0, canonicalSaved: 0, created: 0, updated: 0,
     unchanged: 0, skipped: 0, duplicatesResolved: 0, previewCount: 0,
     eligibleSources: 0, blockedSources: 0, failedSources: 0, failedWrites: 0, durationMs: 0 };
@@ -50,7 +52,7 @@ async function runGlobalIngestionCycle({ dryRun = false, dueOnly = false } = {})
     }
   }
   stats.durationMs = Date.now() - started;
-  return { success: stats.failedSources === 0, dryRun, stats, sampleEvents, sources: runs, incomplete: found.length > 50 || runs.some(run => run.incomplete),
+  return { success: stats.failedSources === 0, dryRun, stats, sampleEvents, sources: runs, incomplete: found.length > perCycle || runs.some(run => run.incomplete),
     message: !stats.eligibleSources ? 'No hay fuentes aprobadas y listas para importar' :
       dryRun ? 'Vista previa sin guardar eventos ni métricas' : 'Ciclo de importación terminado; las nuevas fichas requieren revisión' };
 }

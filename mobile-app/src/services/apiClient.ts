@@ -1,6 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL, STORAGE_KEYS } from '@/constants';
+import { getSessionToken, setSessionTokens, clearSessionTokens } from '@/utils/sessionTokens';
 
 export const apiConfig = { baseURL: API_BASE_URL.replace(/\/api$/, ''), timeout: 30000 };
 export const apiClient = axios.create({ baseURL: API_BASE_URL, timeout: apiConfig.timeout });
@@ -13,13 +14,14 @@ export function onSessionChange(listener: SessionListener) {
   return () => { listeners.delete(listener); };
 }
 export async function clearSession() {
-  await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER_DATA]);
+  await clearSessionTokens();
+  await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
   listeners.forEach(listener => listener(null));
 }
 export function refreshAccessToken(): Promise<string> {
   if (!refreshRequest) {
     refreshRequest = (async () => {
-      const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+      const refreshToken = await getSessionToken(STORAGE_KEYS.REFRESH_TOKEN);
       if (!refreshToken) {
         await clearSession();
         throw new Error('Tu sesión venció. Inicia sesión nuevamente.');
@@ -30,7 +32,7 @@ export function refreshAccessToken(): Promise<string> {
         const accessToken = data.accessToken || data.data?.accessToken || data.data?.token;
         const nextRefreshToken = data.refreshToken || data.data?.refreshToken;
         if (!accessToken || !nextRefreshToken) throw new Error('Respuesta de sesión inválida');
-        await AsyncStorage.multiSet([[STORAGE_KEYS.AUTH_TOKEN, accessToken], [STORAGE_KEYS.REFRESH_TOKEN, nextRefreshToken]]);
+        await setSessionTokens({ accessToken, refreshToken: nextRefreshToken });
         listeners.forEach(listener => listener(accessToken));
         return accessToken as string;
       } catch (error: any) {
@@ -42,7 +44,7 @@ export function refreshAccessToken(): Promise<string> {
   return refreshRequest;
 }
 apiClient.interceptors.request.use(async config => {
-  const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+  const token = await getSessionToken(STORAGE_KEYS.AUTH_TOKEN);
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

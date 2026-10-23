@@ -29,6 +29,7 @@ import OrganizerPromotersModal from '@/components/events/OrganizerPromotersModal
 import { canRsvp, canScanAdmissions } from '@/utils/admission';
 import { eventParam } from '@/utils/eventAuthReturn';
 import { getMobileImageUrl } from '@/utils/imageFallbacks';
+import { eventSectionPlan, eventCoordinates } from '@/utils/eventSectionPlan';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button, Card, Badge, Avatar } from '@/components/ui';
@@ -246,6 +247,9 @@ export default function EventDetailScreen() {
     : 'Organizador';
 
   const isOrganizer = canScanAdmissions(event, user);
+  // Which sections fit this event (virtual vs in person, music, phase, country).
+  const sections = eventSectionPlan(event as any);
+  const point = eventCoordinates(event as any);
 
   const categoryGradient: [string, string] =
     (theme.gradients as any)[event.category?.toLowerCase()] ||
@@ -704,6 +708,18 @@ export default function EventDetailScreen() {
           </Card>
         )}
 
+        {/* Description */}
+        {event.description ? (
+          <Card variant="glass" glassIntensity="light" padding={20} style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+              Acerca del evento
+            </Text>
+            <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
+              {event.description}
+            </Text>
+          </Card>
+        ) : null}
+
         {/* ── ¿Quién va al coro? (Visual Attendees) ── */}
         <Card variant="glass" glassIntensity="medium" padding={18} style={styles.section}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -847,6 +863,7 @@ export default function EventDetailScreen() {
           </View>
         </Card>
 
+        {sections.songVoting && (<>
         {/* ── DJ Crowd Request & Live Music Voting ── */}
         <Card variant="glass" glassIntensity="medium" padding={18} style={[styles.section, { borderColor: 'rgba(236,72,153,0.3)', borderWidth: 1 }] as any}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -882,7 +899,9 @@ export default function EventDetailScreen() {
           </View>
         </Card>
 
-        {/* ── Transferencia Bancaria Directa RD (Sin pasarela) ── */}
+        </>)}
+
+                {/* ── Transferencia Bancaria Directa RD (Sin pasarela) ── */}
         {Boolean(event.price && (typeof event.price === 'number' ? event.price > 0 : (event.price as any).amount > 0)) && (
           <Card variant="glass" glassIntensity="medium" padding={16} style={[styles.section, { borderColor: 'rgba(6,182,212,0.3)', borderWidth: 1, backgroundColor: 'rgba(6,182,212,0.08)' }] as any}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -913,6 +932,7 @@ export default function EventDetailScreen() {
           </Card>
         )}
 
+        {sections.splitCosts && (<>
         {/* Serrucho Digital RD Card */}
         <Card variant="glass" glassIntensity="medium" padding={16} style={[styles.section, { borderColor: '#f59e0b', borderWidth: 1, backgroundColor: 'rgba(245,158,11,0.08)' }] as any}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -946,7 +966,9 @@ export default function EventDetailScreen() {
           </View>
         </Card>
 
-        {/* Location */}
+        </>)}
+
+                {/* Location */}
         <Card
           variant="glass"
           glassIntensity="medium"
@@ -962,12 +984,13 @@ export default function EventDetailScreen() {
                 Ubicacion
               </Text>
               <Text style={[styles.locationAddress, { color: theme.colors.text }]}>
-                {locationAddress}
+                {sections.online && !sections.inPerson ? 'Evento en línea' : locationAddress}
               </Text>
             </View>
           </View>
 
           {/* 1-Tap Navigation Buttons: Waze & Google Maps */}
+          {sections.navigation && (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
             <TouchableOpacity
               style={{
@@ -981,9 +1004,7 @@ export default function EventDetailScreen() {
                 borderRadius: 12,
               }}
               onPress={() => {
-                const lat = (event.location as any)?.coordinates?.[1] || 18.4861;
-                const lng = (event.location as any)?.coordinates?.[0] || -69.9312;
-                Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`);
+                if (point) Linking.openURL(`https://waze.com/ul?ll=${point.latitude},${point.longitude}&navigate=yes`);
               }}
             >
               <Ionicons name="navigate" size={16} color="#fff" />
@@ -1002,17 +1023,17 @@ export default function EventDetailScreen() {
                 borderRadius: 12,
               }}
               onPress={() => {
-                const lat = (event.location as any)?.coordinates?.[1] || 18.4861;
-                const lng = (event.location as any)?.coordinates?.[0] || -69.9312;
-                Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+                if (point) Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${point.latitude},${point.longitude}`);
               }}
             >
               <Ionicons name="map" size={16} color="#fff" />
               <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Google Maps</Text>
             </TouchableOpacity>
           </View>
+          )}
         </Card>
 
+        {sections.calendar && (<>
         {/* ── Agendar en Calendario ── */}
         <Card variant="glass" glassIntensity="medium" padding={16} style={[styles.section, { borderColor: 'rgba(139,92,246,0.3)', borderWidth: 1 }] as any}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1035,7 +1056,7 @@ export default function EventDetailScreen() {
               onPress={() => {
                 const d = new Date(event.date);
                 const gDates = d.toISOString().replace(/-|:|\.\d\d\d/g, '');
-                const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${gDates}/${gDates}&details=${encodeURIComponent(event.description || '')}&location=${encodeURIComponent(locationAddress)}`;
+                const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${gDates}/${event.endDate ? new Date(event.endDate).toISOString().replace(/-|:|\.\d\d\d/g, '') : gDates}&details=${encodeURIComponent(event.description || '')}&location=${encodeURIComponent(locationAddress)}`;
                 Linking.openURL(url);
               }}
             >
@@ -1044,6 +1065,9 @@ export default function EventDetailScreen() {
           </View>
         </Card>
 
+        </>)}
+
+        {sections.transitDominicanRepublic && (<>
         {/* ── Directorio de Seguridad Oficial & Transporte RD ── */}
         <Card variant="glass" glassIntensity="medium" padding={16} style={[styles.section, { borderColor: 'rgba(16,185,129,0.3)', borderWidth: 1 }] as any}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -1072,9 +1096,7 @@ export default function EventDetailScreen() {
             <TouchableOpacity
               style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1, padding: 8, borderRadius: 12, alignItems: 'center' }}
               onPress={() => {
-                const lat = (event.location as any)?.coordinates?.[1] || 18.4861;
-                const lng = (event.location as any)?.coordinates?.[0] || -69.9312;
-                Linking.openURL(`https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[latitude]=${lat}&dropoff[longitude]=${lng}`);
+                if (point) Linking.openURL(`https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[latitude]=${point.latitude}&dropoff[longitude]=${point.longitude}`);
               }}
             >
               <Ionicons name="car" size={16} color="#fff" />
@@ -1084,11 +1106,17 @@ export default function EventDetailScreen() {
           </View>
         </Card>
 
+        </>)}
+
+        {sections.hospitality && (<>
         <EventHospitalityPanel event={{ ...event, isAttending }} onOpenSerrucho={() => {
           if (!user) { router.push({ pathname: '/(auth)/login', params: { returnTo: `/event/${eventId}` } } as any); return; }
           setSerruchoVisible(true);
         }} />
 
+        </>)}
+
+        {sections.tripBudget && (<>
         {/* ── Calculadora de Presupuesto de Viaje & Serrucho (Mobile) ── */}
         <Card variant="glass" glassIntensity="medium" padding={18} style={[styles.section, { borderColor: '#8b5cf6', borderWidth: 1, backgroundColor: 'rgba(139,92,246,0.12)' }] as any}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -1116,38 +1144,28 @@ export default function EventDetailScreen() {
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Dividir Serrucho</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
+            {Boolean((event.location as any)?.city) && <TouchableOpacity
               style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
               onPress={() => {
-                const destination = (event.location as any)?.city || (event.location as any)?.venue || 'Santo Domingo';
+                const destination = (event.location as any).city;
                 Linking.openURL(`https://www.google.com/travel/flights?q=Flights%20to%20${encodeURIComponent(destination)}`);
               }}
             >
               <Ionicons name="airplane" size={16} color="#38bdf8" />
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Buscar Vuelos</Text>
-            </TouchableOpacity>
+            </TouchableOpacity>}
           </View>
         </Card>
 
-        <Card variant="glass" glassIntensity="light" padding={20} style={styles.section}>
+        </>)}
+
+                <Card variant="glass" glassIntensity="light" padding={20} style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Prepara tu salida</Text>
           <Text style={{ color: theme.colors.textSecondary, lineHeight: 22 }}>Cómo llegar, qué llevar y presupuesto de entrada y gastos adicionales. Si el evento se cancela, compara un Plan B.</Text>
           <TouchableOpacity accessibilityRole="button" onPress={() => router.push(`/event-planning/${eventId}` as any)} style={{ minHeight: 48, justifyContent: 'center' }}><Text style={{ color: theme.colors.primary, fontWeight: '600' }}>Ver información práctica y presupuesto</Text></TouchableOpacity>
           <TouchableOpacity accessibilityRole="button" onPress={() => router.push(`/community-event/${eventId}` as any)} style={{ minHeight: 48, justifyContent: 'center' }}><Text style={{ color: theme.colors.primary, fontWeight: '600' }}>Yo aporto · Encuentro · ¿Lo repetimos?</Text></TouchableOpacity>
         </Card>
         {!importedSource && <OrganizerReliabilityPanel eventId={String(eventId)} organizerId={typeof event.createdBy === 'string' ? event.createdBy : event.createdBy?._id || event.createdBy?.id || ''} isPublic={['published', 'completed', 'expired'].includes(event.status) && !event.isPrivate && !event.isSecretLocation} />}
-
-        {/* Description */}
-        {event.description ? (
-          <Card variant="glass" glassIntensity="light" padding={20} style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              Acerca del evento
-            </Text>
-            <Text style={[styles.description, { color: theme.colors.textSecondary }]}>
-              {event.description}
-            </Text>
-          </Card>
-        ) : null}
 
         {/* End date */}
         {event.endDate ? (

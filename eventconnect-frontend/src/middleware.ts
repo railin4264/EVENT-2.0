@@ -96,16 +96,20 @@ export function middleware(request: NextRequest) {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
   const isDev = process.env.NODE_ENV === 'development'
 
+  // Production allows no third-party script hosts and no eval: the session token lives in
+  // localStorage, so any injected script would be an account takeover.
+  const apiOrigin = (() => { try { return new URL(apiUrl).origin } catch { return '' } })()
+  const apiSocket = apiOrigin.replace(/^http/, 'ws')
   const cspHeader = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com",
-    "img-src 'self' data: https: http://localhost:5000 http://localhost:3000 blob:",
+    isDev ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    isDev ? "img-src 'self' data: https: http://localhost:5000 http://localhost:3000 blob:" : "img-src 'self' data: https: blob:",
     "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
     isDev
       ? `connect-src 'self' https: http: ws: wss: data: blob:` // More permissive in dev
-      : `connect-src 'self' https://api.open-meteo.com https://api.mapbox.com https://maps.googleapis.com https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com https://nominatim.openstreetmap.org https://*.tile.openstreetmap.org https://tile.openstreetmap.org ws://localhost:* wss://localhost:* http://localhost:* ${apiUrl}`,
-    "media-src 'self' https: http://localhost:5000 http://localhost:3000",
+      : `connect-src 'self' https://api.open-meteo.com https://api.mapbox.com https://maps.googleapis.com https://fonts.googleapis.com https://fonts.gstatic.com https://nominatim.openstreetmap.org https://*.tile.openstreetmap.org https://tile.openstreetmap.org ${apiOrigin} ${apiSocket}`,
+    isDev ? "media-src 'self' https: http://localhost:5000 http://localhost:3000" : "media-src 'self' https:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

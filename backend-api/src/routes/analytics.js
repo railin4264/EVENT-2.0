@@ -365,9 +365,9 @@ router.get('/audience-insights', protect, async (req, res) => {
   try {
     const lat = parseFloat(req.query.lat);
     const lng = parseFloat(req.query.lng);
-    const radiusKm = req.query.radius ? parseFloat(req.query.radius) : 25;
+    const radiusKm = Math.min(Math.max(req.query.radius ? parseFloat(req.query.radius) || 25 : 25, 1), 100);
 
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
       return res.status(400).json({
         success: false,
         message: 'lat and lng query params are required',

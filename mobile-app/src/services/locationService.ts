@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from './apiClient';
 import { STORAGE_KEYS } from '@/constants';
+import { getSessionToken } from '@/utils/sessionTokens';
 
 export const SANTO_DOMINGO_COORDS = {
   latitude: 18.4861,
@@ -47,7 +48,7 @@ class LocationService {
     address?: string
   ): Promise<boolean> {
     try {
-      const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const token = await getSessionToken(STORAGE_KEYS.AUTH_TOKEN);
       if (!token) return false;
 
       const now = Date.now();

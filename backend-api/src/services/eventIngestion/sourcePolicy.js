@@ -2,9 +2,10 @@
 
 const { sourceUrl } = require('./safeSourceFetch');
 const { PUBLIC_AGENDAS } = require('./publicAgendaAdapters');
+const { UNIVERSITY_ADAPTERS } = require('./universityCalendarAdapters');
 
 // An adapter name or a public website is not evidence of permission or readiness.
-const SUPPORTED_ADAPTERS = new Set(['ics_feed', 'json_feed', 'wp_events_calendar', ...Object.keys(PUBLIC_AGENDAS)]);
+const SUPPORTED_ADAPTERS = new Set(['ics_feed', 'json_feed', 'wp_events_calendar', ...Object.keys(PUBLIC_AGENDAS), ...Object.keys(UNIVERSITY_ADAPTERS)]);
 
 function sourceBlockers(source) {
   const blockers = [];

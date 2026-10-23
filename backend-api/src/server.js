@@ -5,6 +5,13 @@ const sentryConfig = require('./config/sentry');
 sentryConfig.initialize();
 
 // Set default environment variables if not provided
+if (process.env.NODE_ENV === 'production') {
+  const weak = require('./config/secretStrength').weakSecretReasons();
+  if (weak.length) {
+    console.error('FATAL: insecure token secrets: ' + weak.join('; ') + '. Generate them with node scripts/generate-secrets.js');
+    process.exit(1);
+  }
+}
 if (!process.env.JWT_SECRET) {
   if (process.env.NODE_ENV === 'production') {
     console.error('FATAL: JWT_SECRET is required in production');

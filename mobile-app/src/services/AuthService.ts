@@ -2,6 +2,7 @@ import { User, LoginForm, RegisterForm, ApiResponse } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '@/constants';
 import { apiClient, refreshAccessToken } from './apiClient';
+import { getSessionToken } from '@/utils/sessionTokens';
 
 export type AuthData = { user: User; token: string; refreshToken: string };
 
@@ -67,7 +68,7 @@ class AuthService {
   }
   public async logout(): Promise<void> {
     try {
-      const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+      const refreshToken = await getSessionToken(STORAGE_KEYS.REFRESH_TOKEN);
       await apiClient.post('/auth/logout', { refreshToken });
     } finally { this.clearAuthToken(); }
   }

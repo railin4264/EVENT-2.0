@@ -43,7 +43,10 @@ const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'
 async function getAudienceInsights(lat, lng, radiusKm = 25) {
   const radiusMeters = radiusKm * 1000;
 
+  // Public catalogue only: private, draft or pending events never shape a public summary.
   const events = await Event.find({
+    status: 'published',
+    isPrivate: { $ne: true },
     location: {
       $nearSphere: {
         $geometry: { type: 'Point', coordinates: [lng, lat] },

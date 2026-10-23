@@ -6,6 +6,7 @@ import { authService, AuthData } from '@/services/AuthService';
 import { onSessionChange } from '@/services/apiClient';
 import { STORAGE_KEYS } from '@/constants';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getSessionToken, setSessionTokens, clearSessionTokens } from '@/utils/sessionTokens';
 
 interface AuthContextType {
   user: User | null;
@@ -54,7 +55,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const checkAuthStatus = async () => {
     try {
-      const token = await AsyncStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const token = await getSessionToken(STORAGE_KEYS.AUTH_TOKEN);
       const userData = await AsyncStorage.getItem(STORAGE_KEYS.USER_DATA);
 
       if (token && userData) {
@@ -78,8 +79,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const { user: userData, token, refreshToken } = response.data as { user: User; token: string; refreshToken: string };
 
         // Store auth data
-        await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-        await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+        await setSessionTokens({ accessToken: token, refreshToken });
         await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
 
         // Update state
@@ -98,11 +98,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     onSuccess: async (response: ApiResponse<AuthData>) => {
       if (!response.success || !response.data) throw new Error('No se pudo completar la sesión.');
       const { user: userData, token: accessToken, refreshToken } = response.data;
-      await AsyncStorage.multiSet([
-        [STORAGE_KEYS.AUTH_TOKEN, accessToken],
-        [STORAGE_KEYS.REFRESH_TOKEN, refreshToken],
-        [STORAGE_KEYS.USER_DATA, JSON.stringify(userData)],
-      ]);
+      await setSessionTokens({ accessToken, refreshToken });
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
       setUser(userData);
       setToken(accessToken);
       authService.setAuthToken(accessToken);
@@ -118,8 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const { user: userData, token, refreshToken } = response.data as { user: User; token: string; refreshToken: string };
 
         // Store auth data
-        await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-        await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+        await setSessionTokens({ accessToken: token, refreshToken });
         await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(userData));
 
         // Update state
@@ -193,11 +189,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       await authService.logout().catch(() => undefined);
       // Clear stored data
-      await AsyncStorage.multiRemove([
-        STORAGE_KEYS.AUTH_TOKEN,
-        STORAGE_KEYS.REFRESH_TOKEN,
-        STORAGE_KEYS.USER_DATA,
-      ]);
+      await clearSessionTokens();
+      await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
 
       // Clear auth token from service
       authService.clearAuthToken();
@@ -227,7 +220,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const response = await authService.refreshToken();
       if (response.success && response.data) {
         const { token } = response.data;
-        await AsyncStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+        await setSessionTokens({ accessToken: token });
         setToken(token);
         authService.setAuthToken(token);
       }
